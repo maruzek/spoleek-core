@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
+import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
@@ -13,11 +14,12 @@ import {
 
 type MemberRow = {
   id: string;
+  firstName: string;
+  lastName: string;
   fullName: string;
   email: string | null;
   role: "member" | "leader" | "org_admin";
   status: "invited" | "pending" | "active" | "archived";
-  phone: string | null;
   userId: string | null;
   createdAt: Date;
   linkedUserName: string | null;
@@ -114,7 +116,9 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
               {members.map((member) => (
                 <tr key={member.id} className="border-t border-slate-200">
                   <td className="px-6 py-4">
-                    <div className="font-medium text-slate-900">{member.fullName}</div>
+                    <div className="font-medium text-slate-900">
+                      {getMemberDisplayName(member)}
+                    </div>
                     <div className="text-slate-500">{member.email || "No email yet"}</div>
                   </td>
                   <td className="px-6 py-4 capitalize">{member.status}</td>

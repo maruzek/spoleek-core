@@ -15,6 +15,7 @@ import {
   emailAdminSchema,
   organizationBootstrapSchema,
 } from "@/lib/bootstrap/setup-schemas";
+import { splitMemberName } from "@/lib/member-custom-fields";
 import { actionClient } from "@/lib/safe-action";
 import { slugify } from "@/lib/slugify";
 import {
@@ -239,6 +240,7 @@ export const createBootstrapOrganizationAction = actionClient
       .limit(1);
 
     const orgId = randomUUID();
+    const adminName = splitMemberName(session.user.name);
 
     await db.transaction(async (tx) => {
       await tx.insert(organizations).values({
@@ -277,6 +279,8 @@ export const createBootstrapOrganizationAction = actionClient
           orgId,
           userId: session.user.id,
           email: session.user.email,
+          firstName: adminName.firstName,
+          lastName: adminName.lastName,
           fullName: session.user.name,
           role: "org_admin",
           status: "active",
@@ -289,6 +293,8 @@ export const createBootstrapOrganizationAction = actionClient
           .update(tenantMembers)
           .set({
             orgId,
+            firstName: existingMembership.firstName || adminName.firstName,
+            lastName: existingMembership.lastName || adminName.lastName,
             role: "org_admin",
             status: "active",
             linkedAt: existingMembership.linkedAt ?? new Date(),

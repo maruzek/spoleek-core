@@ -25,7 +25,9 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 export default async function PortalOverviewPage() {
-  const { member, organization, session } = await requireCurrentMemberAccess();
+  const { member, organization, session } = await requireCurrentMemberAccess({
+    requireProfileComplete: true,
+  });
 
   return (
     <AppPage

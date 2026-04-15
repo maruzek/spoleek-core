@@ -1,79 +1,174 @@
 "use client";
 
+import { useForm } from "@tanstack/react-form";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
-import { FormField } from "@/components/forms/form-field";
+import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { joinOrganizationAction } from "@/server/actions/member";
+import type { MemberCustomField } from "@/server/db/schema";
 
 export function JoinForm({
   termsLabel,
   privacyLabel,
+  defaultFirstName,
+  defaultLastName,
+  customFields,
 }: {
   termsLabel: string;
   privacyLabel: string;
+  defaultFirstName: string;
+  defaultLastName: string;
+  customFields: MemberCustomField[];
 }) {
   const router = useRouter();
   const joinAction = useAction(joinOrganizationAction, {
-    onSuccess() {
-      router.push("/portal");
-      router.refresh();
+    onSuccess({ data }) {
+      if (data?.success) {
+        router.push("/portal");
+        router.refresh();
+      }
+    },
+  });
+
+  const form = useForm({
+    defaultValues: {
+      firstName: defaultFirstName,
+      lastName: defaultLastName,
+      acceptTerms: false,
+      acceptPrivacy: false,
+      customFieldAnswers: Object.fromEntries(customFields.map((field) => [field.key, null])),
+    },
+    onSubmit: async ({ value }) => {
+      await joinAction.executeAsync(value);
     },
   });
 
   const fieldErrors = joinAction.result.validationErrors;
+  const customFieldErrors = joinAction.result.data?.customFieldErrors ?? {};
 
   return (
     <form
       className="grid gap-5 rounded-4xl border border-slate-950/10 bg-white p-8 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]"
-      action={async (formData) => {
-        await joinAction.executeAsync({
-          phone: String(formData.get("phone") ?? ""),
-          addressLine1: String(formData.get("addressLine1") ?? ""),
-          city: String(formData.get("city") ?? ""),
-          postalCode: String(formData.get("postalCode") ?? ""),
-          acceptTerms: formData.get("acceptTerms") === "on",
-          acceptPrivacy: formData.get("acceptPrivacy") === "on",
-        });
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 md:grid-cols-2">
-        <FormField name="phone" label="Phone number" placeholder="+420..." />
-        <FormField name="addressLine1" label="Address" placeholder="Street and number" />
-        <FormField name="city" label="City" placeholder="Prague" />
-        <FormField name="postalCode" label="Postal code" placeholder="11000" />
-      </div>
+      <FieldGroup>
+        <div className="grid gap-4 md:grid-cols-2">
+          <form.Field name="firstName">
+            {(formField) => (
+              <Field>
+                <FieldLabel htmlFor="join-first-name">First name</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="join-first-name"
+                    value={formField.state.value}
+                    onBlur={formField.handleBlur}
+                    onChange={(event) => formField.handleChange(event.target.value)}
+                    aria-invalid={Boolean(fieldErrors?.firstName?._errors?.[0])}
+                  />
+                  {fieldErrors?.firstName?._errors?.[0] ? (
+                    <FieldError>{fieldErrors.firstName._errors[0]}</FieldError>
+                  ) : null}
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
 
-      <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-        <input
-          name="acceptTerms"
-          type="checkbox"
-          className="mt-1 size-4 rounded border-slate-300 text-emerald-700"
-          required
-        />
-        <span>{termsLabel}</span>
-      </label>
-      {fieldErrors?.acceptTerms?._errors?.[0] ? (
-        <p className="text-sm text-rose-600">
-          {fieldErrors.acceptTerms._errors[0]}
-        </p>
-      ) : null}
+          <form.Field name="lastName">
+            {(formField) => (
+              <Field>
+                <FieldLabel htmlFor="join-last-name">Last name</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="join-last-name"
+                    value={formField.state.value}
+                    onBlur={formField.handleBlur}
+                    onChange={(event) => formField.handleChange(event.target.value)}
+                    aria-invalid={Boolean(fieldErrors?.lastName?._errors?.[0])}
+                  />
+                  {fieldErrors?.lastName?._errors?.[0] ? (
+                    <FieldError>{fieldErrors.lastName._errors[0]}</FieldError>
+                  ) : null}
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
+        </div>
 
-      <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
-        <input
-          name="acceptPrivacy"
-          type="checkbox"
-          className="mt-1 size-4 rounded border-slate-300 text-emerald-700"
-          required
-        />
-        <span>{privacyLabel}</span>
-      </label>
-      {fieldErrors?.acceptPrivacy?._errors?.[0] ? (
-        <p className="text-sm text-rose-600">
-          {fieldErrors.acceptPrivacy._errors[0]}
-        </p>
-      ) : null}
+        {customFields.map((field) => (
+          <MemberCustomFieldInput
+            key={field.id}
+            field={field}
+            value={form.state.values.customFieldAnswers[field.key]}
+            error={customFieldErrors[field.key]?.[0]}
+            onChange={(value) =>
+              form.setFieldValue("customFieldAnswers" as never, {
+                ...form.state.values.customFieldAnswers,
+                [field.key]: value,
+              } as never)
+            }
+          />
+        ))}
+
+        <form.Field name="acceptTerms">
+          {(formField) => (
+            <Field data-invalid={Boolean(fieldErrors?.acceptTerms?._errors?.[0])}>
+              <FieldLabel htmlFor="join-accept-terms">{termsLabel}</FieldLabel>
+              <FieldContent>
+                <Checkbox
+                  id="join-accept-terms"
+                  checked={formField.state.value}
+                  onCheckedChange={(checked) => formField.handleChange(Boolean(checked))}
+                  aria-invalid={Boolean(fieldErrors?.acceptTerms?._errors?.[0])}
+                />
+                <FieldDescription>
+                  Required to create or link your membership record.
+                </FieldDescription>
+                {fieldErrors?.acceptTerms?._errors?.[0] ? (
+                  <FieldError>{fieldErrors.acceptTerms._errors[0]}</FieldError>
+                ) : null}
+              </FieldContent>
+            </Field>
+          )}
+        </form.Field>
+
+        <form.Field name="acceptPrivacy">
+          {(formField) => (
+            <Field data-invalid={Boolean(fieldErrors?.acceptPrivacy?._errors?.[0])}>
+              <FieldLabel htmlFor="join-accept-privacy">{privacyLabel}</FieldLabel>
+              <FieldContent>
+                <Checkbox
+                  id="join-accept-privacy"
+                  checked={formField.state.value}
+                  onCheckedChange={(checked) => formField.handleChange(Boolean(checked))}
+                  aria-invalid={Boolean(fieldErrors?.acceptPrivacy?._errors?.[0])}
+                />
+                <FieldDescription>
+                  Required before the organization can process your membership.
+                </FieldDescription>
+                {fieldErrors?.acceptPrivacy?._errors?.[0] ? (
+                  <FieldError>{fieldErrors.acceptPrivacy._errors[0]}</FieldError>
+                ) : null}
+              </FieldContent>
+            </Field>
+          )}
+        </form.Field>
+      </FieldGroup>
 
       {joinAction.result.serverError ? (
         <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

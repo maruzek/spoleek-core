@@ -6,26 +6,37 @@ import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
+import {
+  memberCustomFieldAnswersSchema,
+  splitMemberName,
+} from "@/lib/member-custom-fields";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
+import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
+import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import {
   findShadowMemberForUser,
   getTenantMemberByUserId,
 } from "@/server/queries/members";
 
 const joinSchema = z.object({
-  phone: z.string().optional(),
-  addressLine1: z.string().optional(),
-  city: z.string().optional(),
-  postalCode: z.string().optional(),
+  firstName: z.string().trim().min(1, "First name is required."),
+  lastName: z.string().trim().min(1, "Last name is required."),
   acceptTerms: z
     .boolean()
     .refine((value) => value, "You must accept the organization terms."),
   acceptPrivacy: z
     .boolean()
     .refine((value) => value, "You must accept the privacy policy."),
+  customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
+});
+
+const profileSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required."),
+  lastName: z.string().trim().min(1, "Last name is required."),
+  customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });
 
 export const joinOrganizationAction = authActionClient
@@ -49,74 +60,97 @@ export const joinOrganizationAction = authActionClient
       organization.id,
       ctx.auth.user.email,
     );
+    const registrationFields = await listActiveMemberCustomFields(organization.id, [
+      "registration",
+    ]);
 
-    const patch = {
-      phone: parsedInput.phone || null,
-      addressLine1: parsedInput.addressLine1 || null,
-      city: parsedInput.city || null,
-      postalCode: parsedInput.postalCode || null,
-      acceptedTermsAt: new Date(),
-      acceptedPrivacyAt: new Date(),
-      updatedAt: new Date(),
-    };
+    const firstName = parsedInput.firstName.trim();
+    const lastName = parsedInput.lastName.trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
 
-    if (existing) {
-      await db
-        .update(tenantMembers)
-        .set({
-          ...patch,
-          fullName: existing.fullName || ctx.auth.user.name,
-          email: ctx.auth.user.email,
-          status: existing.status === "active" ? "active" : "pending",
-        })
-        .where(eq(tenantMembers.id, existing.id));
+    const result = await db.transaction(async (tx) => {
+      const patch = {
+        firstName,
+        lastName,
+        fullName,
+        acceptedTermsAt: new Date(),
+        acceptedPrivacyAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-      return { success: true, status: existing.status };
-    }
+      let memberId = existing?.id ?? shadow?.id ?? null;
+      let status = existing?.status ?? shadow?.status ?? "pending";
 
-    if (shadow) {
-      await db
-        .update(tenantMembers)
-        .set({
-          ...patch,
+      if (existing) {
+        await tx
+          .update(tenantMembers)
+          .set({
+            ...patch,
+            email: ctx.auth.user.email,
+            status: existing.status === "active" ? "active" : "pending",
+          })
+          .where(eq(tenantMembers.id, existing.id));
+      } else if (shadow) {
+        await tx
+          .update(tenantMembers)
+          .set({
+            ...patch,
+            userId: ctx.auth.user.id,
+            email: ctx.auth.user.email,
+            linkedAt: new Date(),
+            status: shadow.status === "active" ? "active" : "pending",
+          })
+          .where(eq(tenantMembers.id, shadow.id));
+      } else {
+        memberId = randomUUID();
+        status = "pending";
+
+        await tx.insert(tenantMembers).values({
+          id: memberId,
+          orgId: organization.id,
           userId: ctx.auth.user.id,
-          fullName: shadow.fullName || ctx.auth.user.name,
           email: ctx.auth.user.email,
+          firstName,
+          lastName,
+          fullName,
+          role: "member",
+          status: "pending",
           linkedAt: new Date(),
-          status: shadow.status === "active" ? "active" : "pending",
-        })
-        .where(eq(tenantMembers.id, shadow.id));
+          acceptedTermsAt: new Date(),
+          acceptedPrivacyAt: new Date(),
+        });
+      }
 
-      return { success: true, status: shadow.status };
-    }
+      const targetMemberId = memberId ?? existing?.id ?? shadow?.id;
 
-    await db.insert(tenantMembers).values({
-      id: randomUUID(),
-      orgId: organization.id,
-      userId: ctx.auth.user.id,
-      email: ctx.auth.user.email,
-      fullName: ctx.auth.user.name,
-      role: "member",
-      status: "pending",
-      linkedAt: new Date(),
-      ...patch,
+      if (!targetMemberId) {
+        throw new Error("Unable to resolve the member record.");
+      }
+
+      const answerResult = await upsertMemberCustomFieldAnswers(tx, {
+        orgId: organization.id,
+        memberId: targetMemberId,
+        fields: registrationFields,
+        answers: parsedInput.customFieldAnswers,
+      });
+
+      if (Object.keys(answerResult.errors).length > 0) {
+        return {
+          success: false as const,
+          status,
+          customFieldErrors: answerResult.errors,
+        };
+      }
+
+      return {
+        success: true as const,
+        status,
+        customFieldErrors: {} as Record<string, string[]>,
+      };
     });
 
-    return {
-      success: true,
-      status: "pending" as const,
-    };
+    return result;
   });
-
-const profileSchema = z.object({
-  fullName: z.string().min(2, "Full name is required."),
-  phone: z.string().optional(),
-  addressLine1: z.string().optional(),
-  addressLine2: z.string().optional(),
-  city: z.string().optional(),
-  postalCode: z.string().optional(),
-  countryCode: z.string().min(2).max(2).default("CZ"),
-});
 
 export const updateProfileAction = authActionClient
   .metadata({ actionName: "updateProfile" })
@@ -132,32 +166,57 @@ export const updateProfileAction = authActionClient
 
     if (!member) {
       returnValidationErrors(profileSchema, {
-        fullName: {
+        firstName: {
           _errors: ["Join the organization before updating your profile."],
         },
       });
     }
 
-    await db
-      .update(tenantMembers)
-      .set({
-        fullName: parsedInput.fullName,
-        phone: parsedInput.phone || null,
-        addressLine1: parsedInput.addressLine1 || null,
-        addressLine2: parsedInput.addressLine2 || null,
-        city: parsedInput.city || null,
-        postalCode: parsedInput.postalCode || null,
-        countryCode: parsedInput.countryCode,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(tenantMembers.orgId, organization.id),
-          eq(tenantMembers.userId, ctx.auth.user.id),
-        ),
-      );
+    const activeFields = await listActiveMemberCustomFields(organization.id, [
+      "registration",
+      "post_approval",
+      "optional",
+    ]);
 
-    return {
-      success: true,
-    };
+    const firstName = parsedInput.firstName.trim();
+    const lastName = parsedInput.lastName.trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
+
+    const result = await db.transaction(async (tx) => {
+      await tx
+        .update(tenantMembers)
+        .set({
+          firstName,
+          lastName,
+          fullName,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tenantMembers.orgId, organization.id),
+            eq(tenantMembers.userId, ctx.auth.user.id),
+          ),
+        );
+
+      const answerResult = await upsertMemberCustomFieldAnswers(tx, {
+        orgId: organization.id,
+        memberId: member.id,
+        fields: activeFields,
+        answers: parsedInput.customFieldAnswers,
+      });
+
+      if (Object.keys(answerResult.errors).length > 0) {
+        return {
+          success: false as const,
+          customFieldErrors: answerResult.errors,
+        };
+      }
+
+      return {
+        success: true as const,
+        customFieldErrors: {} as Record<string, string[]>,
+      };
+    });
+
+    return result;
   });

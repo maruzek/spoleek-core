@@ -22,6 +22,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   payments: "Payments",
   portal: "Portal",
   profile: "Profile",
+  "custom-fields": "Custom fields",
   settings: "Settings",
 };
 

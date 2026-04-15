@@ -35,11 +35,12 @@ export async function listTenantMembers(orgId: string) {
   return db
     .select({
       id: tenantMembers.id,
+      firstName: tenantMembers.firstName,
+      lastName: tenantMembers.lastName,
       fullName: tenantMembers.fullName,
       email: tenantMembers.email,
       role: tenantMembers.role,
       status: tenantMembers.status,
-      phone: tenantMembers.phone,
       userId: tenantMembers.userId,
       createdAt: tenantMembers.createdAt,
       linkedUserName: users.name,

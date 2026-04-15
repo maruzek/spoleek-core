@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   index,
   jsonb,
   pgEnum,
@@ -25,6 +26,24 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "pending",
   "active",
   "archived",
+]);
+
+export const memberCustomFieldTypeEnum = pgEnum("member_custom_field_type", [
+  "text",
+  "textarea",
+  "boolean",
+  "number",
+  "email",
+  "phone",
+  "date",
+  "select",
+  "multi_select",
+]);
+
+export const memberCustomFieldStageEnum = pgEnum("member_custom_field_stage", [
+  "registration",
+  "post_approval",
+  "optional",
 ]);
 
 const timestamps = {
@@ -166,6 +185,8 @@ export const tenantMembers = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
     email: text("email"),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
     fullName: text("full_name").notNull(),
     role: tenantRoleEnum("role").notNull().default("member"),
     status: membershipStatusEnum("status").notNull().default("pending"),
@@ -189,6 +210,67 @@ export const tenantMembers = pgTable(
   }),
 );
 
+export const memberCustomFields = pgTable(
+  "member_custom_fields",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
+    type: memberCustomFieldTypeEnum("type").notNull(),
+    stage: memberCustomFieldStageEnum("stage").notNull().default("optional"),
+    required: boolean("required").notNull().default(false),
+    options: jsonb("options").$type<string[]>().notNull().default([]),
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps,
+  },
+  (table) => ({
+    orgKeyIdx: uniqueIndex("member_custom_fields_org_key_idx").on(table.orgId, table.key),
+    orgSortIdx: index("member_custom_fields_org_sort_idx").on(table.orgId, table.sortOrder),
+    orgStageIdx: index("member_custom_fields_org_stage_idx").on(table.orgId, table.stage),
+  }),
+);
+
+export const memberCustomFieldValues = pgTable(
+  "member_custom_field_values",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    fieldId: text("field_id")
+      .notNull()
+      .references(() => memberCustomFields.id, { onDelete: "cascade" }),
+    valueText: text("value_text"),
+    valueNumber: integer("value_number"),
+    valueBoolean: boolean("value_boolean"),
+    valueDate: timestamp("value_date", { withTimezone: true }),
+    valueJson: jsonb("value_json").$type<string[] | Record<string, unknown> | null>(),
+    ...timestamps,
+  },
+  (table) => ({
+    memberFieldIdx: uniqueIndex("member_custom_field_values_member_field_idx").on(
+      table.memberId,
+      table.fieldId,
+    ),
+    orgMemberIdx: index("member_custom_field_values_org_member_idx").on(
+      table.orgId,
+      table.memberId,
+    ),
+    orgFieldIdx: index("member_custom_field_values_org_field_idx").on(
+      table.orgId,
+      table.fieldId,
+    ),
+  }),
+);
+
 export const schema = {
   users,
   sessions,
@@ -197,12 +279,18 @@ export const schema = {
   organizations,
   organizationPolicies,
   tenantMembers,
+  memberCustomFields,
+  memberCustomFieldValues,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
 export type TenantRole = typeof tenantRoleEnum.enumValues[number];
 export type MembershipStatus = typeof membershipStatusEnum.enumValues[number];
+export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
+export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;
 export type TenantMember = typeof tenantMembers.$inferSelect;
+export type MemberCustomField = typeof memberCustomFields.$inferSelect;
+export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;

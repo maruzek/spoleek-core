@@ -7,6 +7,7 @@ import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
 import { actionClient } from "@/lib/safe-action";
+import { splitMemberName } from "@/lib/member-custom-fields";
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
 import { slugify } from "@/lib/slugify";
 import { db } from "@/server/db";
@@ -100,11 +101,15 @@ export const createOrganizationSetupAction = authActionClient
         .limit(1);
 
       if (existingMembership.length === 0) {
+        const adminName = splitMemberName(ctx.auth.user.name);
+
         await tx.insert(tenantMembers).values({
           id: randomUUID(),
           orgId,
           userId: ctx.auth.user.id,
           email: ctx.auth.user.email,
+          firstName: adminName.firstName,
+          lastName: adminName.lastName,
           fullName: ctx.auth.user.name,
           role: "org_admin",
           status: "active",
@@ -150,12 +155,15 @@ export const createShadowMemberAction = orgAdminActionClient
       parsedInput.email && parsedInput.email.length > 0
         ? await findUserByEmail(parsedInput.email)
         : null;
+    const memberName = splitMemberName(parsedInput.fullName);
 
     await db.insert(tenantMembers).values({
       id: randomUUID(),
       orgId: organization.id,
       userId: matchedUser?.id ?? null,
       email: parsedInput.email || null,
+      firstName: memberName.firstName,
+      lastName: memberName.lastName,
       fullName: parsedInput.fullName,
       phone: parsedInput.phone || null,
       notes: parsedInput.notes || null,

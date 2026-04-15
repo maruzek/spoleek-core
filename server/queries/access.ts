@@ -5,6 +5,7 @@ import type { AppCapabilities, AppShellContext } from "@/lib/app-shell";
 import { db } from "@/server/db";
 import { tenantMembers, users } from "@/server/db/schema";
 import { getAppOrganization } from "@/server/queries/app";
+import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
 import { requireViewerSession } from "@/server/queries/auth";
 
 export async function requireOrganization() {
@@ -157,13 +158,23 @@ export async function getViewerAppContext(): Promise<
   };
 }
 
-export async function requireCurrentMemberAccess() {
+export async function requireCurrentMemberAccess(options?: {
+  requireProfileComplete?: boolean;
+}) {
   const session = await requireViewerSession();
   const organization = await requireOrganization();
   const member = await getCurrentMember(session.user.id);
 
   if (!member) {
     redirect("/join");
+  }
+
+  if (options?.requireProfileComplete && member.status === "active") {
+    const completeness = await getPostApprovalCompleteness(organization.id, member.id);
+
+    if (!completeness.isComplete) {
+      redirect("/portal/profile?incomplete=1");
+    }
   }
 
   return {

@@ -106,12 +106,17 @@ function getSidebarData(appContext: AppShellContext) {
       href: "/admin/settings",
       icon: Settings2Icon,
     },
+    {
+      title: "Custom Fields",
+      href: "/admin/settings/custom-fields",
+      icon: Settings2Icon,
+    },
   ].filter((item) => {
     if (item.href === "/admin/members") {
       return appContext.capabilities.canManageMembers
     }
 
-    if (item.href === "/admin/settings") {
+    if (item.href === "/admin/settings" || item.href === "/admin/settings/custom-fields") {
       return appContext.capabilities.canManageOrganization
     }
 
