@@ -1,9 +1,6 @@
 "use client"
 
-import * as React from "react"
-
 import { NavMain } from "@/components/nav-main"
-import { NavProjects } from "@/components/nav-projects"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -15,186 +12,182 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { TerminalSquareIcon, BotIcon, BookOpenIcon, Settings2Icon, LifeBuoyIcon, SendIcon, FrameIcon, PieChartIcon, MapIcon, TerminalIcon } from "lucide-react"
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  navMain: [
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+
+import type { AppShellContext } from "@/lib/app-shell"
+import {
+  BookOpenIcon,
+  CalendarDaysIcon,
+  CreditCardIcon,
+  FolderTreeIcon,
+  LayoutDashboardIcon,
+  LifeBuoyIcon,
+  Settings2Icon,
+  ShieldIcon,
+  TerminalIcon,
+  UserCircle2Icon,
+  UsersIcon,
+} from "lucide-react"
+
+function getSidebarData(appContext: AppShellContext) {
+  const portalItems = [
     {
-      title: "Playground",
-      url: "#",
-      icon: (
-        <TerminalSquareIcon
-        />
-      ),
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
+      title: "Overview",
+      href: "/portal",
+      icon: LayoutDashboardIcon,
     },
     {
-      title: "Models",
-      url: "#",
-      icon: (
-        <BotIcon
-        />
-      ),
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
+      title: "Profile",
+      href: "/portal/profile",
+      icon: UserCircle2Icon,
     },
     {
-      title: "Documentation",
-      url: "#",
-      icon: (
-        <BookOpenIcon
-        />
-      ),
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
+      title: "My Groups",
+      href: "/portal/groups",
+      icon: FolderTreeIcon,
+    },
+    {
+      title: "Events",
+      href: "/portal/events",
+      icon: CalendarDaysIcon,
+    },
+    {
+      title: "Forms",
+      href: "/portal/forms",
+      icon: BookOpenIcon,
+    },
+    {
+      title: "Payments",
+      href: "/portal/payments",
+      icon: CreditCardIcon,
+    },
+  ]
+
+  const adminItems = [
+    {
+      title: "Dashboard",
+      href: "/admin",
+      icon: ShieldIcon,
+    },
+    {
+      title: "Members",
+      href: "/admin/members",
+      icon: UsersIcon,
+    },
+    {
+      title: "Groups",
+      href: "/admin/groups",
+      icon: FolderTreeIcon,
+    },
+    {
+      title: "Group Categories",
+      href: "/admin/group-categories",
+      icon: FolderTreeIcon,
+    },
+    {
+      title: "Events",
+      href: "/admin/events",
+      icon: CalendarDaysIcon,
+    },
+    {
+      title: "Forms",
+      href: "/admin/forms",
+      icon: BookOpenIcon,
+    },
+    {
+      title: "Payments",
+      href: "/admin/payments",
+      icon: CreditCardIcon,
     },
     {
       title: "Settings",
-      url: "#",
-      icon: (
-        <Settings2Icon
-        />
-      ),
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
+      href: "/admin/settings",
+      icon: Settings2Icon,
     },
-  ],
-  navSecondary: [
+  ].filter((item) => {
+    if (item.href === "/admin/members") {
+      return appContext.capabilities.canManageMembers
+    }
+
+    if (item.href === "/admin/settings") {
+      return appContext.capabilities.canManageOrganization
+    }
+
+    return appContext.capabilities.canAccessAdmin
+  })
+
+  const secondaryItems = [
     {
-      title: "Support",
-      url: "#",
-      icon: (
-        <LifeBuoyIcon
-        />
-      ),
+      title: "Portal",
+      href: "/portal",
+      icon: UserCircle2Icon,
     },
     {
-      title: "Feedback",
-      url: "#",
-      icon: (
-        <SendIcon
-        />
-      ),
+      title: "Help",
+      href: "/",
+      icon: LifeBuoyIcon,
     },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: (
-        <FrameIcon
-        />
-      ),
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: (
-        <PieChartIcon
-        />
-      ),
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: (
-        <MapIcon
-        />
-      ),
-    },
-  ],
+  ].filter((item) => item.href !== "/portal" || appContext.capabilities.canAccessPortal)
+
+  return {
+    portalItems,
+    adminItems,
+    secondaryItems,
+  }
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  appContext,
+  ...props
+}: React.ComponentProps<typeof Sidebar> & {
+  appContext: AppShellContext
+}) {
+  const pathname = usePathname()
+  const { adminItems, portalItems, secondaryItems } = getSidebarData(appContext)
+  const isAdminSection = pathname.startsWith("/admin")
+
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <Link href={isAdminSection ? "/admin" : "/portal"}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <TerminalIcon className="size-4" />
+                  <TerminalIcon />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Acme Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-medium">{appContext.organization.name}</span>
+                  <span className="truncate text-xs">
+                    {isAdminSection ? "Administration" : "Member portal"}
+                  </span>
                 </div>
-              </a>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        {appContext.capabilities.canAccessPortal ? (
+          <NavMain label="Portal" items={portalItems} />
+        ) : null}
+        {appContext.capabilities.canAccessAdmin ? (
+          <NavMain label="Administration" items={adminItems} />
+        ) : null}
+        <NavSecondary items={secondaryItems} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser
+          user={{
+            name: appContext.viewer.name,
+            email: appContext.viewer.email,
+            avatar: appContext.viewer.avatar,
+            portalHref: appContext.capabilities.canAccessPortal ? "/portal" : null,
+            adminHref: appContext.capabilities.canAccessAdmin ? "/admin" : null,
+          }}
+        />
       </SidebarFooter>
     </Sidebar>
   )

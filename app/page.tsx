@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 
 import { RootAuthPanel } from "@/components/auth/root-auth-panel";
 import { getServerEnvStatus } from "@/lib/env";
+import { getDefaultSignedInRoute } from "@/lib/app-shell";
 import { getBootstrapState } from "@/server/queries/bootstrap";
+import { getViewerAppContext } from "@/server/queries/access";
 import { getViewerSession } from "@/server/queries/auth";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +22,8 @@ export default async function Home() {
   ]);
 
   if (session) {
-    redirect("/portal");
+    const appContext = await getViewerAppContext();
+    redirect(getDefaultSignedInRoute(appContext));
   }
 
   return (
