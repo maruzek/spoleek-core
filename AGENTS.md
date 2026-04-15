@@ -6,6 +6,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 <!-- END:nextjs-agent-rules -->
 
+# Tools:
+
+You must at all cost try to use as much shadcn/ui components as possible. Do not reinvent the wheel. If a component is not available in shadcn/ui, check if there is a community package that provides it. If not, then you can create a custom component.
+
+Use TanStack Form for all forms. It is a very powerful library that can be used to create complex forms.
+
+Use TanStack Table for all tables. It is a very powerful library that can be used to create complex tables.
+
 # Product Requirements Document (PRD): Spoleek
 
 ## 1. Executive Summary

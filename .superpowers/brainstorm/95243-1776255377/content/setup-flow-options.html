@@ -1,0 +1,89 @@
+<h2>Which first-run setup structure feels right?</h2>
+<p class="subtitle">All three assume: <strong>/</strong> is blocked until an org exists, <strong>/setup</strong> is public on first run, the wizard creates the first admin account, and the flow includes guided <code>.env</code> instructions.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. Linear Gate</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Setup progress</div>
+          <div class="mock-content">
+            <div class="placeholder">1. Environment checklist</div>
+            <div class="placeholder">2. Auth strategy</div>
+            <div class="placeholder">3. Create first admin</div>
+            <div class="placeholder">4. Create organization</div>
+            <div class="placeholder">5. Finish + go to login</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Linear Gate</h3>
+      <p>Strict step-by-step onboarding. Great for reducing confusion and guaranteeing order, but the most guided and least flexible.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Setup Launcher</div>
+        <div class="mockup-body">
+          <div class="mock-nav">Choose your path</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="placeholder">Deployment guide</div>
+            <div class="placeholder">Auth strategy</div>
+            <div class="placeholder">Create admin account</div>
+            <div class="placeholder">Organization details</div>
+          </div>
+          <div class="placeholder" style="margin-top:12px;">Progress checklist stays visible</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Setup Launcher</h3>
+      <p>Starts with a choice-oriented setup home, then moves into short focused tasks. Best balance of guidance, flexibility, and “prompted with options.”</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Operations Console</div>
+        <div class="mockup-body">
+          <div style="display:flex;gap:12px;">
+            <div class="mock-sidebar">Checklist<br>Env<br>Auth<br>Org<br>Done</div>
+            <div class="mock-content">
+              <div class="placeholder">Status panels</div>
+              <div class="placeholder">Current task detail</div>
+              <div class="placeholder">Docs / commands / next steps</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Operations Console</h3>
+      <p>Feels powerful and admin-heavy, with lots of context visible at once. Strong for self-hosters, but denser and more complex for first-run onboarding.</p>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons" style="margin-top:24px;">
+  <div class="pros">
+    <h4>Recommended</h4>
+    <ul>
+      <li><strong>B. Setup Launcher</strong> best matches your “prompted with options, then instructions” requirement.</li>
+      <li>Keeps <code>/setup</code> feeling intentional rather than just a long form.</li>
+      <li>Makes it easy later to add optional setup tracks like Google sign-in or Workspace.</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>Watch-outs</h4>
+    <ul>
+      <li>A can feel too rigid if the admin already knows what they need.</li>
+      <li>C risks feeling like a dashboard before the app is actually ready for use.</li>
+      <li>B needs clear completion states so it does not feel “choose-your-own-adventure” in a bad way.</li>
+    </ul>
+  </div>
+</div>
