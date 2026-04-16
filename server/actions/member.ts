@@ -8,7 +8,6 @@ import { z } from "zod";
 
 import {
   memberCustomFieldAnswersSchema,
-  splitMemberName,
 } from "@/lib/member-custom-fields";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";

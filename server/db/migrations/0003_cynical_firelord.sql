@@ -1,0 +1,2 @@
+ALTER TABLE "organizations" ADD COLUMN "join_page_headline" text DEFAULT 'Join our organization' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN "join_page_body" text DEFAULT 'Tell us a little about yourself and submit your application. We will review it and get back to you soon.' NOT NULL;

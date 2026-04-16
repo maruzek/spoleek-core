@@ -31,6 +31,16 @@ export async function findShadowMemberForUser(orgId: string, email: string) {
   return member ?? null;
 }
 
+export async function findTenantMemberByEmail(orgId: string, email: string) {
+  const [member] = await db
+    .select()
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.orgId, orgId), ilike(tenantMembers.email, email)))
+    .limit(1);
+
+  return member ?? null;
+}
+
 export async function listTenantMembers(orgId: string) {
   return db
     .select({

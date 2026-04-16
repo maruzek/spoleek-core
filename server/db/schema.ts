@@ -140,6 +140,10 @@ export const organizations = pgTable(
     legalName: text("legal_name"),
     primaryEmail: text("primary_email"),
     website: text("website"),
+    joinPageHeadline: text("join_page_headline").notNull().default("Join our organization"),
+    joinPageBody: text("join_page_body").notNull().default(
+      "Tell us a little about yourself and submit your application. We will review it and get back to you soon.",
+    ),
     countryCode: text("country_code").notNull().default("CZ"),
     locale: text("locale").notNull().default("en"),
     timezone: text("timezone").notNull().default("Europe/Prague"),

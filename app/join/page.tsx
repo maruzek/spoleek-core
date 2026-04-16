@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeftIcon } from "lucide-react";
+import { redirect } from "next/navigation";
 
-import { AppShell } from "@/components/app/shell";
-import { JoinForm } from "@/components/app/join-form";
+import { PublicJoinForm } from "@/components/app/public-join-form";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,11 +11,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { splitMemberName } from "@/lib/member-custom-fields";
-import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
+import { Separator } from "@/components/ui/separator";
+import { getAppOrganization, getOrganizationJoinPage } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
-import { getViewerSession } from "@/server/queries/auth";
-import { getTenantMemberByUserId } from "@/server/queries/members";
 
 export default async function JoinPage() {
   const organization = await getAppOrganization();
@@ -24,105 +22,66 @@ export default async function JoinPage() {
     redirect("/setup");
   }
 
-  const policy = await getOrganizationPolicy(organization.id);
+  const [joinPage, registrationFields] = await Promise.all([
+    getOrganizationJoinPage(organization.id),
+    listActiveMemberCustomFields(organization.id, ["registration"]),
+  ]);
 
-  if (!policy) {
+  if (!joinPage) {
     redirect("/setup");
   }
 
-  const session = await getViewerSession();
-  const member = session
-    ? await getTenantMemberByUserId(organization.id, session.user.id)
-    : null;
-
-  const registrationFields = await listActiveMemberCustomFields(organization.id, [
-    "registration",
-  ]);
-  const defaultName = session
-    ? splitMemberName(session.user.name)
-    : { firstName: "", lastName: "" };
-  const isJoined = Boolean(member?.acceptedTermsAt && member?.acceptedPrivacyAt);
-
   return (
-    <AppShell
-      eyebrow="Member onboarding"
-      title={`Join ${organization.name}`}
-      description="Accept the organization policies and complete the minimum profile details needed to create or link your membership record."
-      actions={
-        session ? (
-          <Button asChild variant="outline">
-            <Link href={isJoined ? "/portal" : "/"}>{isJoined ? "Open portal" : "Account"}</Link>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(214,240,224,0.9),_rgba(249,246,238,0.92)_38%,_rgba(244,238,227,0.98)_100%)] px-6 py-10 text-foreground">
+      <div className="mx-auto flex max-w-5xl flex-col gap-8">
+        <div className="flex items-center justify-between">
+          <Button asChild variant="ghost">
+            <Link href="/">
+              <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
+              Back
+            </Link>
           </Button>
-        ) : (
-          <Button asChild variant="outline">
-            <Link href="/">Sign in or register</Link>
-          </Button>
-        )
-      }
-    >
-      <section className="grid gap-6 md:grid-cols-[0.9fr_1.1fr]">
-        <article className="grid gap-4 rounded-4xl border border-slate-950/10 bg-white p-8 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]">
-          <div>
-            <p className="text-xs font-semibold tracking-[0.28em] uppercase text-slate-500">
-              Terms of service
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+            {organization.name}
+          </p>
+        </div>
+
+        <section className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          <div className="flex flex-col justify-center gap-5 px-1 py-4">
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              Public application
             </p>
-            <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">
-              {policy.termsOfServiceText}
+            <h1 className="max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
+              {joinPage.joinPageHeadline}
+            </h1>
+            <p className="max-w-xl whitespace-pre-line text-base leading-8 text-muted-foreground">
+              {joinPage.joinPageBody}
+            </p>
+            <Separator className="max-w-28" />
+            <p className="max-w-lg text-sm leading-7 text-muted-foreground">
+              Submit the form once. If the organization needs anything else, they can follow up
+              with you directly.
             </p>
           </div>
-          <div className="h-px bg-slate-200" />
-          <div>
-            <p className="text-xs font-semibold tracking-[0.28em] uppercase text-slate-500">
-              Privacy policy
-            </p>
-            <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">
-              {policy.privacyPolicyText}
-            </p>
-          </div>
-        </article>
-        {session ? (
-          isJoined ? (
-            <Card className="rounded-4xl border border-slate-950/10 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]">
-              <CardHeader>
-                <CardTitle>You have already joined.</CardTitle>
-                <CardDescription>
-                  Your membership record is already linked to this account, so you can continue in the portal.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button asChild size="lg">
-                  <Link href="/portal">Go to portal</Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <JoinForm
-              termsLabel={policy.termsOfServiceLabel}
-              privacyLabel={policy.privacyPolicyLabel}
-              defaultFirstName={member?.firstName || defaultName.firstName}
-              defaultLastName={member?.lastName || defaultName.lastName}
-              customFields={registrationFields}
-            />
-          )
-        ) : (
-          <Card className="rounded-4xl border border-slate-950/10 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]">
-            <CardHeader>
-              <CardTitle>Sign in before joining</CardTitle>
-              <CardDescription>
-                Review the policies here anytime, then sign in or create an account to submit your membership details.
+
+          <Card className="border-border/70 bg-card/95 shadow-[0_24px_60px_-28px_rgba(16,24,40,0.3)] backdrop-blur">
+            <CardHeader className="gap-3">
+              <CardTitle className="text-2xl">Apply to join</CardTitle>
+              <CardDescription className="text-sm leading-6">
+                Fill in your contact details, answer the organization&apos;s questions, and submit
+                your application for review.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <Button asChild size="lg">
-                <Link href="/">Continue to sign in</Link>
-              </Button>
-              <p className="text-sm leading-6 text-muted-foreground">
-                After authentication, you will be able to complete the join form on this page.
-              </p>
+            <CardContent>
+              <PublicJoinForm
+                customFields={registrationFields}
+                termsLabel={joinPage.termsOfServiceLabel}
+                privacyLabel={joinPage.privacyPolicyLabel}
+              />
             </CardContent>
           </Card>
-        )}
-      </section>
-    </AppShell>
+        </section>
+      </div>
+    </main>
   );
 }

@@ -27,9 +27,14 @@ export default async function AdminSettingsPage() {
             land here later without widening access.
           </p>
           <div>
-            <Button asChild variant="outline">
-              <Link href="/admin/settings/custom-fields">Manage custom fields</Link>
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild variant="outline">
+                <Link href="/admin/settings/custom-fields">Manage custom fields</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/admin/settings/join">Manage join page</Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
