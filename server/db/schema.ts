@@ -26,6 +26,7 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "pending",
   "active",
   "archived",
+  "deleted",
 ]);
 
 export const memberCustomFieldTypeEnum = pgEnum("member_custom_field_type", [
@@ -196,6 +197,10 @@ export const tenantMembers = pgTable(
     acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
     acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
     linkedAt: timestamp("linked_at", { withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedByUserId: text("deleted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     ...timestamps,
   },
   (table) => ({

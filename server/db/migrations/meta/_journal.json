@@ -36,6 +36,13 @@
       "when": 1776325601392,
       "tag": "0004_silky_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776328205681,
+      "tag": "0005_majestic_thor",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,9 @@ import { MemberAdmin } from "@/components/app/member-admin";
 import { requireAdminAccess } from "@/server/queries/access";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberEditorData, listTenantMembers } from "@/server/queries/members";
+import type { TenantMember } from "@/server/db/schema";
+
+type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
 
 export default async function AdminMembersPage({
   searchParams,
@@ -30,9 +33,19 @@ export default async function AdminMembersPage({
       tooltip="This screen remains the first operational slice for organization admins. It covers creating offline records, linking real users later, and approving pending join requests."
     >
       <MemberAdmin
-        members={members}
+        members={members as Array<(typeof members)[number] & { status: VisibleMemberStatus }>}
         customFields={customFields}
-        selectedMember={selectedMember}
+        selectedMember={
+          selectedMember
+            ? {
+                ...selectedMember,
+                member: {
+                  ...selectedMember.member,
+                  status: selectedMember.member.status as VisibleMemberStatus,
+                },
+              }
+            : null
+        }
       />
     </AppPage>
   );

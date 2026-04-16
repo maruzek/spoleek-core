@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { forbidden, redirect } from "next/navigation";
 
 import type { AppCapabilities, AppShellContext } from "@/lib/app-shell";
@@ -24,7 +24,11 @@ export async function getCurrentMember(userId: string) {
     .select()
     .from(tenantMembers)
     .where(
-      and(eq(tenantMembers.orgId, organization.id), eq(tenantMembers.userId, userId)),
+      and(
+        eq(tenantMembers.orgId, organization.id),
+        eq(tenantMembers.userId, userId),
+        ne(tenantMembers.status, "deleted"),
+      ),
     )
     .limit(1);
 
@@ -119,7 +123,11 @@ export async function getViewerAppContext(): Promise<
     .select()
     .from(tenantMembers)
     .where(
-      and(eq(tenantMembers.orgId, organization.id), eq(tenantMembers.userId, session.user.id)),
+      and(
+        eq(tenantMembers.orgId, organization.id),
+        eq(tenantMembers.userId, session.user.id),
+        ne(tenantMembers.status, "deleted"),
+      ),
     )
     .limit(1);
 
@@ -233,7 +241,13 @@ export async function requireOrgAdminAccess(userId?: string) {
     const [member] = await db
       .select()
       .from(tenantMembers)
-      .where(and(eq(tenantMembers.orgId, organization.id), eq(tenantMembers.userId, userId)))
+      .where(
+        and(
+          eq(tenantMembers.orgId, organization.id),
+          eq(tenantMembers.userId, userId),
+          ne(tenantMembers.status, "deleted"),
+        ),
+      )
       .limit(1);
 
     if (!member || member.status !== "active" || member.role !== "org_admin") {

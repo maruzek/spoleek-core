@@ -6,10 +6,16 @@ import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
-import { createMemberSchema, updateMemberSchema } from "@/lib/member-admin";
+import {
+  bulkDeleteMembersSchema,
+  createMemberSchema,
+  deleteMemberSchema,
+  updateMemberSchema,
+} from "@/lib/member-admin";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
+import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { requireOrganization } from "@/server/queries/access";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
@@ -169,4 +175,30 @@ export const updateMemberAction = orgAdminActionClient
     });
 
     return result;
+  });
+
+export const deleteMemberAction = orgAdminActionClient
+  .metadata({ actionName: "deleteMember" })
+  .inputSchema(deleteMemberSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const organization = await requireOrganization();
+
+    return softDeleteMembers({
+      actorUserId: ctx.auth.user.id,
+      memberIds: [parsedInput.memberId],
+      orgId: organization.id,
+    });
+  });
+
+export const bulkDeleteMembersAction = orgAdminActionClient
+  .metadata({ actionName: "bulkDeleteMembers" })
+  .inputSchema(bulkDeleteMembersSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const organization = await requireOrganization();
+
+    return softDeleteMembers({
+      actorUserId: ctx.auth.user.id,
+      memberIds: parsedInput.memberIds,
+      orgId: organization.id,
+    });
   });

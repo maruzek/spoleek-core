@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { AlertTriangleIcon, InfoIcon, Trash2Icon } from "lucide-react";
 
 import {
   type UpdateMemberValues,
@@ -9,9 +11,19 @@ import {
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -34,13 +46,19 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
-import { InfoIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
+type EditableMemberStatus = Exclude<TenantMember["status"], "deleted">;
+type EditableMember = Omit<TenantMember, "status"> & {
+  status: EditableMemberStatus;
+};
+
 type MemberEditSheetProps = {
+  canDelete: boolean;
   customFields: MemberCustomField[];
+  isDeletePending: boolean;
   isPending: boolean;
-  member: TenantMember;
+  member: EditableMember;
   open: boolean;
   serverError?: string;
   validationErrors?: Partial<
@@ -48,12 +66,13 @@ type MemberEditSheetProps = {
   >;
   customFieldErrors?: Record<string, string[]>;
   customFieldAnswers: Record<string, unknown>;
+  onDelete: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: UpdateMemberValues) => Promise<void>;
 };
 
 function toDefaultValues(
-  member: TenantMember,
+  member: EditableMember,
   customFieldAnswers: Record<string, unknown>,
 ): UpdateMemberValues {
   return {
@@ -68,7 +87,9 @@ function toDefaultValues(
 }
 
 export function MemberEditSheet({
+  canDelete,
   customFields,
+  isDeletePending,
   isPending,
   member,
   open,
@@ -76,9 +97,11 @@ export function MemberEditSheet({
   validationErrors,
   customFieldErrors,
   customFieldAnswers,
+  onDelete,
   onOpenChange,
   onSubmit,
 }: MemberEditSheetProps) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const form = useForm({
     defaultValues: toDefaultValues(member, customFieldAnswers),
     onSubmit: async ({ value }) => {
@@ -355,8 +378,53 @@ export function MemberEditSheet({
             </FieldGroup>
           </div>
 
-          <SheetFooter>
-            <Button type="submit" disabled={isPending}>
+          <SheetFooter className="flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {canDelete ? (
+              <AlertDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+              >
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  disabled={isPending || isDeletePending}
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  Delete member
+                </Button>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogMedia>
+                      <AlertTriangleIcon />
+                    </AlertDialogMedia>
+                    <AlertDialogTitle>Delete {member.firstName} {member.lastName}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This soft-deletes the member immediately, hides them from the
+                      table, and schedules permanent removal after 30 days.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeletePending}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      disabled={isDeletePending}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        void onDelete();
+                      }}
+                    >
+                      {isDeletePending ? "Deleting..." : "Delete member"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <div />
+            )}
+            <Button type="submit" disabled={isPending || isDeletePending}>
               {isPending ? "Saving..." : "Save member"}
             </Button>
           </SheetFooter>

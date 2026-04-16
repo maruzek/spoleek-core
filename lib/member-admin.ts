@@ -22,5 +22,15 @@ export const updateMemberSchema = adminMemberIdentitySchema.extend({
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });
 
+export const deleteMemberSchema = z.object({
+  memberId: z.string().uuid(),
+});
+
+export const bulkDeleteMembersSchema = z.object({
+  memberIds: z.array(z.string().uuid()).min(1, "Select at least one member."),
+});
+
 export type CreateMemberValues = z.infer<typeof createMemberSchema>;
 export type UpdateMemberValues = z.infer<typeof updateMemberSchema>;
+export type DeleteMemberValues = z.infer<typeof deleteMemberSchema>;
+export type BulkDeleteMembersValues = z.infer<typeof bulkDeleteMembersSchema>;
