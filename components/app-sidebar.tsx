@@ -82,11 +82,6 @@ function getSidebarData(appContext: AppShellContext) {
       icon: FolderTreeIcon,
     },
     {
-      title: "Group Categories",
-      href: "/admin/group-categories",
-      icon: FolderTreeIcon,
-    },
-    {
       title: "Events",
       href: "/admin/events",
       icon: CalendarDaysIcon,
@@ -114,6 +109,10 @@ function getSidebarData(appContext: AppShellContext) {
   ].filter((item) => {
     if (item.href === "/admin/members") {
       return appContext.capabilities.canManageMembers
+    }
+
+    if (item.href === "/admin/groups") {
+      return appContext.capabilities.canManageGroups
     }
 
     if (item.href === "/admin/settings" || item.href === "/admin/settings/custom-fields") {

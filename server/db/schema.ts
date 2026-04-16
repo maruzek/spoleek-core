@@ -47,6 +47,22 @@ export const memberCustomFieldStageEnum = pgEnum("member_custom_field_stage", [
   "optional",
 ]);
 
+export const groupCategorySelectionModeEnum = pgEnum(
+  "group_category_selection_mode",
+  ["single", "multiple"],
+);
+
+export const groupJoinPolicyEnum = pgEnum("group_join_policy", [
+  "admin_only",
+  "free_join_leave",
+  "request_to_join",
+]);
+
+export const groupMembershipRoleEnum = pgEnum("group_membership_role", [
+  "member",
+  "group_admin",
+]);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -210,6 +226,125 @@ export const tenantMembers = pgTable(
   }),
 );
 
+export const groupCategories = pgTable(
+  "group_categories",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    isActive: boolean("is_active").notNull().default(true),
+    isPinnedToNavigation: boolean("is_pinned_to_navigation").notNull().default(false),
+    showInRegistration: boolean("show_in_registration").notNull().default(false),
+    selectionMode: groupCategorySelectionModeEnum("selection_mode")
+      .notNull()
+      .default("multiple"),
+    selectionRequired: boolean("selection_required").notNull().default(false),
+    maxSelections: integer("max_selections"),
+    defaultJoinPolicy: groupJoinPolicyEnum("default_join_policy")
+      .notNull()
+      .default("admin_only"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    specialCapability: text("special_capability"),
+    ...timestamps,
+  },
+  (table) => ({
+    orgSlugIdx: uniqueIndex("group_categories_org_slug_idx").on(table.orgId, table.slug),
+    orgSortIdx: index("group_categories_org_sort_idx").on(table.orgId, table.sortOrder),
+    orgActiveIdx: index("group_categories_org_active_idx").on(table.orgId, table.isActive),
+  }),
+);
+
+export const groups = pgTable(
+  "groups",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => groupCategories.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    joinPolicy: groupJoinPolicyEnum("join_policy").notNull().default("admin_only"),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => ({
+    orgSlugIdx: uniqueIndex("groups_org_slug_idx").on(table.orgId, table.slug),
+    categorySortIdx: index("groups_category_sort_idx").on(table.categoryId, table.sortOrder),
+    orgCategoryIdx: index("groups_org_category_idx").on(table.orgId, table.categoryId),
+    orgActiveIdx: index("groups_org_active_idx").on(table.orgId, table.isActive),
+  }),
+);
+
+export const groupMemberships = pgTable(
+  "group_memberships",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    groupId: text("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    role: groupMembershipRoleEnum("role").notNull().default("member"),
+    ...timestamps,
+  },
+  (table) => ({
+    groupMemberIdx: uniqueIndex("group_memberships_group_member_idx").on(
+      table.groupId,
+      table.memberId,
+    ),
+    orgMemberIdx: index("group_memberships_org_member_idx").on(table.orgId, table.memberId),
+    orgGroupRoleIdx: index("group_memberships_org_group_role_idx").on(
+      table.orgId,
+      table.groupId,
+      table.role,
+    ),
+  }),
+);
+
+export const categoryAdminAssignments = pgTable(
+  "category_admin_assignments",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    categoryId: text("category_id")
+      .notNull()
+      .references(() => groupCategories.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    ...timestamps,
+  },
+  (table) => ({
+    categoryMemberIdx: uniqueIndex("category_admin_assignments_category_member_idx").on(
+      table.categoryId,
+      table.memberId,
+    ),
+    orgCategoryIdx: index("category_admin_assignments_org_category_idx").on(
+      table.orgId,
+      table.categoryId,
+    ),
+    orgMemberIdx: index("category_admin_assignments_org_member_idx").on(
+      table.orgId,
+      table.memberId,
+    ),
+  }),
+);
+
 export const memberCustomFields = pgTable(
   "member_custom_fields",
   {
@@ -279,6 +414,10 @@ export const schema = {
   organizations,
   organizationPolicies,
   tenantMembers,
+  groupCategories,
+  groups,
+  groupMemberships,
+  categoryAdminAssignments,
   memberCustomFields,
   memberCustomFieldValues,
 };
@@ -288,9 +427,17 @@ export type TenantRole = typeof tenantRoleEnum.enumValues[number];
 export type MembershipStatus = typeof membershipStatusEnum.enumValues[number];
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
+export type GroupCategorySelectionMode =
+  typeof groupCategorySelectionModeEnum.enumValues[number];
+export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
+export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;
 export type TenantMember = typeof tenantMembers.$inferSelect;
+export type GroupCategory = typeof groupCategories.$inferSelect;
+export type Group = typeof groups.$inferSelect;
+export type GroupMembership = typeof groupMemberships.$inferSelect;
+export type CategoryAdminAssignment = typeof categoryAdminAssignments.$inferSelect;
 export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;

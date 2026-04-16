@@ -6,6 +6,7 @@ export type AdminAccessLevel = "none" | "scoped" | "full";
 export type AppCapabilities = {
   canAccessPortal: boolean;
   canAccessAdmin: boolean;
+  canManageGroups: boolean;
   canManageOrganization: boolean;
   canManageMembers: boolean;
   canManageScopedMembers: boolean;

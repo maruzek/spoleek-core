@@ -34,6 +34,10 @@ function getLabel(segment: string) {
   return SEGMENT_LABELS[segment] ?? segment.replace(/-/g, " ");
 }
 
+function isDynamicId(segment: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
+}
+
 export function AppBreadcrumbs() {
   const segments = useSelectedLayoutSegments().filter(
     (segment) => !segment.startsWith("("),
@@ -48,7 +52,14 @@ export function AppBreadcrumbs() {
       <BreadcrumbList>
         {segments.map((segment, index) => {
           const isLast = index === segments.length - 1;
-          const label = getLabel(segment);
+          const dynamicSegmentsBefore = segments
+            .slice(0, index + 1)
+            .filter((value) => isDynamicId(value)).length;
+          const label = isDynamicId(segment)
+            ? dynamicSegmentsBefore === 1
+              ? "Category"
+              : "Group"
+            : getLabel(segment);
 
           return (
             <Fragment key={segment}>
