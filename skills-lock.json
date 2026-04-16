@@ -21,6 +21,11 @@
       "sourceType": "github",
       "computedHash": "747d7f73bd9e2ec5317b8ef88dc70f97df716d00e3d02de4051feebaa48b062d"
     },
+    "email-best-practices": {
+      "source": "resend/email-best-practices",
+      "sourceType": "github",
+      "computedHash": "6a88d51e8c8ffd7d5b70831c303878ad29a3734792db9b56456269c4d70c2ff8"
+    },
     "frontend-design": {
       "source": "anthropics/skills",
       "sourceType": "github",
@@ -40,6 +45,21 @@
       "source": "planetscale/database-skills",
       "sourceType": "github",
       "computedHash": "2acf9fae4fcdb6c392923708b67234828f8a9f10b10dfa5d228eaab6e9108245"
+    },
+    "react-email": {
+      "source": "resend/react-email",
+      "sourceType": "github",
+      "computedHash": "dc8823cae35b2650f5ca0aa56a806b724cfd92118b68a561d29d99f138fee8d2"
+    },
+    "resend": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "computedHash": "936851c3e22e6de1d416134a9cd170d7540ddebe5a1c0113eef66537c843c6ed"
+    },
+    "resend-cli": {
+      "source": "resend/resend-skills",
+      "sourceType": "github",
+      "computedHash": "3d7a36a5b726b3248e8bcc734a01d43f46b984f0d32c4fe1c5b987ececd57964"
     },
     "safe-action-better-auth": {
       "source": "next-safe-action/skills",
