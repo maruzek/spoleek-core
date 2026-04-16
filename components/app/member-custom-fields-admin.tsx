@@ -3,15 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { useForm } from "@tanstack/react-form";
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
-  useReactTable,
-  type SortingState,
-} from "@tanstack/react-table";
+import { createColumnHelper } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { PlusIcon, SearchIcon, Settings2Icon } from "lucide-react";
@@ -136,14 +128,13 @@ function getValidationFieldMessages(
   );
 }
 
+import { DataTable } from "@/components/ui/data-table";
+import { Checkbox } from "@/components/ui/checkbox";
+
 export function MemberCustomFieldsAdmin({
   fields,
 }: MemberCustomFieldsAdminProps) {
   const router = useRouter();
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "label", desc: false },
-  ]);
-  const [globalFilter, setGlobalFilter] = useState("");
   const [sheetState, setSheetState] = useState<SheetState>({
     open: false,
     field: null,
@@ -166,17 +157,37 @@ export function MemberCustomFieldsAdmin({
     },
   });
 
-  const data = useMemo(() => fields, [fields]);
-
   const columns = useMemo(
     () => [
+      columnHelper.display({
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      }),
       columnHelper.accessor("label", {
         header: "Label",
         cell: ({ row }) => (
           <div className="flex flex-col gap-1">
             <span className="font-medium text-foreground">{row.original.label}</span>
             {row.original.description ? (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground line-clamp-1">
                 {row.original.description}
               </span>
             ) : null}
@@ -185,17 +196,19 @@ export function MemberCustomFieldsAdmin({
       }),
       columnHelper.accessor("key", {
         header: "Key",
-        cell: (info) => <code className="text-sm">{info.getValue()}</code>,
+        cell: (info) => <code className="text-sm text-muted-foreground">{info.getValue()}</code>,
       }),
       columnHelper.accessor("type", {
         header: "Type",
         cell: (info) => (
-          <Badge variant="secondary">{formatTypeLabel(info.getValue())}</Badge>
+          <Badge variant="secondary" className="max-w-[150px] truncate">
+            {formatTypeLabel(info.getValue())}
+          </Badge>
         ),
       }),
       columnHelper.accessor("stage", {
         header: "Stage",
-        cell: (info) => <span>{formatStageLabel(info.getValue())}</span>,
+        cell: (info) => <span className="text-muted-foreground">{formatStageLabel(info.getValue())}</span>,
       }),
       columnHelper.accessor("required", {
         header: "Required",
@@ -211,13 +224,17 @@ export function MemberCustomFieldsAdmin({
       }),
       columnHelper.accessor("updatedAt", {
         header: "Updated",
-        cell: (info) => info.getValue().toLocaleDateString(),
+        cell: (info) => (
+          <span className="text-muted-foreground">
+            {info.getValue().toLocaleDateString()}
+          </span>
+        ),
       }),
       columnHelper.display({
         id: "actions",
-        header: "Actions",
+        header: "",
         cell: ({ row }) => (
-          <div className="flex gap-2">
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               size="sm"
@@ -247,118 +264,22 @@ export function MemberCustomFieldsAdmin({
     [toggleAction],
   );
 
-  const table = useReactTable({
-    data,
-    columns,
-    state: {
-      sorting,
-      globalFilter,
-    },
-    getRowId: (row) => row.id,
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: (row, _columnId, filterValue) => {
-      const query = String(filterValue).toLowerCase().trim();
-      if (!query) {
-        return true;
-      }
-
-      return [row.original.label, row.original.key, row.original.description ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    },
-  });
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-sm md:flex-row md:items-center md:justify-between">
-        <div className="max-w-2xl">
-          <h2 className="text-xl font-semibold text-foreground">Member custom fields</h2>
-          <p className="text-sm leading-6 text-muted-foreground">
-            Define which member questions appear during registration, after
-            approval, and later in the self-service portal.
-          </p>
-        </div>
-        <Button onClick={() => setSheetState({ open: true, field: null })}>
-          <PlusIcon data-icon="inline-start" />
-          New field
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-4 rounded-3xl border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="relative w-full md:max-w-sm">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={globalFilter}
-              onChange={(event) => setGlobalFilter(event.target.value)}
-              placeholder="Search custom fields"
-              className="pl-10"
-            />
-          </div>
-          <Badge variant="secondary">{fields.length} fields</Badge>
-        </div>
-
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder ? null : (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-2 font-medium"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                      </button>
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.length > 0 ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="py-16">
-                  <div className="flex flex-col items-center gap-3 text-center">
-                    <div className="flex size-12 items-center justify-center rounded-full border bg-muted">
-                      <Settings2Icon />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <p className="font-medium text-foreground">
-                        No custom fields yet
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Start with the member questions your organization needs most.
-                      </p>
-                    </div>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        data={fields}
+        columns={columns as any}
+        searchKey="label"
+        searchPlaceholder="Search custom fields..."
+        emptyStateTitle="No custom fields yet"
+        emptyStateDescription="Start with the member questions your organization needs most."
+        toolbarActions={() => (
+          <Button onClick={() => setSheetState({ open: true, field: null })}>
+            <PlusIcon data-icon="inline-start" className="size-4" />
+            New field
+          </Button>
+        )}
+      />
 
       <MemberCustomFieldSheet
         key={sheetState.field?.id ?? "new"}

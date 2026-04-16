@@ -1,11 +1,25 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
+import { createColumnHelper } from "@tanstack/react-table";
+import { PlusIcon } from "lucide-react";
 
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
 import {
   approveMemberAction,
@@ -25,10 +39,15 @@ type MemberRow = {
   linkedUserName: string | null;
 };
 
+const columnHelper = createColumnHelper<MemberRow>();
+
 export function MemberAdmin({ members }: { members: MemberRow[] }) {
   const router = useRouter();
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const createAction = useAction(createShadowMemberAction, {
     onSuccess() {
+      setSheetOpen(false);
       router.refresh();
     },
   });
@@ -38,122 +57,213 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
     },
   });
 
-  const createErrors = createAction.result.validationErrors;
+  const columns = useMemo(
+    () => [
+      columnHelper.display({
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      }),
+      columnHelper.accessor("fullName", {
+        header: "Member",
+        id: "member",
+        cell: ({ row }) => {
+          const member = row.original;
+          return (
+            <div className="flex flex-col gap-1">
+              <span className="font-medium text-foreground">
+                {getMemberDisplayName(member)}
+              </span>
+              <span className="text-sm text-muted-foreground line-clamp-1">
+                {member.email || "No email yet"}
+              </span>
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor("status", {
+        header: "Status",
+        cell: (info) => (
+          <Badge
+            variant={
+              info.getValue() === "active"
+                ? "default"
+                : info.getValue() === "pending"
+                ? "secondary"
+                : "outline"
+            }
+            className="capitalize"
+          >
+            {info.getValue()}
+          </Badge>
+        ),
+      }),
+      columnHelper.accessor("role", {
+        header: "Role",
+        cell: (info) => (
+          <span className="capitalize text-muted-foreground">
+            {info.getValue().replace("_", " ")}
+          </span>
+        ),
+      }),
+      columnHelper.accessor("userId", {
+        header: "Link",
+        cell: ({ row }) => {
+          const member = row.original;
+          return (
+            <span className="text-muted-foreground">
+              {member.userId ? member.linkedUserName || "Linked" : "Shadow profile"}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor("createdAt", {
+        header: "Created",
+        cell: (info) => (
+          <span className="text-muted-foreground">
+            {formatDateTime(info.getValue())}
+          </span>
+        ),
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "",
+        cell: ({ row }) => {
+          const member = row.original;
+          return (
+            <div className="flex justify-end gap-2">
+              {member.status === "pending" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  onClick={() =>
+                    approveAction.execute({
+                      memberId: member.id,
+                      role: member.role,
+                    })
+                  }
+                  disabled={approveAction.isPending}
+                >
+                  Approve
+                </Button>
+              ) : null}
+            </div>
+          );
+        },
+      }),
+    ],
+    [approveAction],
+  );
 
   return (
-    <div className="grid gap-8">
-      <form
-        className="grid gap-4 rounded-4xl border border-slate-950/10 bg-white p-8 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]"
-        action={async (formData) => {
-          await createAction.executeAsync({
-            fullName: String(formData.get("fullName") ?? ""),
-            email: String(formData.get("email") ?? ""),
-            phone: String(formData.get("phone") ?? ""),
-            notes: String(formData.get("notes") ?? ""),
-            role: String(formData.get("role") ?? "member") as
-              | "member"
-              | "leader"
-              | "org_admin",
-          });
-        }}
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            name="fullName"
-            label="Member name"
-            placeholder="Anna Novak"
-            required
-            error={createErrors?.fullName?._errors?.[0]}
-          />
-          <FormField
-            name="email"
-            label="Email"
-            type="email"
-            placeholder="anna@example.com"
-            error={createErrors?.email?._errors?.[0]}
-          />
-          <FormField name="phone" label="Phone" placeholder="+420..." />
-          <label className="grid gap-2 text-sm font-medium text-slate-700">
-            <span>Role</span>
-            <select
-              name="role"
-              className="h-11 rounded-2xl border border-slate-300 bg-white px-4 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
-              defaultValue="member"
-            >
-              <option value="member">Member</option>
-              <option value="leader">Leader</option>
-              <option value="org_admin">Org admin</option>
-            </select>
-          </label>
-        </div>
-        <FormField name="notes" label="Notes" placeholder="Optional admin note" />
+    <div className="flex flex-col gap-8">
+      <DataTable
+        data={members}
+        columns={columns as any}
+        searchKey="member"
+        searchPlaceholder="Search members..."
+        emptyStateTitle="No members found"
+        emptyStateDescription="Create members or invite them via the portal."
+        toolbarActions={() => (
+          <Button onClick={() => setSheetOpen(true)}>
+            <PlusIcon data-icon="inline-start" className="size-4" />
+            New Member
+          </Button>
+        )}
+      />
 
-        {createAction.result.serverError ? (
-          <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-            {createAction.result.serverError}
-          </p>
-        ) : null}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl">
+          <SheetHeader>
+            <SheetTitle>Create member or shadow profile</SheetTitle>
+            <SheetDescription>
+              Add a new member directly or create a shadow profile to later link
+              with a registered user.
+            </SheetDescription>
+          </SheetHeader>
 
-        <Button type="submit" size="lg" disabled={createAction.isPending}>
-          {createAction.isPending ? "Creating..." : "Create member or shadow profile"}
-        </Button>
-      </form>
+          <form
+            className="flex flex-1 flex-col overflow-hidden"
+            action={async (formData) => {
+              await createAction.executeAsync({
+                fullName: String(formData.get("fullName") ?? ""),
+                email: String(formData.get("email") ?? ""),
+                phone: String(formData.get("phone") ?? ""),
+                notes: String(formData.get("notes") ?? ""),
+                role: String(formData.get("role") ?? "member") as
+                  | "member"
+                  | "leader"
+                  | "org_admin",
+              });
+            }}
+          >
+            <div className="flex-1 overflow-y-auto px-4 py-6">
+              <div className="grid gap-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    name="fullName"
+                    label="Member name"
+                    placeholder="Anna Novak"
+                    required
+                    error={createAction.result.validationErrors?.fullName?._errors?.[0]}
+                  />
+                  <FormField
+                    name="email"
+                    label="Email"
+                    type="email"
+                    placeholder="anna@example.com"
+                    error={createAction.result.validationErrors?.email?._errors?.[0]}
+                  />
+                  <FormField name="phone" label="Phone" placeholder="+420..." />
+                  <label className="grid gap-2 text-sm font-medium text-slate-700">
+                    <span>Role</span>
+                    <select
+                      name="role"
+                      className="h-10 rounded-2xl border border-input bg-background px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                      defaultValue="member"
+                    >
+                      <option value="member">Member</option>
+                      <option value="leader">Leader</option>
+                      <option value="org_admin">Org admin</option>
+                    </select>
+                  </label>
+                </div>
+                <FormField name="notes" label="Notes" placeholder="Optional admin note" />
 
-      <section className="overflow-hidden rounded-4xl border border-slate-950/10 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)]">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-6 py-4 font-medium">Member</th>
-                <th className="px-6 py-4 font-medium">Status</th>
-                <th className="px-6 py-4 font-medium">Role</th>
-                <th className="px-6 py-4 font-medium">Link</th>
-                <th className="px-6 py-4 font-medium">Created</th>
-                <th className="px-6 py-4 font-medium">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((member) => (
-                <tr key={member.id} className="border-t border-slate-200">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-slate-900">
-                      {getMemberDisplayName(member)}
-                    </div>
-                    <div className="text-slate-500">{member.email || "No email yet"}</div>
-                  </td>
-                  <td className="px-6 py-4 capitalize">{member.status}</td>
-                  <td className="px-6 py-4 capitalize">{member.role.replace("_", " ")}</td>
-                  <td className="px-6 py-4 text-slate-500">
-                    {member.userId ? member.linkedUserName || "Linked" : "Shadow profile"}
-                  </td>
-                  <td className="px-6 py-4 text-slate-500">
-                    {formatDateTime(member.createdAt)}
-                  </td>
-                  <td className="px-6 py-4">
-                    {member.status === "pending" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() =>
-                          approveAction.execute({
-                            memberId: member.id,
-                            role: member.role,
-                          })
-                        }
-                        disabled={approveAction.isPending}
-                      >
-                        Approve
-                      </Button>
-                    ) : (
-                      <span className="text-slate-400">No action</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                {createAction.result.serverError ? (
+                  <p className="rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                    {createAction.result.serverError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <SheetFooter>
+              <Button type="submit" disabled={createAction.isPending}>
+                {createAction.isPending ? "Creating..." : "Create profile"}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

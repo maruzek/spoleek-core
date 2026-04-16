@@ -1,12 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 
 type AppPageProps = {
   eyebrow?: string;
@@ -24,26 +18,35 @@ export function AppPage({
   actions,
 }: AppPageProps) {
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <Card>
-        <CardHeader className="gap-4 md:grid-cols-[1fr_auto]">
+    <div className="flex flex-1 flex-col pb-8">
+      <header className="flex flex-col gap-6 py-6 md:py-8 lg:py-10">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex flex-col gap-2">
             {eyebrow ? (
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/80">
                 {eyebrow}
               </p>
             ) : null}
-            <CardTitle className="text-3xl md:text-4xl">{title}</CardTitle>
-            <CardDescription className="max-w-3xl text-sm leading-6 md:text-base">
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground md:text-5xl">
+              {title}
+            </h1>
+            <p className="mt-1 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
               {description}
-            </CardDescription>
+            </p>
           </div>
-          {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-        </CardHeader>
-      </Card>
-      <Card className="bg-transparent py-0 ring-0 shadow-none">
-        <CardContent className="px-0">{children}</CardContent>
-      </Card>
+          {actions ? (
+            <div className="mt-4 flex items-center gap-3 md:mt-0">
+              {actions}
+            </div>
+          ) : null}
+        </div>
+      </header>
+
+      <Separator className="mb-8" />
+
+      <main className="flex flex-1 flex-col">
+        {children}
+      </main>
     </div>
   );
 }
