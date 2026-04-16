@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { actionClient } from "@/lib/safe-action";
 import { splitMemberName } from "@/lib/member-custom-fields";
-import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
+import { authActionClient } from "@/lib/safe-action-auth";
 import { slugify } from "@/lib/slugify";
 import { db } from "@/server/db";
 import {
@@ -110,7 +110,6 @@ export const createOrganizationSetupAction = authActionClient
           email: ctx.auth.user.email,
           firstName: adminName.firstName,
           lastName: adminName.lastName,
-          fullName: ctx.auth.user.name,
           role: "org_admin",
           status: "active",
           acceptedTermsAt: new Date(),
@@ -133,78 +132,4 @@ export const bootstrapDemoOrganizationAction = actionClient
     return {
       ok: true,
     };
-  });
-
-export const createShadowMemberAction = orgAdminActionClient
-  .metadata({ actionName: "createShadowMember" })
-  .inputSchema(
-    z.object({
-      fullName: z.string().min(2, "Member name is required."),
-      email: z.union([z.literal(""), z.email("Enter a valid email.")]).optional(),
-      phone: z.string().optional(),
-      notes: z.string().optional(),
-      role: z.enum(["member", "leader", "org_admin"]).default("member"),
-    }),
-  )
-  .action(async ({ parsedInput, ctx }) => {
-    const { requireOrganization } = await import("@/server/queries/access");
-    const { findUserByEmail } = await import("@/server/queries/members");
-
-    const organization = await requireOrganization();
-    const matchedUser =
-      parsedInput.email && parsedInput.email.length > 0
-        ? await findUserByEmail(parsedInput.email)
-        : null;
-    const memberName = splitMemberName(parsedInput.fullName);
-
-    await db.insert(tenantMembers).values({
-      id: randomUUID(),
-      orgId: organization.id,
-      userId: matchedUser?.id ?? null,
-      email: parsedInput.email || null,
-      firstName: memberName.firstName,
-      lastName: memberName.lastName,
-      fullName: parsedInput.fullName,
-      phone: parsedInput.phone || null,
-      notes: parsedInput.notes || null,
-      role: parsedInput.role,
-      status: "active",
-      linkedAt: matchedUser ? new Date() : null,
-      acceptedTermsAt: matchedUser ? new Date() : null,
-      acceptedPrivacyAt: matchedUser ? new Date() : null,
-    });
-
-    return {
-      success: true,
-      createdBy: ctx.auth.user.email,
-    };
-  });
-
-export const approveMemberAction = orgAdminActionClient
-  .metadata({ actionName: "approveMember" })
-  .inputSchema(
-    z.object({
-      memberId: z.string().uuid(),
-      role: z.enum(["member", "leader", "org_admin"]).default("member"),
-    }),
-  )
-  .action(async ({ parsedInput }) => {
-    const { requireOrganization } = await import("@/server/queries/access");
-    const organization = await requireOrganization();
-
-    await db
-      .update(tenantMembers)
-      .set({
-        role: parsedInput.role,
-        status: "active",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(tenantMembers.id, parsedInput.memberId),
-          eq(tenantMembers.orgId, organization.id),
-        ),
-      );
-
-    return { success: true };
   });

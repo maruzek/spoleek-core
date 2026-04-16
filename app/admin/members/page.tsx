@@ -1,14 +1,26 @@
 import { AppPage } from "@/components/app/app-page";
 import { MemberAdmin } from "@/components/app/member-admin";
 import { requireAdminAccess } from "@/server/queries/access";
-import { listTenantMembers } from "@/server/queries/members";
+import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
+import { getMemberEditorData, listTenantMembers } from "@/server/queries/members";
 
-export default async function AdminMembersPage() {
+export default async function AdminMembersPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { organization } = await requireAdminAccess({
     requireFullAccess: true,
     capability: "canManageMembers",
   });
-  const members = await listTenantMembers(organization.id);
+  const params = searchParams ? await searchParams : {};
+  const editMemberId =
+    typeof params.edit === "string" && params.edit.length > 0 ? params.edit : null;
+  const [members, customFields, selectedMember] = await Promise.all([
+    listTenantMembers(organization.id),
+    listMemberCustomFields(organization.id),
+    editMemberId ? getMemberEditorData(organization.id, editMemberId) : Promise.resolve(null),
+  ]);
 
   return (
     <AppPage
@@ -17,7 +29,11 @@ export default async function AdminMembersPage() {
       description="This screen remains the first operational slice for organization admins. It covers creating offline records, linking real users later, and approving pending join requests."
       tooltip="This screen remains the first operational slice for organization admins. It covers creating offline records, linking real users later, and approving pending join requests."
     >
-      <MemberAdmin members={members} />
+      <MemberAdmin
+        members={members}
+        customFields={customFields}
+        selectedMember={selectedMember}
+      />
     </AppPage>
   );
 }

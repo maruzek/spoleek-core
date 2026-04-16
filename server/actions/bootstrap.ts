@@ -281,7 +281,6 @@ export const createBootstrapOrganizationAction = actionClient
           email: session.user.email,
           firstName: adminName.firstName,
           lastName: adminName.lastName,
-          fullName: session.user.name,
           role: "org_admin",
           status: "active",
           acceptedTermsAt: new Date(),

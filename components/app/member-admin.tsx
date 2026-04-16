@@ -1,37 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { PlusIcon } from "lucide-react";
+import { PencilIcon, PlusIcon } from "lucide-react";
 
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
+import { MemberEditSheet } from "./member-edit-sheet";
 import { MemberSheet } from "./member-sheet";
 import {
   approveMemberAction,
   createShadowMemberAction,
-} from "@/server/actions/setup";
+  updateMemberAction,
+} from "@/server/actions/member-admin";
+import type { MemberCustomField, TenantMember } from "@/server/db/schema";
 
 type MemberRow = {
   id: string;
   firstName: string;
   lastName: string;
-  fullName: string;
   email: string | null;
   role: "member" | "leader" | "org_admin";
   status: "invited" | "pending" | "active" | "archived";
@@ -42,9 +35,37 @@ type MemberRow = {
 
 const columnHelper = createColumnHelper<MemberRow>();
 
-export function MemberAdmin({ members }: { members: MemberRow[] }) {
+type MemberEditorData = {
+  member: TenantMember;
+  customFieldAnswers: Record<string, unknown>;
+};
+
+export function MemberAdmin({
+  members,
+  customFields,
+  selectedMember,
+}: {
+  members: MemberRow[];
+  customFields: MemberCustomField[];
+  selectedMember: MemberEditorData | null;
+}) {
+  const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  const updateSearchParam = (memberId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (memberId) {
+      params.set("edit", memberId);
+    } else {
+      params.delete("edit");
+    }
+
+    const nextUrl = params.toString().length > 0 ? `${pathname}?${params}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  };
 
   const createAction = useAction(createShadowMemberAction, {
     onSuccess() {
@@ -57,10 +78,15 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
       router.refresh();
     },
   });
+  const updateAction = useAction(updateMemberAction, {
+    onSuccess() {
+      updateSearchParam(null);
+      router.refresh();
+    },
+  });
 
-  const columns = useMemo(
-    () => [
-      columnHelper.display({
+  const columns = [
+    columnHelper.display({
         id: "select",
         header: ({ table }) => (
           <Checkbox
@@ -82,7 +108,12 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
         enableSorting: false,
         enableHiding: false,
       }),
-      columnHelper.accessor("fullName", {
+    columnHelper.accessor(
+      (member) =>
+        [member.firstName, member.lastName, member.email ?? ""]
+          .filter(Boolean)
+          .join(" "),
+      {
         header: "Member",
         id: "member",
         cell: ({ row }) => {
@@ -98,8 +129,9 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
             </div>
           );
         },
-      }),
-      columnHelper.accessor("status", {
+      },
+    ),
+    columnHelper.accessor("status", {
         header: "Status",
         cell: (info) => (
           <Badge
@@ -115,16 +147,16 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
             {info.getValue()}
           </Badge>
         ),
-      }),
-      columnHelper.accessor("role", {
+    }),
+    columnHelper.accessor("role", {
         header: "Role",
         cell: (info) => (
           <span className="capitalize text-muted-foreground">
             {info.getValue().replace("_", " ")}
           </span>
         ),
-      }),
-      columnHelper.accessor("userId", {
+    }),
+    columnHelper.accessor("userId", {
         header: "Link",
         cell: ({ row }) => {
           const member = row.original;
@@ -134,22 +166,31 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
             </span>
           );
         },
-      }),
-      columnHelper.accessor("createdAt", {
+    }),
+    columnHelper.accessor("createdAt", {
         header: "Created",
         cell: (info) => (
           <span className="text-muted-foreground">
             {formatDateTime(info.getValue())}
           </span>
         ),
-      }),
-      columnHelper.display({
+    }),
+    columnHelper.display({
         id: "actions",
         header: "",
         cell: ({ row }) => {
           const member = row.original;
           return (
             <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => updateSearchParam(member.id)}
+              >
+                <PencilIcon data-icon="inline-start" />
+                Edit
+              </Button>
               {member.status === "pending" ? (
                 <Button
                   type="button"
@@ -169,15 +210,14 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
             </div>
           );
         },
-      }),
-    ],
-    [approveAction],
-  );
+    }),
+  ];
 
   return (
     <div className="flex flex-col gap-8">
       <DataTable
         data={members}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         searchKey="member"
         searchPlaceholder="Search members..."
@@ -185,7 +225,7 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
         emptyStateDescription="Create members or invite them via the portal."
         toolbarActions={() => (
           <Button onClick={() => setSheetOpen(true)}>
-            <PlusIcon data-icon="inline-start" className="size-4" />
+            <PlusIcon data-icon="inline-start" />
             New Member
           </Button>
         )}
@@ -201,6 +241,28 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
           await createAction.executeAsync(value);
         }}
       />
+
+      {selectedMember ? (
+        <MemberEditSheet
+          key={selectedMember.member.id}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) {
+              updateSearchParam(null);
+            }
+          }}
+          member={selectedMember.member}
+          customFields={customFields}
+          customFieldAnswers={selectedMember.customFieldAnswers}
+          isPending={updateAction.isPending}
+          serverError={updateAction.result.serverError}
+          validationErrors={updateAction.result.validationErrors}
+          customFieldErrors={updateAction.result.data?.customFieldErrors}
+          onSubmit={async (value) => {
+            await updateAction.executeAsync(value);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

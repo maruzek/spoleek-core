@@ -41,7 +41,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { MemberCustomField } from "@/server/db/schema";
 
-function toFormValues(field: MemberCustomField | null): MemberCustomFieldFormValues {
+function toFormValues(
+  field: MemberCustomField | null,
+): MemberCustomFieldFormValues {
   return {
     id: field?.id,
     label: field?.label ?? "",
@@ -68,7 +70,9 @@ function getValidationMessages(value: unknown): string[] {
   if (typeof value === "object" && "_errors" in value) {
     const maybeErrors = (value as { _errors?: unknown })._errors;
     return Array.isArray(maybeErrors)
-      ? maybeErrors.filter((message): message is string => typeof message === "string")
+      ? maybeErrors.filter(
+          (message): message is string => typeof message === "string",
+        )
       : [];
   }
 
@@ -84,9 +88,11 @@ export function getValidationFieldMessages(
   }
 
   return getValidationMessages(
-    (validationErrors as Partial<Record<keyof MemberCustomFieldFormValues, unknown>>)[
-      fieldName
-    ],
+    (
+      validationErrors as Partial<
+        Record<keyof MemberCustomFieldFormValues, unknown>
+      >
+    )[fieldName],
   );
 }
 
@@ -127,7 +133,8 @@ export function MemberCustomFieldSheet({
             {field ? "Edit custom field" : "Create custom field"}
           </SheetTitle>
           <SheetDescription>
-            Control where this question appears and how members are expected to answer it.
+            Control where this question appears and how members are expected to
+            answer it.
           </SheetDescription>
         </SheetHeader>
 
@@ -148,7 +155,8 @@ export function MemberCustomFieldSheet({
                       (formField.state.meta.isTouched ||
                         form.state.submissionAttempts > 0) &&
                       (formField.state.meta.errors.length > 0 ||
-                        getValidationFieldMessages(validationErrors, "label").length > 0)
+                        getValidationFieldMessages(validationErrors, "label")
+                          .length > 0)
                     }
                   >
                     <FieldLabel htmlFor="field-label">Label</FieldLabel>
@@ -157,26 +165,33 @@ export function MemberCustomFieldSheet({
                         id="field-label"
                         value={formField.state.value}
                         onBlur={formField.handleBlur}
-                        onChange={(event) => formField.handleChange(event.target.value)}
+                        onChange={(event) =>
+                          formField.handleChange(event.target.value)
+                        }
                         aria-invalid={
                           (formField.state.meta.isTouched ||
                             form.state.submissionAttempts > 0) &&
                           (formField.state.meta.errors.length > 0 ||
-                            getValidationFieldMessages(validationErrors, "label").length > 0)
+                            getValidationFieldMessages(
+                              validationErrors,
+                              "label",
+                            ).length > 0)
                         }
                       />
                       <FieldError
                         errors={[
-                          ...((formField.state.meta.errors as unknown as string[]) ?? []).map(
-                            (message: string) => ({
+                          ...(
+                            (formField.state.meta
+                              .errors as unknown as string[]) ?? []
+                          ).map((message: string) => ({
                             message,
-                            }),
-                          ),
-                          ...getValidationFieldMessages(validationErrors, "label").map(
-                            (message: string) => ({
-                              message,
-                            }),
-                          ),
+                          })),
+                          ...getValidationFieldMessages(
+                            validationErrors,
+                            "label",
+                          ).map((message: string) => ({
+                            message,
+                          })),
                         ]}
                       />
                     </FieldContent>
@@ -206,12 +221,16 @@ export function MemberCustomFieldSheet({
                       </FieldDescription>
                       <FieldError
                         errors={[
-                          ...((formField.state.meta.errors as unknown as string[]) ?? []).map(
-                            (message: string) => ({
+                          ...(
+                            (formField.state.meta
+                              .errors as unknown as string[]) ?? []
+                          ).map((message: string) => ({
                             message,
-                            }),
-                          ),
-                          ...getValidationFieldMessages(validationErrors, "key").map((message) => ({
+                          })),
+                          ...getValidationFieldMessages(
+                            validationErrors,
+                            "key",
+                          ).map((message) => ({
                             message,
                           })),
                         ]}
@@ -224,13 +243,17 @@ export function MemberCustomFieldSheet({
               <form.Field name="description">
                 {(formField) => (
                   <Field>
-                    <FieldLabel htmlFor="field-description">Description</FieldLabel>
+                    <FieldLabel htmlFor="field-description">
+                      Description
+                    </FieldLabel>
                     <FieldContent>
                       <Textarea
                         id="field-description"
                         value={formField.state.value}
                         onBlur={formField.handleBlur}
-                        onChange={(event) => formField.handleChange(event.target.value)}
+                        onChange={(event) =>
+                          formField.handleChange(event.target.value)
+                        }
                       />
                     </FieldContent>
                   </Field>
@@ -246,16 +269,21 @@ export function MemberCustomFieldSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as MemberCustomField["type"])
+                            formField.handleChange(
+                              value as MemberCustomField["type"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="h-11 w-full px-4">
                             <SelectValue placeholder="Choose type" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
                               {memberCustomFieldTypeOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
                                   {option.label}
                                 </SelectItem>
                               ))}
@@ -263,11 +291,12 @@ export function MemberCustomFieldSheet({
                           </SelectContent>
                         </Select>
                         <FieldError
-                          errors={getValidationFieldMessages(validationErrors, "type").map(
-                            (message: string) => ({
-                              message,
-                            }),
-                          )}
+                          errors={getValidationFieldMessages(
+                            validationErrors,
+                            "type",
+                          ).map((message: string) => ({
+                            message,
+                          }))}
                         />
                       </FieldContent>
                     </Field>
@@ -282,16 +311,21 @@ export function MemberCustomFieldSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as MemberCustomField["stage"])
+                            formField.handleChange(
+                              value as MemberCustomField["stage"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="h-11 w-full px-4">
                             <SelectValue placeholder="Choose stage" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
                               {memberCustomFieldStageOptions.map((option) => (
-                                <SelectItem key={option.value} value={option.value}>
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                >
                                   {option.label}
                                 </SelectItem>
                               ))}
@@ -335,7 +369,9 @@ export function MemberCustomFieldSheet({
               <form.Field name="sortOrder">
                 {(formField) => (
                   <Field>
-                    <FieldLabel htmlFor="field-sort-order">Sort order</FieldLabel>
+                    <FieldLabel htmlFor="field-sort-order">
+                      Sort order
+                    </FieldLabel>
                     <FieldContent>
                       <Input
                         id="field-sort-order"
@@ -343,7 +379,9 @@ export function MemberCustomFieldSheet({
                         value={String(formField.state.value)}
                         onBlur={formField.handleBlur}
                         onChange={(event) =>
-                          formField.handleChange(Number(event.target.value || "0"))
+                          formField.handleChange(
+                            Number(event.target.value || "0"),
+                          )
                         }
                       />
                     </FieldContent>
@@ -357,11 +395,15 @@ export function MemberCustomFieldSheet({
                     <form.Field name="options">
                       {(formField) => (
                         <Field>
-                          <FieldLabel htmlFor="field-options">Options</FieldLabel>
+                          <FieldLabel htmlFor="field-options">
+                            Options
+                          </FieldLabel>
                           <FieldContent>
                             <Textarea
                               id="field-options"
-                              value={stringifyFieldOptions(formField.state.value)}
+                              value={stringifyFieldOptions(
+                                formField.state.value,
+                              )}
                               onBlur={formField.handleBlur}
                               onChange={(event) =>
                                 formField.handleChange(
@@ -376,9 +418,7 @@ export function MemberCustomFieldSheet({
                               errors={getValidationFieldMessages(
                                 validationErrors,
                                 "options",
-                              ).map(
-                                (message: string) => ({ message }),
-                              )}
+                              ).map((message: string) => ({ message }))}
                             />
                           </FieldContent>
                         </Field>
@@ -392,7 +432,11 @@ export function MemberCustomFieldSheet({
 
           <SheetFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : field ? "Save changes" : "Create field"}
+              {isPending
+                ? "Saving..."
+                : field
+                  ? "Save changes"
+                  : "Create field"}
             </Button>
           </SheetFooter>
         </form>

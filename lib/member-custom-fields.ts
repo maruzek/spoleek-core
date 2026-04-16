@@ -129,10 +129,8 @@ export function splitMemberName(fullName: string) {
 export function getMemberDisplayName(member: {
   firstName: string;
   lastName: string;
-  fullName?: string | null;
 }) {
-  const composed = [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
-  return composed || member.fullName || "";
+  return [member.firstName, member.lastName].filter(Boolean).join(" ").trim();
 }
 
 export function getFieldOptionList(value: string) {

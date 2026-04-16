@@ -2,6 +2,7 @@ import { and, asc, eq, ilike, isNull, or } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { tenantMembers, users } from "@/server/db/schema";
+import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
 
 export async function getTenantMemberByUserId(orgId: string, userId: string) {
   const [member] = await db
@@ -47,7 +48,6 @@ export async function listTenantMembers(orgId: string) {
       id: tenantMembers.id,
       firstName: tenantMembers.firstName,
       lastName: tenantMembers.lastName,
-      fullName: tenantMembers.fullName,
       email: tenantMembers.email,
       role: tenantMembers.role,
       status: tenantMembers.status,
@@ -71,6 +71,33 @@ export async function getMemberById(orgId: string, memberId: string) {
     .limit(1);
 
   return member ?? null;
+}
+
+export async function getMemberByUserId(orgId: string, userId: string) {
+  const [member] = await db
+    .select()
+    .from(tenantMembers)
+    .where(
+      and(eq(tenantMembers.orgId, orgId), eq(tenantMembers.userId, userId)),
+    )
+    .limit(1);
+
+  return member ?? null;
+}
+
+export async function getMemberEditorData(orgId: string, memberId: string) {
+  const member = await getMemberById(orgId, memberId);
+
+  if (!member) {
+    return null;
+  }
+
+  const customFieldAnswers = await getMemberCustomFieldAnswerMap(orgId, member.id);
+
+  return {
+    member,
+    customFieldAnswers,
+  };
 }
 
 export async function findUserByEmail(email: string) {

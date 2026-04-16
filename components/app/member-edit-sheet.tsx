@@ -2,11 +2,16 @@
 
 import { useForm } from "@tanstack/react-form";
 
-import { createMemberSchema, type CreateMemberValues } from "@/lib/member-admin";
+import {
+  type UpdateMemberValues,
+  updateMemberSchema,
+} from "@/lib/member-admin";
+import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -28,63 +33,82 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import type { MemberCustomField, TenantMember } from "@/server/db/schema";
+import { InfoIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-export type ShadowMemberFormValues = CreateMemberValues;
-
-export function MemberSheet({
-  open,
-  isPending,
-  serverError,
-  validationErrors,
-  onOpenChange,
-  onSubmit,
-}: {
-  open: boolean;
+type MemberEditSheetProps = {
+  customFields: MemberCustomField[];
   isPending: boolean;
+  member: TenantMember;
+  open: boolean;
   serverError?: string;
   validationErrors?: Partial<
-    Record<keyof ShadowMemberFormValues, { _errors?: string[] }>
+    Record<keyof UpdateMemberValues, { _errors?: string[] }>
   >;
+  customFieldErrors?: Record<string, string[]>;
+  customFieldAnswers: Record<string, unknown>;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (value: ShadowMemberFormValues) => Promise<void>;
-}) {
-  const defaultValues: ShadowMemberFormValues = {
-    firstName: "",
-    lastName: "",
-    email: "",
-    role: "member",
-    status: "active",
-  };
+  onSubmit: (value: UpdateMemberValues) => Promise<void>;
+};
 
+function toDefaultValues(
+  member: TenantMember,
+  customFieldAnswers: Record<string, unknown>,
+): UpdateMemberValues {
+  return {
+    memberId: member.id,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    email: member.email ?? "",
+    role: member.role,
+    status: member.status,
+    customFieldAnswers,
+  };
+}
+
+export function MemberEditSheet({
+  customFields,
+  isPending,
+  member,
+  open,
+  serverError,
+  validationErrors,
+  customFieldErrors,
+  customFieldAnswers,
+  onOpenChange,
+  onSubmit,
+}: MemberEditSheetProps) {
   const form = useForm({
-    defaultValues,
+    defaultValues: toDefaultValues(member, customFieldAnswers),
     onSubmit: async ({ value }) => {
-      const parsed = createMemberSchema.safeParse(value);
+      const parsed = updateMemberSchema.safeParse(value);
 
       if (!parsed.success) {
         return;
       }
 
       await onSubmit(parsed.data);
-      form.reset();
     },
   });
 
-  const getFieldError = (fieldName: keyof ShadowMemberFormValues): string[] =>
+  const getFieldError = (fieldName: keyof UpdateMemberValues): string[] =>
     validationErrors?.[fieldName]?._errors ?? [];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
-      ? errors.filter((message): message is string => typeof message === "string")
+      ? errors.filter(
+          (message): message is string => typeof message === "string",
+        )
       : [];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>Create member or shadow profile</SheetTitle>
+          <SheetTitle>Edit member</SheetTitle>
           <SheetDescription>
-            Add a member record directly and optionally link it to an existing
-            account when the email already belongs to a signed-in user.
+            Update the core member record and any organization-defined custom
+            fields.
           </SheetDescription>
         </SheetHeader>
 
@@ -109,14 +133,17 @@ export function MemberSheet({
                           getFieldError("firstName").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="field-first-name">First name *</FieldLabel>
+                      <FieldLabel htmlFor="edit-member-first-name">
+                        First name *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
-                          id="field-first-name"
-                          placeholder="Anna"
+                          id="edit-member-first-name"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -126,10 +153,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("firstName").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("firstName").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -147,14 +176,17 @@ export function MemberSheet({
                           getFieldError("lastName").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="field-last-name">Last name *</FieldLabel>
+                      <FieldLabel htmlFor="edit-member-last-name">
+                        Last name *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
-                          id="field-last-name"
-                          placeholder="Novak"
+                          id="edit-member-last-name"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -164,10 +196,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("lastName").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("lastName").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -185,15 +219,16 @@ export function MemberSheet({
                           getFieldError("email").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="field-email">Email</FieldLabel>
+                      <FieldLabel htmlFor="edit-member-email">Email</FieldLabel>
                       <FieldContent>
                         <Input
-                          id="field-email"
+                          id="edit-member-email"
                           type="email"
-                          placeholder="anna@example.com"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -203,10 +238,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("email").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("email").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -222,17 +259,21 @@ export function MemberSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as ShadowMemberFormValues["role"])
+                            formField.handleChange(
+                              value as UpdateMemberValues["role"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="w-full px-4">
                             <SelectValue placeholder="Choose role" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
                               <SelectItem value="member">Member</SelectItem>
                               <SelectItem value="leader">Leader</SelectItem>
-                              <SelectItem value="org_admin">Org admin</SelectItem>
+                              <SelectItem value="org_admin">
+                                Org admin
+                              </SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
@@ -249,10 +290,12 @@ export function MemberSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as ShadowMemberFormValues["status"])
+                            formField.handleChange(
+                              value as UpdateMemberValues["status"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="w-full px-4">
                             <SelectValue placeholder="Choose status" />
                           </SelectTrigger>
                           <SelectContent>
@@ -270,8 +313,42 @@ export function MemberSheet({
                 </form.Field>
               </div>
 
+              {customFields.length > 0 ? (
+                <Field>
+                  <FieldLabel className="flex items-center gap-2">
+                    Custom member fields
+                    <Tooltip>
+                      <TooltipTrigger className="focus:outline-none" asChild>
+                        <InfoIcon className="size-4 cursor-help text-muted-foreground transition-colors hover:text-foreground" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          These organization-defined fields stay editable here,
+                          even when a field is currently inactive elsewhere.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </FieldLabel>
+                </Field>
+              ) : null}
+
+              {customFields.map((field) => (
+                <MemberCustomFieldInput
+                  key={field.id}
+                  field={field}
+                  value={form.state.values.customFieldAnswers[field.key]}
+                  error={customFieldErrors?.[field.key]?.[0]}
+                  onChange={(value) =>
+                    form.setFieldValue("customFieldAnswers", {
+                      ...form.state.values.customFieldAnswers,
+                      [field.key]: value,
+                    })
+                  }
+                />
+              ))}
+
               {serverError ? (
-                <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <div className="rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {serverError}
                 </div>
               ) : null}
@@ -280,7 +357,7 @@ export function MemberSheet({
 
           <SheetFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create profile"}
+              {isPending ? "Saving..." : "Save member"}
             </Button>
           </SheetFooter>
         </form>

@@ -220,6 +220,7 @@ export function MemberCustomFieldsAdmin({
     <div className="flex flex-col gap-6">
       <DataTable
         data={fields}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         searchKey="label"
         searchPlaceholder="Search custom fields..."

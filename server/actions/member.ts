@@ -65,13 +65,10 @@ export const joinOrganizationAction = authActionClient
 
     const firstName = parsedInput.firstName.trim();
     const lastName = parsedInput.lastName.trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
-
     const result = await db.transaction(async (tx) => {
       const patch = {
         firstName,
         lastName,
-        fullName,
         acceptedTermsAt: new Date(),
         acceptedPrivacyAt: new Date(),
         updatedAt: new Date(),
@@ -111,7 +108,6 @@ export const joinOrganizationAction = authActionClient
           email: ctx.auth.user.email,
           firstName,
           lastName,
-          fullName,
           role: "member",
           status: "pending",
           linkedAt: new Date(),
@@ -179,15 +175,12 @@ export const updateProfileAction = authActionClient
 
     const firstName = parsedInput.firstName.trim();
     const lastName = parsedInput.lastName.trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
-
     const result = await db.transaction(async (tx) => {
       await tx
         .update(tenantMembers)
         .set({
           firstName,
           lastName,
-          fullName,
           updatedAt: new Date(),
         })
         .where(

@@ -40,7 +40,6 @@ export const submitJoinApplicationAction = actionClient
 
     const firstName = parsedInput.firstName.trim();
     const lastName = parsedInput.lastName.trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(" ").trim();
     const email = parsedInput.email.trim().toLowerCase();
 
     const result = await db.transaction(async (tx) => {
@@ -48,7 +47,6 @@ export const submitJoinApplicationAction = actionClient
         email,
         firstName,
         lastName,
-        fullName,
         role: "member" as const,
         status: "pending" as const,
         acceptedTermsAt: new Date(),
