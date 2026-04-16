@@ -8,6 +8,10 @@ import { useAction } from "next-safe-action/hooks";
 import { ArrowRightIcon, CheckCircle2Icon } from "lucide-react";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
+import {
+  RegistrationGroupInput,
+  type RegistrationGroupCategoryInput,
+} from "@/components/app/registration-group-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,12 +29,14 @@ import type { MemberCustomField } from "@/server/db/schema";
 
 type PublicJoinFormProps = {
   customFields: MemberCustomField[];
+  registrationGroupCategories: RegistrationGroupCategoryInput[];
   termsLabel: string;
   privacyLabel: string;
 };
 
 export function PublicJoinForm({
   customFields,
+  registrationGroupCategories,
   termsLabel,
   privacyLabel,
 }: PublicJoinFormProps) {
@@ -50,6 +56,9 @@ export function PublicJoinForm({
       email: "",
       acceptTerms: false,
       acceptPrivacy: false,
+      registrationGroupSelections: Object.fromEntries(
+        registrationGroupCategories.map((category) => [category.id, null]),
+      ),
       customFieldAnswers: Object.fromEntries(customFields.map((field) => [field.key, null])),
     },
     onSubmit: async ({ value }) => {
@@ -59,6 +68,7 @@ export function PublicJoinForm({
 
   const fieldErrors = submitAction.result.validationErrors;
   const customFieldErrors = submitAction.result.data?.customFieldErrors ?? {};
+  const registrationGroupErrors = submitAction.result.data?.registrationGroupErrors ?? {};
 
   if (submitted) {
     return (
@@ -157,6 +167,22 @@ export function PublicJoinForm({
           )}
         </form.Field>
 
+        {registrationGroupCategories.map((category) => (
+          <form.Field
+            key={category.id}
+            name={`registrationGroupSelections.${category.id}` as never}
+          >
+            {(formField) => (
+              <RegistrationGroupInput
+                category={category}
+                value={formField.state.value as string | null | undefined}
+                error={registrationGroupErrors[category.id]?.[0]}
+                onChange={(value) => formField.handleChange(value as never)}
+              />
+            )}
+          </form.Field>
+        ))}
+
         {customFields.map((field) => (
           <form.Field
             key={field.id}
@@ -240,7 +266,7 @@ export function PublicJoinForm({
       ) : null}
 
       <Button type="submit" size="lg" disabled={submitAction.isPending}>
-        {submitAction.isPending ? "Submitting..." : "Submit application"}
+        {submitAction.isPending ? "Submitting…" : "Submit application"}
         <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
       </Button>
     </form>

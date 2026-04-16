@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { memberCustomFieldAnswersSchema } from "@/lib/member-custom-fields";
 
+export const registrationGroupSelectionsSchema = z
+  .record(z.string(), z.union([z.string().uuid(), z.literal(""), z.null()]))
+  .default({});
+
 export const joinApplicationSchema = z.object({
   firstName: z.string().trim().min(1, "First name is required."),
   lastName: z.string().trim().min(1, "Last name is required."),
@@ -12,6 +16,7 @@ export const joinApplicationSchema = z.object({
   acceptPrivacy: z
     .boolean()
     .refine((value) => value, "You must accept the privacy policy."),
+  registrationGroupSelections: registrationGroupSelectionsSchema,
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });
 

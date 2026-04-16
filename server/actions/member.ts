@@ -9,9 +9,15 @@ import { z } from "zod";
 import {
   memberCustomFieldAnswersSchema,
 } from "@/lib/member-custom-fields";
+import { registrationGroupSelectionsSchema } from "@/lib/join";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
+import {
+  listRegistrationGroupCategories,
+  syncRegistrationGroupSelections,
+  validateRegistrationGroupSelections,
+} from "@/server/lib/group-registration";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
@@ -29,6 +35,7 @@ const joinSchema = z.object({
   acceptPrivacy: z
     .boolean()
     .refine((value) => value, "You must accept the privacy policy."),
+  registrationGroupSelections: registrationGroupSelectionsSchema,
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });
 
@@ -62,9 +69,24 @@ export const joinOrganizationAction = authActionClient
     const registrationFields = await listActiveMemberCustomFields(organization.id, [
       "registration",
     ]);
+    const registrationGroupCategories = await listRegistrationGroupCategories(organization.id);
 
     const firstName = parsedInput.firstName.trim();
     const lastName = parsedInput.lastName.trim();
+    const registrationSelections = await validateRegistrationGroupSelections({
+      categories: registrationGroupCategories,
+      selections: parsedInput.registrationGroupSelections,
+    });
+
+    if (Object.keys(registrationSelections.errors).length > 0) {
+      return {
+        success: false as const,
+        status: existing?.status ?? shadow?.status ?? "pending",
+        customFieldErrors: {} as Record<string, string[]>,
+        registrationGroupErrors: registrationSelections.errors,
+      };
+    }
+
     const result = await db.transaction(async (tx) => {
       const patch = {
         firstName,
@@ -134,13 +156,22 @@ export const joinOrganizationAction = authActionClient
           success: false as const,
           status,
           customFieldErrors: answerResult.errors,
+          registrationGroupErrors: {} as Record<string, string[]>,
         };
       }
+
+      await syncRegistrationGroupSelections(tx, {
+        orgId: organization.id,
+        memberId: targetMemberId,
+        registrationCategoryIds: registrationGroupCategories.map((category) => category.id),
+        selections: registrationSelections.normalizedSelections,
+      });
 
       return {
         success: true as const,
         status,
         customFieldErrors: {} as Record<string, string[]>,
+        registrationGroupErrors: {} as Record<string, string[]>,
       };
     });
 

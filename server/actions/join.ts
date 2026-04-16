@@ -8,6 +8,11 @@ import { joinApplicationSchema } from "@/lib/join";
 import { actionClient } from "@/lib/safe-action";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
+import {
+  listRegistrationGroupCategories,
+  syncRegistrationGroupSelections,
+  validateRegistrationGroupSelections,
+} from "@/server/lib/group-registration";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
@@ -33,6 +38,7 @@ export const submitJoinApplicationAction = actionClient
     const registrationFields = await listActiveMemberCustomFields(organization.id, [
       "registration",
     ]);
+    const registrationGroupCategories = await listRegistrationGroupCategories(organization.id);
 
     if (existingMember?.userId) {
       throw new Error("An account with this email already exists. Please sign in instead.");
@@ -41,6 +47,18 @@ export const submitJoinApplicationAction = actionClient
     const firstName = parsedInput.firstName.trim();
     const lastName = parsedInput.lastName.trim();
     const email = parsedInput.email.trim().toLowerCase();
+    const registrationSelections = await validateRegistrationGroupSelections({
+      categories: registrationGroupCategories,
+      selections: parsedInput.registrationGroupSelections,
+    });
+
+    if (Object.keys(registrationSelections.errors).length > 0) {
+      return {
+        success: false as const,
+        customFieldErrors: {} as Record<string, string[]>,
+        registrationGroupErrors: registrationSelections.errors,
+      };
+    }
 
     const result = await db.transaction(async (tx) => {
       const patch = {
@@ -87,12 +105,21 @@ export const submitJoinApplicationAction = actionClient
         return {
           success: false as const,
           customFieldErrors: answerResult.errors,
+          registrationGroupErrors: {} as Record<string, string[]>,
         };
       }
+
+      await syncRegistrationGroupSelections(tx, {
+        orgId: organization.id,
+        memberId: targetMemberId,
+        registrationCategoryIds: registrationGroupCategories.map((category) => category.id),
+        selections: registrationSelections.normalizedSelections,
+      });
 
       return {
         success: true as const,
         customFieldErrors: {} as Record<string, string[]>,
+        registrationGroupErrors: {} as Record<string, string[]>,
       };
     });
 

@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { listRegistrationGroupCategories } from "@/server/lib/group-registration";
 import { getAppOrganization, getOrganizationJoinPage } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 
@@ -22,9 +23,10 @@ export default async function JoinPage() {
     redirect("/setup");
   }
 
-  const [joinPage, registrationFields] = await Promise.all([
+  const [joinPage, registrationFields, registrationGroupCategories] = await Promise.all([
     getOrganizationJoinPage(organization.id),
     listActiveMemberCustomFields(organization.id, ["registration"]),
+    listRegistrationGroupCategories(organization.id),
   ]);
 
   if (!joinPage) {
@@ -75,6 +77,7 @@ export default async function JoinPage() {
             <CardContent>
               <PublicJoinForm
                 customFields={registrationFields}
+                registrationGroupCategories={registrationGroupCategories}
                 termsLabel={joinPage.termsOfServiceLabel}
                 privacyLabel={joinPage.privacyPolicyLabel}
               />

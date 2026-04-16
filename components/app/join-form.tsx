@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
+import {
+  RegistrationGroupInput,
+  type RegistrationGroupCategoryInput,
+} from "@/components/app/registration-group-input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,12 +29,14 @@ export function JoinForm({
   defaultFirstName,
   defaultLastName,
   customFields,
+  registrationGroupCategories,
 }: {
   termsLabel: string;
   privacyLabel: string;
   defaultFirstName: string;
   defaultLastName: string;
   customFields: MemberCustomField[];
+  registrationGroupCategories: RegistrationGroupCategoryInput[];
 }) {
   const router = useRouter();
   const joinAction = useAction(joinOrganizationAction, {
@@ -48,6 +54,9 @@ export function JoinForm({
       lastName: defaultLastName,
       acceptTerms: false,
       acceptPrivacy: false,
+      registrationGroupSelections: Object.fromEntries(
+        registrationGroupCategories.map((category) => [category.id, null]),
+      ),
       customFieldAnswers: Object.fromEntries(customFields.map((field) => [field.key, null])),
     },
     onSubmit: async ({ value }) => {
@@ -57,6 +66,7 @@ export function JoinForm({
 
   const fieldErrors = joinAction.result.validationErrors;
   const customFieldErrors = joinAction.result.data?.customFieldErrors ?? {};
+  const registrationGroupErrors = joinAction.result.data?.registrationGroupErrors ?? {};
 
   return (
     <form
@@ -76,6 +86,8 @@ export function JoinForm({
                 <FieldContent>
                   <Input
                     id="join-first-name"
+                    name="firstName"
+                    autoComplete="given-name"
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
                     onChange={(event) => formField.handleChange(event.target.value)}
@@ -96,6 +108,8 @@ export function JoinForm({
                 <FieldContent>
                   <Input
                     id="join-last-name"
+                    name="lastName"
+                    autoComplete="family-name"
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
                     onChange={(event) => formField.handleChange(event.target.value)}
@@ -109,6 +123,22 @@ export function JoinForm({
             )}
           </form.Field>
         </div>
+
+        {registrationGroupCategories.map((category) => (
+          <form.Field
+            key={category.id}
+            name={`registrationGroupSelections.${category.id}` as never}
+          >
+            {(formField) => (
+              <RegistrationGroupInput
+                category={category}
+                value={formField.state.value as string | null | undefined}
+                error={registrationGroupErrors[category.id]?.[0]}
+                onChange={(value) => formField.handleChange(value as never)}
+              />
+            )}
+          </form.Field>
+        ))}
 
         {customFields.map((field) => (
           <form.Field
@@ -172,13 +202,16 @@ export function JoinForm({
       </FieldGroup>
 
       {joinAction.result.serverError ? (
-        <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <p
+          className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+          aria-live="polite"
+        >
           {joinAction.result.serverError}
         </p>
       ) : null}
 
       <Button type="submit" size="lg" disabled={joinAction.isPending}>
-        {joinAction.isPending ? "Submitting..." : "Join organization"}
+        {joinAction.isPending ? "Submitting…" : "Join organization"}
       </Button>
     </form>
   );
