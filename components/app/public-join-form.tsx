@@ -158,18 +158,19 @@ export function PublicJoinForm({
         </form.Field>
 
         {customFields.map((field) => (
-          <MemberCustomFieldInput
+          <form.Field
             key={field.id}
-            field={field}
-            value={form.state.values.customFieldAnswers[field.key]}
-            error={customFieldErrors[field.key]?.[0]}
-            onChange={(value) =>
-              form.setFieldValue("customFieldAnswers" as never, {
-                ...form.state.values.customFieldAnswers,
-                [field.key]: value,
-              } as never)
-            }
-          />
+            name={`customFieldAnswers.${field.key}` as never}
+          >
+            {(formField) => (
+              <MemberCustomFieldInput
+                field={field}
+                value={formField.state.value}
+                error={customFieldErrors[field.key]?.[0]}
+                onChange={(value) => formField.handleChange(value as never)}
+              />
+            )}
+          </form.Field>
         ))}
 
         <form.Field name="acceptTerms">
