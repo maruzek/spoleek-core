@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { InfoIcon } from "lucide-react";
+
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip";
 
@@ -30,22 +32,21 @@ export function AppPage({
                 {eyebrow}
               </p>
             ) : null}
-            {tooltip ? (
-              <Tooltip>
-                <TooltipTrigger className="text-left cursor-default focus:outline-none" asChild>
-                  <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-                    {title}
-                  </h1>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{tooltip}</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
+            <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
                 {title}
               </h1>
-            )}
+              {tooltip ? (
+                <Tooltip>
+                  <TooltipTrigger className="focus:outline-none" asChild>
+                    <InfoIcon className="size-5 cursor-help text-muted-foreground transition-colors hover:text-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
+            </div>
             {description ? (
               <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
                 {description}
