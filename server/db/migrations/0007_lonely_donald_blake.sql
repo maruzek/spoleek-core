@@ -1,0 +1,1 @@
+ALTER TABLE "group_categories" ADD COLUMN "registration_field_label" text;

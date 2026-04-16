@@ -18,6 +18,7 @@ export async function listGroupCategories(orgId: string) {
       name: groupCategories.name,
       slug: groupCategories.slug,
       description: groupCategories.description,
+      registrationFieldLabel: groupCategories.registrationFieldLabel,
       isActive: groupCategories.isActive,
       isPinnedToNavigation: groupCategories.isPinnedToNavigation,
       showInRegistration: groupCategories.showInRegistration,

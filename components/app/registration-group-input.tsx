@@ -25,6 +25,7 @@ export type RegistrationGroupOption = {
 export type RegistrationGroupCategoryInput = {
   id: string;
   name: string;
+  registrationFieldLabel: string | null;
   description: string | null;
   selectionRequired: boolean;
   groups: RegistrationGroupOption[];
@@ -46,7 +47,7 @@ export function RegistrationGroupInput({
   return (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={`registration-group-${category.id}`}>
-        {category.name}
+        {category.registrationFieldLabel ?? category.name}
       </FieldLabel>
       <FieldContent>
         <Select

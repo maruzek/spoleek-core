@@ -66,6 +66,7 @@ export const groupCategorySchema = z
     name: z.string().trim().min(2, "Name is required."),
     slug: slugSchema,
     description: nullableTrimmedString,
+    registrationFieldLabel: nullableTrimmedString,
     isActive: z.boolean().default(true),
     isPinnedToNavigation: z.boolean().default(false),
     showInRegistration: z.boolean().default(false),
@@ -83,6 +84,14 @@ export const groupCategorySchema = z
         code: "custom",
         path: ["maxSelections"],
         message: "Single-selection categories can allow at most one group.",
+      });
+    }
+
+    if (value.showInRegistration && !value.registrationFieldLabel) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrationFieldLabel"],
+        message: "Add the singular label applicants should see on the join form.",
       });
     }
   });

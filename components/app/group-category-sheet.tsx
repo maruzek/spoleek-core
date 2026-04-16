@@ -30,7 +30,9 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-type ValidationErrors = Partial<Record<keyof GroupCategoryFormValues, { _errors?: string[] }>>;
+type ValidationErrors = Partial<
+  Record<keyof GroupCategoryFormValues, { _errors?: string[] }>
+>;
 
 function toDefaultValues(
   category?: Partial<GroupCategoryFormValues> | null,
@@ -40,6 +42,7 @@ function toDefaultValues(
     name: category?.name ?? "",
     slug: category?.slug ?? "",
     description: category?.description ?? null,
+    registrationFieldLabel: category?.registrationFieldLabel ?? null,
     isActive: category?.isActive ?? true,
     isPinnedToNavigation: category?.isPinnedToNavigation ?? false,
     showInRegistration: category?.showInRegistration ?? false,
@@ -83,17 +86,21 @@ export function GroupCategorySheet({
     validationErrors?.[fieldName]?._errors ?? [];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
-      ? errors.filter((message): message is string => typeof message === "string")
+      ? errors.filter(
+          (message): message is string => typeof message === "string",
+        )
       : [];
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>{category?.id ? "Edit category" : "Create category"}</SheetTitle>
+          <SheetTitle>
+            {category?.id ? "Edit category" : "Create category"}
+          </SheetTitle>
           <SheetDescription>
-            Define the top-level wrapper that controls group rules, registration hooks,
-            and future delegated-management structure.
+            Define the top-level wrapper that controls group rules, registration
+            hooks, and future delegated-management structure.
           </SheetDescription>
         </SheetHeader>
 
@@ -112,17 +119,23 @@ export function GroupCategorySheet({
                   {(formField) => (
                     <Field
                       data-invalid={
-                        (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                        (formField.state.meta.errors.length > 0 || getFieldError("name").length > 0)
+                        (formField.state.meta.isTouched ||
+                          form.state.submissionAttempts > 0) &&
+                        (formField.state.meta.errors.length > 0 ||
+                          getFieldError("name").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="group-category-name">Name *</FieldLabel>
+                      <FieldLabel htmlFor="group-category-name">
+                        Name *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="group-category-name"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -132,10 +145,14 @@ export function GroupCategorySheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map((message) => ({
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({
                               message,
                             })),
-                            ...getFieldError("name").map((message) => ({ message })),
+                            ...getFieldError("name").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -147,17 +164,23 @@ export function GroupCategorySheet({
                   {(formField) => (
                     <Field
                       data-invalid={
-                        (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                        (formField.state.meta.errors.length > 0 || getFieldError("slug").length > 0)
+                        (formField.state.meta.isTouched ||
+                          form.state.submissionAttempts > 0) &&
+                        (formField.state.meta.errors.length > 0 ||
+                          getFieldError("slug").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="group-category-slug">Slug *</FieldLabel>
+                      <FieldLabel htmlFor="group-category-slug">
+                        Slug *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="group-category-slug"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -166,14 +189,19 @@ export function GroupCategorySheet({
                           }
                         />
                         <FieldDescription>
-                          Used in URLs and must stay unique inside the organization.
+                          Used in URLs and must stay unique inside the
+                          organization.
                         </FieldDescription>
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map((message) => ({
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({
                               message,
                             })),
-                            ...getFieldError("slug").map((message) => ({ message })),
+                            ...getFieldError("slug").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -185,14 +213,20 @@ export function GroupCategorySheet({
               <form.Field name="description">
                 {(formField) => (
                   <Field>
-                    <FieldLabel htmlFor="group-category-description">Description</FieldLabel>
+                    <FieldLabel htmlFor="group-category-description">
+                      Description
+                    </FieldLabel>
                     <FieldContent>
                       <Textarea
                         id="group-category-description"
                         value={formField.state.value ?? ""}
                         onBlur={formField.handleBlur}
                         onChange={(event) =>
-                          formField.handleChange(event.target.value.length > 0 ? event.target.value : null)
+                          formField.handleChange(
+                            event.target.value.length > 0
+                              ? event.target.value
+                              : null,
+                          )
                         }
                       />
                     </FieldContent>
@@ -210,14 +244,19 @@ export function GroupCategorySheet({
                         value={formField.state.value}
                         onValueChange={(value) => {
                           if (value) {
-                            formField.handleChange(value as GroupCategoryFormValues["selectionMode"]);
+                            formField.handleChange(
+                              value as GroupCategoryFormValues["selectionMode"],
+                            );
                           }
                         }}
                         variant="outline"
                         spacing={0}
                       >
                         {groupCategorySelectionModeOptions.map((option) => (
-                          <ToggleGroupItem key={option.value} value={option.value}>
+                          <ToggleGroupItem
+                            key={option.value}
+                            value={option.value}
+                          >
                             {option.label}
                           </ToggleGroupItem>
                         ))}
@@ -237,7 +276,9 @@ export function GroupCategorySheet({
                         value={formField.state.value}
                         onValueChange={(value) => {
                           if (value) {
-                            formField.handleChange(value as GroupCategoryFormValues["defaultJoinPolicy"]);
+                            formField.handleChange(
+                              value as GroupCategoryFormValues["defaultJoinPolicy"],
+                            );
                           }
                         }}
                         orientation="vertical"
@@ -245,7 +286,11 @@ export function GroupCategorySheet({
                         spacing={1}
                       >
                         {groupJoinPolicyOptions.map((option) => (
-                          <ToggleGroupItem key={option.value} value={option.value} className="justify-start">
+                          <ToggleGroupItem
+                            key={option.value}
+                            value={option.value}
+                            className="justify-start"
+                          >
                             {option.label}
                           </ToggleGroupItem>
                         ))}
@@ -259,7 +304,9 @@ export function GroupCategorySheet({
                 <form.Field name="maxSelections">
                   {(formField) => (
                     <Field>
-                      <FieldLabel htmlFor="group-category-max-selections">Max selections</FieldLabel>
+                      <FieldLabel htmlFor="group-category-max-selections">
+                        Max selections
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="group-category-max-selections"
@@ -269,14 +316,21 @@ export function GroupCategorySheet({
                           onBlur={formField.handleBlur}
                           onChange={(event) =>
                             formField.handleChange(
-                              event.target.value.length > 0 ? Number(event.target.value) : null,
+                              event.target.value.length > 0
+                                ? Number(event.target.value)
+                                : null,
                             )
                           }
                         />
                         <FieldDescription>
-                          Leave empty to allow any number within the selected mode.
+                          Leave empty to allow any number within the selected
+                          mode.
                         </FieldDescription>
-                        <FieldError errors={getFieldError("maxSelections").map((message) => ({ message }))} />
+                        <FieldError
+                          errors={getFieldError("maxSelections").map(
+                            (message) => ({ message }),
+                          )}
+                        />
                       </FieldContent>
                     </Field>
                   )}
@@ -285,7 +339,9 @@ export function GroupCategorySheet({
                 <form.Field name="sortOrder">
                   {(formField) => (
                     <Field>
-                      <FieldLabel htmlFor="group-category-sort-order">Sort order</FieldLabel>
+                      <FieldLabel htmlFor="group-category-sort-order">
+                        Sort order
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="group-category-sort-order"
@@ -293,13 +349,80 @@ export function GroupCategorySheet({
                           min={0}
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(Number(event.target.value))}
+                          onChange={(event) =>
+                            formField.handleChange(Number(event.target.value))
+                          }
                         />
                       </FieldContent>
                     </Field>
                   )}
                 </form.Field>
               </div>
+
+              <form.Subscribe
+                selector={(state) => state.values.showInRegistration}
+                children={(showInRegistration) =>
+                  showInRegistration ? (
+                    <form.Field name="registrationFieldLabel">
+                      {(formField) => (
+                        <Field
+                          data-invalid={
+                            (formField.state.meta.isTouched ||
+                              form.state.submissionAttempts > 0) &&
+                            (formField.state.meta.errors.length > 0 ||
+                              getFieldError("registrationFieldLabel").length >
+                                0)
+                          }
+                        >
+                          <FieldLabel htmlFor="group-category-registration-field-label">
+                            Registration field label *
+                          </FieldLabel>
+                          <FieldContent>
+                            <Input
+                              id="group-category-registration-field-label"
+                              value={formField.state.value ?? ""}
+                              onBlur={formField.handleBlur}
+                              onChange={(event) =>
+                                formField.handleChange(
+                                  event.target.value.length > 0
+                                    ? event.target.value
+                                    : null,
+                                )
+                              }
+                              aria-invalid={
+                                (formField.state.meta.isTouched ||
+                                  form.state.submissionAttempts > 0) &&
+                                (formField.state.meta.errors.length > 0 ||
+                                  getFieldError("registrationFieldLabel")
+                                    .length > 0)
+                              }
+                            />
+                            <FieldDescription>
+                              Use the singular label applicants should see, for
+                              example &quot;Region&quot; instead of
+                              &quot;Regions&quot;.
+                            </FieldDescription>
+                            <FieldError
+                              errors={[
+                                ...getClientFieldErrors(
+                                  formField.state.meta.errors,
+                                ).map((message) => ({
+                                  message,
+                                })),
+                                ...getFieldError("registrationFieldLabel").map(
+                                  (message) => ({
+                                    message,
+                                  }),
+                                ),
+                              ]}
+                            />
+                          </FieldContent>
+                        </Field>
+                      )}
+                    </form.Field>
+                  ) : null
+                }
+              />
 
               <div className="grid gap-5 md:grid-cols-2">
                 <form.Field name="selectionRequired">
@@ -313,7 +436,8 @@ export function GroupCategorySheet({
                       <FieldContent>
                         <FieldLabel>Selection required</FieldLabel>
                         <FieldDescription>
-                          Force new members to choose a group in this category later in registration.
+                          Force new members to choose a group in this category
+                          later in registration.
                         </FieldDescription>
                       </FieldContent>
                     </Field>
@@ -349,7 +473,8 @@ export function GroupCategorySheet({
                       <FieldContent>
                         <FieldLabel>Pin to navigation</FieldLabel>
                         <FieldDescription>
-                          Store this now for future specialized management surfaces.
+                          Store this now for future specialized management
+                          surfaces.
                         </FieldDescription>
                       </FieldContent>
                     </Field>
@@ -367,7 +492,8 @@ export function GroupCategorySheet({
                       <FieldContent>
                         <FieldLabel>Active category</FieldLabel>
                         <FieldDescription>
-                          Inactive categories stay visible in admin but stop acting like live structure.
+                          Inactive categories stay visible in admin but stop
+                          acting like live structure.
                         </FieldDescription>
                       </FieldContent>
                     </Field>
@@ -378,11 +504,19 @@ export function GroupCategorySheet({
           </div>
 
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : category?.id ? "Save category" : "Create category"}
+              {isPending
+                ? "Saving..."
+                : category?.id
+                  ? "Save category"
+                  : "Create category"}
             </Button>
           </SheetFooter>
         </form>

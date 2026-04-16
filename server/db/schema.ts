@@ -236,6 +236,7 @@ export const groupCategories = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
+    registrationFieldLabel: text("registration_field_label"),
     isActive: boolean("is_active").notNull().default(true),
     isPinnedToNavigation: boolean("is_pinned_to_navigation").notNull().default(false),
     showInRegistration: boolean("show_in_registration").notNull().default(false),

@@ -22,6 +22,7 @@ type GroupCategoryRow = {
   name: string;
   slug: string;
   description: string | null;
+  registrationFieldLabel: string | null;
   isActive: boolean;
   isPinnedToNavigation: boolean;
   showInRegistration: boolean;
@@ -167,6 +168,7 @@ export function GroupCategoriesAdmin({ categories }: { categories: GroupCategory
       />
 
       <GroupCategorySheet
+        key={sheetState.category?.id ?? "new-category"}
         open={sheetState.open}
         category={sheetState.category}
         isPending={saveAction.isPending}

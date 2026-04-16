@@ -106,6 +106,9 @@ export const saveGroupCategoryAction = orgAdminActionClient
           name: parsedInput.name.trim(),
           slug: parsedInput.slug.trim(),
           description: parsedInput.description,
+          registrationFieldLabel: parsedInput.showInRegistration
+            ? parsedInput.registrationFieldLabel
+            : null,
           isActive: parsedInput.isActive,
           isPinnedToNavigation: parsedInput.isPinnedToNavigation,
           showInRegistration: parsedInput.showInRegistration,
@@ -129,6 +132,9 @@ export const saveGroupCategoryAction = orgAdminActionClient
         name: parsedInput.name.trim(),
         slug: parsedInput.slug.trim(),
         description: parsedInput.description,
+        registrationFieldLabel: parsedInput.showInRegistration
+          ? parsedInput.registrationFieldLabel
+          : null,
         isActive: parsedInput.isActive,
         isPinnedToNavigation: parsedInput.isPinnedToNavigation,
         showInRegistration: parsedInput.showInRegistration,

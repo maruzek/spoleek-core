@@ -8,6 +8,7 @@ type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type RegistrationGroupCategory = {
   id: string;
   name: string;
+  registrationFieldLabel: string | null;
   description: string | null;
   selectionRequired: boolean;
   groups: Array<{
@@ -119,6 +120,7 @@ export async function listRegistrationGroupCategories(orgId: string): Promise<Re
       .select({
         id: groupCategories.id,
         name: groupCategories.name,
+        registrationFieldLabel: groupCategories.registrationFieldLabel,
         description: groupCategories.description,
         selectionRequired: groupCategories.selectionRequired,
         sortOrder: groupCategories.sortOrder,
@@ -148,6 +150,7 @@ export async function listRegistrationGroupCategories(orgId: string): Promise<Re
     .map((category) => ({
       id: category.id,
       name: category.name,
+      registrationFieldLabel: category.registrationFieldLabel,
       description: category.description,
       selectionRequired: category.selectionRequired,
       groups: categoryGroups
