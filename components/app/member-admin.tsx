@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
+import { MemberSheet } from "./member-sheet";
 import {
   approveMemberAction,
   createShadowMemberAction,
@@ -190,80 +191,16 @@ export function MemberAdmin({ members }: { members: MemberRow[] }) {
         )}
       />
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>Create member or shadow profile</SheetTitle>
-            <SheetDescription>
-              Add a new member directly or create a shadow profile to later link
-              with a registered user.
-            </SheetDescription>
-          </SheetHeader>
-
-          <form
-            className="flex flex-1 flex-col overflow-hidden"
-            action={async (formData) => {
-              await createAction.executeAsync({
-                fullName: String(formData.get("fullName") ?? ""),
-                email: String(formData.get("email") ?? ""),
-                phone: String(formData.get("phone") ?? ""),
-                notes: String(formData.get("notes") ?? ""),
-                role: String(formData.get("role") ?? "member") as
-                  | "member"
-                  | "leader"
-                  | "org_admin",
-              });
-            }}
-          >
-            <div className="flex-1 overflow-y-auto px-4 py-6">
-              <div className="grid gap-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    name="fullName"
-                    label="Member name"
-                    placeholder="Anna Novak"
-                    required
-                    error={createAction.result.validationErrors?.fullName?._errors?.[0]}
-                  />
-                  <FormField
-                    name="email"
-                    label="Email"
-                    type="email"
-                    placeholder="anna@example.com"
-                    error={createAction.result.validationErrors?.email?._errors?.[0]}
-                  />
-                  <FormField name="phone" label="Phone" placeholder="+420..." />
-                  <label className="grid gap-2 text-sm font-medium text-slate-700">
-                    <span>Role</span>
-                    <select
-                      name="role"
-                      className="h-10 rounded-2xl border border-input bg-background px-3 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                      defaultValue="member"
-                    >
-                      <option value="member">Member</option>
-                      <option value="leader">Leader</option>
-                      <option value="org_admin">Org admin</option>
-                    </select>
-                  </label>
-                </div>
-                <FormField name="notes" label="Notes" placeholder="Optional admin note" />
-
-                {createAction.result.serverError ? (
-                  <p className="rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                    {createAction.result.serverError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
-            <SheetFooter>
-              <Button type="submit" disabled={createAction.isPending}>
-                {createAction.isPending ? "Creating..." : "Create profile"}
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
+      <MemberSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        isPending={createAction.isPending}
+        serverError={createAction.result.serverError}
+        validationErrors={createAction.result.validationErrors}
+        onSubmit={async (value) => {
+          await createAction.executeAsync(value);
+        }}
+      />
     </div>
   );
 }
