@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
 
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip";
 
 type AppPageProps = {
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
   children: ReactNode;
+  tooltip?: ReactNode;
 };
 
 export function AppPage({
@@ -16,37 +18,49 @@ export function AppPage({
   title,
   description,
   actions,
+  tooltip,
 }: AppPageProps) {
   return (
     <div className="flex flex-1 flex-col pb-8">
-      <header className="flex flex-col gap-6 py-6 md:py-8 lg:py-10">
+      <header className="flex flex-col gap-4 pb-4 md:pb-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {eyebrow ? (
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground/80">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
                 {eyebrow}
               </p>
             ) : null}
-            <h1 className="text-4xl font-semibold tracking-tight text-foreground md:text-5xl">
-              {title}
-            </h1>
-            <p className="mt-1 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-              {description}
-            </p>
+            {tooltip ? (
+              <Tooltip>
+                <TooltipTrigger className="text-left cursor-default focus:outline-none" asChild>
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+                    {title}
+                  </h1>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+                {title}
+              </h1>
+            )}
+            {description ? (
+              <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                {description}
+              </p>
+            ) : null}
           </div>
           {actions ? (
-            <div className="mt-4 flex items-center gap-3 md:mt-0">
-              {actions}
-            </div>
+            <div className="flex items-center gap-3">{actions}</div>
           ) : null}
         </div>
       </header>
 
-      <Separator className="mb-8" />
+      <Separator className="mb-6" />
 
-      <main className="flex flex-1 flex-col">
-        {children}
-      </main>
+      <main className="flex flex-1 flex-col">{children}</main>
     </div>
   );
 }

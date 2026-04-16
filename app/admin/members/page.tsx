@@ -15,6 +15,7 @@ export default async function AdminMembersPage() {
       eyebrow="Org admin"
       title="Manage memberships, approvals, and shadow profiles."
       description="This screen remains the first operational slice for organization admins. It covers creating offline records, linking real users later, and approving pending join requests."
+      tooltip="This screen remains the first operational slice for organization admins. It covers creating offline records, linking real users later, and approving pending join requests."
     >
       <MemberAdmin members={members} />
     </AppPage>
