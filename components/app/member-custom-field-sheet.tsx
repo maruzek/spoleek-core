@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { toast } from "sonner";
 
@@ -111,6 +112,10 @@ export function MemberCustomFieldSheet({
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: MemberCustomFieldFormValues) => Promise<void>;
 }) {
+  const [optionsInput, setOptionsInput] = useState(() =>
+    stringifyFieldOptions(field?.options ?? []),
+  );
+
   const form = useForm({
     defaultValues: toFormValues(field),
     onSubmit: async ({ value }) => {
@@ -401,15 +406,21 @@ export function MemberCustomFieldSheet({
                           <FieldContent>
                             <Textarea
                               id="field-options"
-                              value={stringifyFieldOptions(
-                                formField.state.value,
-                              )}
-                              onBlur={formField.handleBlur}
-                              onChange={(event) =>
+                              value={optionsInput}
+                              onBlur={(event) => {
+                                formField.handleBlur();
+                                setOptionsInput(
+                                  stringifyFieldOptions(
+                                    getFieldOptionList(event.target.value),
+                                  ),
+                                );
+                              }}
+                              onChange={(event) => {
+                                setOptionsInput(event.target.value);
                                 formField.handleChange(
                                   getFieldOptionList(event.target.value),
-                                )
-                              }
+                                );
+                              }}
                             />
                             <FieldDescription>
                               Add one option per line.
