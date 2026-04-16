@@ -298,7 +298,10 @@ export async function requireCategoryManagementAccess(categoryId: string) {
     forbidden();
   }
 
-  const scopedCategoryIds = await listScopedCategoryIds(context.organization.id, context.member.id);
+  const scopedCategoryIds = await listAccessibleCategoryIds(
+    context.organization.id,
+    context.member.id,
+  );
 
   if (!scopedCategoryIds.includes(categoryId)) {
     forbidden();

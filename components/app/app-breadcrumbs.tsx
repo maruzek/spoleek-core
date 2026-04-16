@@ -10,7 +10,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { useSelectedLayoutSegments } from "next/navigation";
+import { usePathname, useSelectedLayoutSegments } from "next/navigation";
 
 const SEGMENT_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -26,8 +26,9 @@ const SEGMENT_LABELS: Record<string, string> = {
   settings: "Settings",
 };
 
-function toHref(segments: string[], index: number) {
-  return `/${segments.slice(0, index + 1).join("/")}`;
+function toHref(basePath: string, segments: string[], index: number) {
+  const suffix = segments.slice(0, index + 1).join("/");
+  return `${basePath}/${suffix}`;
 }
 
 function getLabel(segment: string) {
@@ -39,9 +40,11 @@ function isDynamicId(segment: string) {
 }
 
 export function AppBreadcrumbs() {
+  const pathname = usePathname();
   const segments = useSelectedLayoutSegments().filter(
     (segment) => !segment.startsWith("("),
   );
+  const basePath = pathname.startsWith("/admin") ? "/admin" : "/portal";
 
   if (segments.length === 0) {
     return null;
@@ -68,7 +71,7 @@ export function AppBreadcrumbs() {
                   <BreadcrumbPage className="capitalize">{label}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink
-                    href={toHref(segments, index)}
+                    href={toHref(basePath, segments, index)}
                     className="capitalize"
                   >
                     {label}
