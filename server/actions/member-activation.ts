@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth/auth";
+import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { memberCustomFieldAnswersSchema } from "@/lib/member-custom-fields";
 import { actionClient } from "@/lib/safe-action";
 import { db } from "@/server/db";
@@ -13,6 +14,7 @@ import {
   getValidMemberInvite,
   markMemberInviteCompleted,
   markMemberInviteExpiredIfNeeded,
+  registerActivationAttempt,
 } from "@/server/lib/member-invites";
 import {
   upsertMemberCustomFieldAnswers,
@@ -26,7 +28,7 @@ const completeMemberActivationSchema = z
   .object({
     memberId: z.string().uuid(),
     token: z.string().min(1, "Invitation token is required."),
-    password: z.string().min(8, "Password must be at least 8 characters long."),
+    password: z.string().min(12, "Password must be at least 12 characters long."),
     confirmPassword: z.string().min(1, "Confirm your password."),
     customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
   })
@@ -49,7 +51,7 @@ export const completeMemberActivationAction = actionClient
 
     const member = await getMemberById(organization.id, parsedInput.memberId);
 
-    if (!member || member.status !== "active" || !member.email || !member.userId) {
+    if (!member || !["invited", "active"].includes(member.status) || !member.email) {
       throw new Error("This invitation is no longer available.");
     }
 
@@ -60,6 +62,16 @@ export const completeMemberActivationAction = actionClient
 
     if (!invite) {
       throw new Error("This invitation is invalid or expired. Ask an administrator for a new one.");
+    }
+
+    const activationAttempt = await registerActivationAttempt(parsedInput.memberId);
+
+    if (activationAttempt.blocked) {
+      throw new Error("Too many activation attempts were detected. Wait a few minutes and try the newest invite link again.");
+    }
+
+    if (!invite.provisionedUserId) {
+      throw new Error("This invitation is no longer available.");
     }
 
     const postApprovalFields = await listActiveMemberCustomFields(organization.id, [
@@ -107,6 +119,8 @@ export const completeMemberActivationAction = actionClient
       await tx
         .update(tenantMembers)
         .set({
+          userId: invite.provisionedUserId,
+          status: "active",
           linkedAt: member.linkedAt ?? new Date(),
           updatedAt: new Date(),
         })
@@ -122,13 +136,16 @@ export const completeMemberActivationAction = actionClient
       return result;
     }
 
-    await markMemberInviteCompleted(member.id);
+    await markMemberInviteCompleted({
+      memberId: member.id,
+      claimedUserId: invite.provisionedUserId,
+    });
 
     const signInResult = await auth.api.signInEmail({
       body: {
         email: member.email,
         password: parsedInput.password,
-        callbackURL: "/portal",
+        callbackURL: buildAbsoluteAppUrl("/portal"),
       },
       headers: await headers(),
     });

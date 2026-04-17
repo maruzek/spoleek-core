@@ -39,6 +39,7 @@ const CopyButton = ({
     <button
       type={type}
       title="Copy to clipboard"
+      aria-label="Copy to clipboard"
       className={cn(
         "cursor-pointer",
         "transition-colors duration-200 ease-in-out",

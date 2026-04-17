@@ -1113,7 +1113,10 @@ export function SetupWizard({
                           onClick={async () => {
                             await authClient.signIn.social({
                               provider: "google",
-                              callbackURL: "/setup",
+                              callbackURL: new URL(
+                                "/setup",
+                                window.location.origin,
+                              ).toString(),
                             });
                           }}
                         >

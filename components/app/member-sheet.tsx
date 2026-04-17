@@ -2,7 +2,10 @@
 
 import { useForm } from "@tanstack/react-form";
 
-import { createMemberSchema, type CreateMemberValues } from "@/lib/member-admin";
+import {
+  createMemberSchema,
+  type CreateMemberValues,
+} from "@/lib/member-admin";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -74,7 +77,9 @@ export function MemberSheet({
     validationErrors?.[fieldName]?._errors ?? [];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
-      ? errors.filter((message): message is string => typeof message === "string")
+      ? errors.filter(
+          (message): message is string => typeof message === "string",
+        )
       : [];
 
   return (
@@ -109,14 +114,18 @@ export function MemberSheet({
                           getFieldError("firstName").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="field-first-name">First name *</FieldLabel>
+                      <FieldLabel htmlFor="field-first-name">
+                        First name *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="field-first-name"
                           placeholder="Anna"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -126,10 +135,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("firstName").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("firstName").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -147,14 +158,18 @@ export function MemberSheet({
                           getFieldError("lastName").length > 0)
                       }
                     >
-                      <FieldLabel htmlFor="field-last-name">Last name *</FieldLabel>
+                      <FieldLabel htmlFor="field-last-name">
+                        Last name *
+                      </FieldLabel>
                       <FieldContent>
                         <Input
                           id="field-last-name"
                           placeholder="Novak"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -164,10 +179,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("lastName").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("lastName").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -193,7 +210,9 @@ export function MemberSheet({
                           placeholder="anna@example.com"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
-                          onChange={(event) => formField.handleChange(event.target.value)}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
                           aria-invalid={
                             (formField.state.meta.isTouched ||
                               form.state.submissionAttempts > 0) &&
@@ -203,10 +222,12 @@ export function MemberSheet({
                         />
                         <FieldError
                           errors={[
-                            ...getClientFieldErrors(formField.state.meta.errors).map(
-                              (message) => ({ message }),
-                            ),
-                            ...getFieldError("email").map((message) => ({ message })),
+                            ...getClientFieldErrors(
+                              formField.state.meta.errors,
+                            ).map((message) => ({ message })),
+                            ...getFieldError("email").map((message) => ({
+                              message,
+                            })),
                           ]}
                         />
                       </FieldContent>
@@ -222,17 +243,21 @@ export function MemberSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as ShadowMemberFormValues["role"])
+                            formField.handleChange(
+                              value as ShadowMemberFormValues["role"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="h-11 w-full px-4">
                             <SelectValue placeholder="Choose role" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
                               <SelectItem value="member">Member</SelectItem>
                               <SelectItem value="leader">Leader</SelectItem>
-                              <SelectItem value="org_admin">Org admin</SelectItem>
+                              <SelectItem value="org_admin">
+                                Org admin
+                              </SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
@@ -249,10 +274,12 @@ export function MemberSheet({
                         <Select
                           value={formField.state.value}
                           onValueChange={(value) =>
-                            formField.handleChange(value as ShadowMemberFormValues["status"])
+                            formField.handleChange(
+                              value as ShadowMemberFormValues["status"],
+                            )
                           }
                         >
-                          <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                          <SelectTrigger className="h-11 w-full px-4">
                             <SelectValue placeholder="Choose status" />
                           </SelectTrigger>
                           <SelectContent>

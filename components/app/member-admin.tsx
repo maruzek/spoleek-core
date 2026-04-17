@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatDateTime } from "@/lib/format";
 import { MemberEditSheet } from "./member-edit-sheet";
 import { MemberSheet } from "./member-sheet";
@@ -45,6 +46,7 @@ import {
 } from "@/server/actions/member-admin";
 import type {
   MemberCustomField,
+  MemberInviteDeliveryStatus,
   MemberInviteStatus,
   TenantMember,
 } from "@/server/db/schema";
@@ -62,9 +64,12 @@ type MemberRow = {
   createdAt: Date;
   linkedUserName: string | null;
   inviteStatus: MemberInviteStatus | null;
+  inviteDeliveryStatus: MemberInviteDeliveryStatus | null;
   inviteSentAt: Date | null;
   inviteCompletedAt: Date | null;
   inviteExpiresAt: Date | null;
+  inviteResendAvailableAt: Date | null;
+  inviteActivationBlockedUntil: Date | null;
   inviteLastError: string | null;
 };
 
@@ -111,7 +116,19 @@ export function MemberAdmin({
     },
   });
   const approveAction = useAction(approveMemberAction, {
-    onSuccess() {
+    onSuccess({ data }) {
+      if (data?.inviteReason === "cooldown") {
+        toast.error("The invite was not resent because the resend cooldown is still active.");
+      } else if (data?.inviteReason === "already-completed") {
+        toast.success("Member approved. This account was already activated.");
+      } else if (data?.inviteReason === "suppressed") {
+        toast.error("Member approved, but the invite email is blocked due to a bounce, complaint, or suppression.");
+      } else if (data?.inviteSent) {
+        toast.success("Member approved and activation email sent.");
+      } else {
+        toast.success("Member approved.");
+      }
+
       router.refresh();
     },
   });
@@ -122,8 +139,29 @@ export function MemberAdmin({
     },
   });
   const resendInviteAction = useAction(resendMemberInviteAction, {
-    onSuccess() {
-      toast.success("Activation email sent.");
+    onSuccess({ data }) {
+      if (!data) {
+        return;
+      }
+
+      if (data.sent) {
+        toast.success("Activation email sent.");
+        router.refresh();
+        return;
+      }
+
+      const message =
+        data.reason === "cooldown"
+          ? "Invite resend is cooling down. Wait a few minutes before trying again."
+          : data.reason === "already-completed"
+            ? "This member already completed account activation."
+            : data.reason === "already-active"
+              ? "This member is already linked and does not need another invite."
+              : data.reason === "suppressed"
+                ? "Email delivery is blocked for this address due to a bounce, complaint, or suppression."
+                : "The current activation email is still valid, so a new one was not sent.";
+
+      toast.error(message);
       router.refresh();
     },
   });
@@ -236,20 +274,26 @@ export function MemberAdmin({
     ),
     columnHelper.accessor("status", {
       header: "Status",
-      cell: (info) => (
-        <Badge
-          variant={
-            info.getValue() === "active"
-              ? "default"
-              : info.getValue() === "pending"
-                ? "secondary"
-                : "outline"
-          }
-          className="capitalize"
-        >
-          {info.getValue()}
-        </Badge>
-      ),
+      cell: (info) => {
+        const status = info.getValue();
+        const variant =
+          status === "active"
+            ? "success"
+            : status === "pending"
+              ? "warning"
+              : status === "invited"
+                ? "info"
+                : "default";
+
+        return (
+          <Status variant={variant}>
+            <StatusIndicator />
+            <StatusLabel className="capitalize">
+              {status.replace("_", " ")}
+            </StatusLabel>
+          </Status>
+        );
+      },
     }),
     columnHelper.accessor("role", {
       header: "Role",
@@ -293,14 +337,35 @@ export function MemberAdmin({
         return (
           <div className="flex flex-col gap-1">
             <Badge
-              variant={member.inviteStatus === "completed" ? "default" : "secondary"}
+              variant={
+                member.inviteStatus === "completed"
+                  ? "default"
+                  : member.inviteDeliveryStatus === "bounced" ||
+                      member.inviteDeliveryStatus === "complained" ||
+                      member.inviteDeliveryStatus === "suppressed"
+                    ? "destructive"
+                    : "secondary"
+              }
               className="w-fit capitalize"
             >
               {label.replace("_", " ")}
             </Badge>
+            {member.inviteDeliveryStatus &&
+            member.inviteDeliveryStatus !== "sent" &&
+            member.inviteDeliveryStatus !== "pending" ? (
+              <span className="text-xs text-muted-foreground capitalize">
+                Delivery {member.inviteDeliveryStatus.replace("_", " ")}
+              </span>
+            ) : null}
             {member.inviteSentAt ? (
               <span className="text-xs text-muted-foreground">
                 Sent {formatDateTime(member.inviteSentAt)}
+              </span>
+            ) : null}
+            {member.inviteResendAvailableAt &&
+            member.inviteResendAvailableAt > new Date() ? (
+              <span className="text-xs text-muted-foreground">
+                Resend after {formatDateTime(member.inviteResendAvailableAt)}
               </span>
             ) : null}
             {member.inviteLastError ? (
@@ -350,7 +415,8 @@ export function MemberAdmin({
                 Approve
               </Button>
             ) : null}
-            {member.status === "active" && member.email ? (
+            {(member.status === "invited" || member.status === "active") &&
+            member.email ? (
               <Button
                 type="button"
                 size="sm"
@@ -360,7 +426,12 @@ export function MemberAdmin({
                     memberId: member.id,
                   })
                 }
-                disabled={resendInviteAction.isPending}
+                disabled={
+                  resendInviteAction.isPending ||
+                  member.inviteDeliveryStatus === "suppressed" ||
+                  member.inviteDeliveryStatus === "complained" ||
+                  member.inviteDeliveryStatus === "bounced"
+                }
               >
                 <MailIcon data-icon="inline-start" />
                 {member.inviteStatus === "sent" || member.inviteStatus === "failed"

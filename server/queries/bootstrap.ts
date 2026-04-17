@@ -178,6 +178,7 @@ export function getSetupInstructions(
         : "GOOGLE_CLIENT_SECRET=your-google-client-secret",
       emailInviteEnabled ? "RESEND_API_KEY=re_xxxxxxxxx" : "RESEND_API_KEY=",
       emailInviteEnabled ? "RESEND_FROM_EMAIL=onboarding@example.com" : "RESEND_FROM_EMAIL=",
+      emailInviteEnabled ? "RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxx" : "RESEND_WEBHOOK_SECRET=",
       "SMTP_FROM=optional-fallback@example.com",
     ].join("\n"),
   };
@@ -330,7 +331,7 @@ function getRequiredEnvKeys(authStrategy: SetupAuthStrategy) {
   ];
 
   if (authStrategy === "email-password") {
-    return [...base, "RESEND_API_KEY", "RESEND_FROM_EMAIL"];
+    return [...base, "RESEND_API_KEY", "RESEND_FROM_EMAIL", "RESEND_WEBHOOK_SECRET"];
   }
 
   if (authStrategy === "email-password-google") {
@@ -340,6 +341,7 @@ function getRequiredEnvKeys(authStrategy: SetupAuthStrategy) {
       "GOOGLE_CLIENT_SECRET",
       "RESEND_API_KEY",
       "RESEND_FROM_EMAIL",
+      "RESEND_WEBHOOK_SECRET",
     ];
   }
 

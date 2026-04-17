@@ -40,6 +40,7 @@ const serverEnvSchema = z.object({
   SMTP_FROM: optionalEmail,
   RESEND_API_KEY: optionalString,
   RESEND_FROM_EMAIL: optionalEmail,
+  RESEND_WEBHOOK_SECRET: optionalString,
   PURGE_CRON_SECRET: optionalString,
   WORKSPACE_SYNC_ENABLED: z
     .enum(["true", "false"])
@@ -162,6 +163,7 @@ export function getRawServerEnv() {
     SMTP_FROM: process.env.SMTP_FROM,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+    RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
     PURGE_CRON_SECRET: process.env.PURGE_CRON_SECRET,
     WORKSPACE_SYNC_ENABLED: process.env.WORKSPACE_SYNC_ENABLED,
   };

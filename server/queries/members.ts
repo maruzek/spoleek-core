@@ -66,9 +66,12 @@ export async function listTenantMembers(orgId: string) {
       createdAt: tenantMembers.createdAt,
       linkedUserName: users.name,
       inviteStatus: memberInvites.status,
+      inviteDeliveryStatus: memberInvites.deliveryStatus,
       inviteSentAt: memberInvites.sentAt,
       inviteCompletedAt: memberInvites.completedAt,
       inviteExpiresAt: memberInvites.resetTokenExpiresAt,
+      inviteResendAvailableAt: memberInvites.resendAvailableAt,
+      inviteActivationBlockedUntil: memberInvites.activationBlockedUntil,
       inviteLastError: memberInvites.lastError,
     })
     .from(tenantMembers)

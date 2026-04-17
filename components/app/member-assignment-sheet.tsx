@@ -87,18 +87,30 @@ export function MemberAssignmentSheet({
             <FieldGroup>
               <form.Field name="memberId">
                 {(formField) => (
-                  <Field data-invalid={form.state.submissionAttempts > 0 && !formField.state.value}>
+                  <Field
+                    data-invalid={
+                      form.state.submissionAttempts > 0 &&
+                      !formField.state.value
+                    }
+                  >
                     <FieldLabel>Select member</FieldLabel>
                     <FieldContent>
-                      <Select value={formField.state.value} onValueChange={formField.handleChange}>
-                        <SelectTrigger className="h-11 w-full rounded-2xl px-4">
+                      <Select
+                        value={formField.state.value}
+                        onValueChange={formField.handleChange}
+                      >
+                        <SelectTrigger className="h-11 w-full px-4">
                           <SelectValue placeholder="Choose a member" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
                             {members.map((member) => (
                               <SelectItem key={member.id} value={member.id}>
-                                {[getMemberDisplayName(member), member.email ?? "No email", member.status]
+                                {[
+                                  getMemberDisplayName(member),
+                                  member.email ?? "No email",
+                                  member.status,
+                                ]
                                   .filter(Boolean)
                                   .join(" · ")}
                               </SelectItem>
@@ -109,8 +121,13 @@ export function MemberAssignmentSheet({
                       <FieldDescription>
                         Only members from this organization are listed here.
                       </FieldDescription>
-                      {form.state.submissionAttempts > 0 && !formField.state.value ? (
-                        <FieldError errors={[{ message: "Choose a member before continuing." }]} />
+                      {form.state.submissionAttempts > 0 &&
+                      !formField.state.value ? (
+                        <FieldError
+                          errors={[
+                            { message: "Choose a member before continuing." },
+                          ]}
+                        />
                       ) : null}
                     </FieldContent>
                   </Field>
@@ -120,7 +137,11 @@ export function MemberAssignmentSheet({
           </div>
 
           <SheetFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isPending || members.length === 0}>

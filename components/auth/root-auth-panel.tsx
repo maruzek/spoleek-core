@@ -40,22 +40,23 @@ export function RootAuthPanel({
     setPending(true);
     setError(null);
 
+    const callbackURL = new URL("/portal", window.location.origin).toString();
     const payload = {
       email: String(formData.get("email") ?? ""),
       password: String(formData.get("password") ?? ""),
-      callbackURL: "/portal",
+      callbackURL,
     };
 
     const result = await authClient.signIn.email({
       email: payload.email,
       password: payload.password,
-      callbackURL: "/portal",
+      callbackURL: payload.callbackURL,
     });
 
     setPending(false);
 
     if (result.error) {
-      setError(result.error.message ?? "Authentication failed.");
+      setError("Check your email and password, or contact your administrator for a fresh invite.");
       return;
     }
 
@@ -128,15 +129,29 @@ export function RootAuthPanel({
                 <form action={handleSubmit} className="grid gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="auth-email">Email</Label>
-                    <Input id="auth-email" name="email" type="email" required />
+                    <Input
+                      id="auth-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      spellCheck={false}
+                      required
+                    />
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="auth-password">Password</Label>
-                    <Input id="auth-password" name="password" type="password" required />
+                    <Input
+                      id="auth-password"
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      spellCheck={false}
+                      required
+                    />
                   </div>
 
                   {error ? (
-                    <Alert variant="destructive">
+                    <Alert variant="destructive" aria-live="polite">
                       <CircleAlertIcon />
                       <AlertTitle>Authentication failed</AlertTitle>
                       <AlertDescription>{error}</AlertDescription>
@@ -169,7 +184,7 @@ export function RootAuthPanel({
                     onClick={async () => {
                       await authClient.signIn.social({
                         provider: "google",
-                        callbackURL: "/portal",
+                        callbackURL: new URL("/portal", window.location.origin).toString(),
                       });
                     }}
                   >

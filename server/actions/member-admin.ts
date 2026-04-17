@@ -16,7 +16,7 @@ import {
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
-import { sendMemberActivationInvite } from "@/server/lib/member-invites";
+import { logMemberAuthEvent, sendMemberActivationInvite } from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { requireOrganization } from "@/server/queries/access";
@@ -84,14 +84,17 @@ export const approveMemberAction = orgAdminActionClient
       role: z.enum(["member", "leader", "org_admin"]).default("member"),
     }),
   )
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
+    const nextStatus = usesEmailPasswordActivation(organization.setupAuthStrategy)
+      ? "invited"
+      : "active";
 
     await db
       .update(tenantMembers)
       .set({
         role: parsedInput.role,
-        status: "active",
+        status: nextStatus,
         updatedAt: new Date(),
       })
       .where(
@@ -101,19 +104,37 @@ export const approveMemberAction = orgAdminActionClient
         ),
       );
 
+    await logMemberAuthEvent({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      actorUserId: ctx.auth.user.id,
+      eventType: "member_approved",
+      metadata: {
+        role: parsedInput.role,
+        status: nextStatus,
+      },
+    });
+
+    let inviteResult: Awaited<ReturnType<typeof sendMemberActivationInvite>> | null = null;
+
     if (usesEmailPasswordActivation(organization.setupAuthStrategy)) {
-      await sendMemberActivationInvite({
+      inviteResult = await sendMemberActivationInvite({
         memberId: parsedInput.memberId,
+        actorUserId: ctx.auth.user.id,
       });
     }
 
-    return { success: true };
+    return {
+      success: true,
+      inviteSent: inviteResult?.sent ?? false,
+      inviteReason: inviteResult?.reason ?? null,
+    };
   });
 
 export const resendMemberInviteAction = orgAdminActionClient
   .metadata({ actionName: "resendMemberInvite" })
   .inputSchema(resendMemberInviteSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
 
     if (!usesEmailPasswordActivation(organization.setupAuthStrategy)) {
@@ -123,6 +144,7 @@ export const resendMemberInviteAction = orgAdminActionClient
     const result = await sendMemberActivationInvite({
       memberId: parsedInput.memberId,
       force: true,
+      actorUserId: ctx.auth.user.id,
     });
 
     return {

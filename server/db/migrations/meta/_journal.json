@@ -64,6 +64,13 @@
       "when": 1776408394915,
       "tag": "0008_windy_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776425042364,
+      "tag": "0009_broken_iron_fist",
+      "breakpoints": true
     }
   ]
 }

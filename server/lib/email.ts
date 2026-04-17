@@ -31,3 +31,13 @@ export function getResendFromEmail() {
 
   return from;
 }
+
+export function getResendWebhookSecret() {
+  const env = getServerEnv();
+
+  if (!env.RESEND_WEBHOOK_SECRET) {
+    throw new Error("RESEND_WEBHOOK_SECRET is required to verify Resend webhook events.");
+  }
+
+  return env.RESEND_WEBHOOK_SECRET;
+}

@@ -37,6 +37,27 @@ export const memberInviteStatusEnum = pgEnum("member_invite_status", [
   "failed",
 ]);
 
+export const memberInviteDeliveryStatusEnum = pgEnum("member_invite_delivery_status", [
+  "pending",
+  "sent",
+  "delivered",
+  "bounced",
+  "complained",
+  "suppressed",
+  "failed",
+]);
+
+export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
+  "member_approved",
+  "invite_send_requested",
+  "invite_sent",
+  "invite_send_skipped",
+  "invite_delivery_updated",
+  "invite_completed",
+  "activation_attempt_blocked",
+  "password_reset_sent",
+]);
+
 export const memberCustomFieldTypeEnum = pgEnum("member_custom_field_type", [
   "text",
   "textarea",
@@ -433,9 +454,25 @@ export const memberInvites = pgTable(
     memberId: text("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    provisionedUserId: text("provisioned_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    claimedUserId: text("claimed_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     status: memberInviteStatusEnum("status").notNull().default("pending"),
+    deliveryStatus: memberInviteDeliveryStatusEnum("delivery_status")
+      .notNull()
+      .default("pending"),
     tokenHash: text("token_hash"),
+    providerEmailId: text("provider_email_id"),
     resetTokenExpiresAt: timestamp("reset_token_expires_at", { withTimezone: true }),
+    resendAvailableAt: timestamp("resend_available_at", { withTimezone: true }),
+    deliveryUpdatedAt: timestamp("delivery_updated_at", { withTimezone: true }),
+    lastDeliveryEvent: text("last_delivery_event"),
+    activationAttemptCount: integer("activation_attempt_count").notNull().default(0),
+    lastActivationAttemptAt: timestamp("last_activation_attempt_at", { withTimezone: true }),
+    activationBlockedUntil: timestamp("activation_blocked_until", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     lastError: text("last_error"),
@@ -444,7 +481,42 @@ export const memberInvites = pgTable(
   },
   (table) => ({
     memberIdx: uniqueIndex("member_invites_member_idx").on(table.memberId),
+    providerEmailIdx: uniqueIndex("member_invites_provider_email_idx").on(table.providerEmailId),
     orgStatusIdx: index("member_invites_org_status_idx").on(table.orgId, table.status),
+    orgDeliveryStatusIdx: index("member_invites_org_delivery_status_idx").on(
+      table.orgId,
+      table.deliveryStatus,
+    ),
+  }),
+);
+
+export const memberAuthEvents = pgTable(
+  "member_auth_events",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    inviteId: text("invite_id").references(() => memberInvites.id, { onDelete: "set null" }),
+    eventType: memberAuthEventTypeEnum("event_type").notNull(),
+    message: text("message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    ...timestamps,
+  },
+  (table) => ({
+    orgMemberCreatedIdx: index("member_auth_events_org_member_created_idx").on(
+      table.orgId,
+      table.memberId,
+      table.createdAt,
+    ),
+    orgEventTypeIdx: index("member_auth_events_org_event_type_idx").on(
+      table.orgId,
+      table.eventType,
+    ),
   }),
 );
 
@@ -463,12 +535,16 @@ export const schema = {
   memberCustomFields,
   memberCustomFieldValues,
   memberInvites,
+  memberAuthEvents,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
 export type TenantRole = typeof tenantRoleEnum.enumValues[number];
 export type MembershipStatus = typeof membershipStatusEnum.enumValues[number];
 export type MemberInviteStatus = typeof memberInviteStatusEnum.enumValues[number];
+export type MemberInviteDeliveryStatus =
+  typeof memberInviteDeliveryStatusEnum.enumValues[number];
+export type MemberAuthEventType = typeof memberAuthEventTypeEnum.enumValues[number];
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
 export type GroupCategorySelectionMode =
@@ -486,3 +562,4 @@ export type CategoryAdminAssignment = typeof categoryAdminAssignments.$inferSele
 export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;
 export type MemberInvite = typeof memberInvites.$inferSelect;
+export type MemberAuthEvent = typeof memberAuthEvents.$inferSelect;

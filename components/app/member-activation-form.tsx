@@ -79,8 +79,10 @@ export function MemberActivationForm({
               <FieldContent>
                 <Input
                   id="activation-password"
+                  name="password"
                   type="password"
                   autoComplete="new-password"
+                  spellCheck={false}
                   value={formField.state.value}
                   onBlur={formField.handleBlur}
                   onChange={(event) =>
@@ -113,8 +115,10 @@ export function MemberActivationForm({
               <FieldContent>
                 <Input
                   id="activation-confirm-password"
+                  name="confirmPassword"
                   type="password"
                   autoComplete="new-password"
+                  spellCheck={false}
                   value={formField.state.value}
                   onBlur={formField.handleBlur}
                   onChange={(event) =>
@@ -164,7 +168,7 @@ export function MemberActivationForm({
       </FieldGroup>
 
       {activationAction.result.serverError ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" aria-live="polite">
           <AlertTitle>We couldn&apos;t finish the activation</AlertTitle>
           <AlertDescription>
             {activationAction.result.serverError}

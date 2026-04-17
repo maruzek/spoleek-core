@@ -1,6 +1,7 @@
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { after } from "next/server";
 
 import { MemberActivationEmail } from "@/emails/member-activation-email";
 import { getServerEnv } from "@/lib/env";
@@ -19,9 +20,20 @@ export const auth = betterAuth({
     schema,
     usePlural: true,
   }),
+  advanced: {
+    backgroundTasks: {
+      handler: (promise) => {
+        after(async () => {
+          await promise;
+        });
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
+    minPasswordLength: 12,
+    maxPasswordLength: 256,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url, token }) => {
       const inviteTools = await import("@/server/lib/member-invites");
@@ -34,12 +46,15 @@ export const auth = betterAuth({
           const emailContent = await inviteTools.getMemberInviteEmailContent(
             activationTarget.memberId,
           );
+          const existingInvite = await inviteTools.getMemberInviteByMemberId(
+            activationTarget.memberId,
+          );
 
           if (!emailContent.email) {
             throw new Error("Invite email could not be sent because the member has no email.");
           }
 
-          const { error } = await resend.emails.send(
+          const { data, error } = await resend.emails.send(
             {
               from,
               to: [emailContent.email],
@@ -64,7 +79,22 @@ export const auth = betterAuth({
           await inviteTools.markMemberInviteSent({
             memberId: activationTarget.memberId,
             token,
+            providerEmailId: data?.id ?? null,
           });
+          if (existingInvite) {
+            await inviteTools
+              .logMemberAuthEvent({
+                orgId: existingInvite.orgId,
+                memberId: activationTarget.memberId,
+                inviteId: existingInvite.id,
+                actorUserId: null,
+                eventType: "password_reset_sent",
+                metadata: {
+                  providerEmailId: data?.id ?? null,
+                },
+              })
+              .catch(() => undefined);
+          }
           return;
         } catch (error) {
           await inviteTools.markMemberInviteFailed({

@@ -60,7 +60,9 @@ export function MemberCustomFieldInput({
   if (field.type === "boolean") {
     return (
       <Field orientation="horizontal" data-invalid={Boolean(error)}>
-        <FieldLabel htmlFor={`custom-field-${field.key}`}>{field.label}</FieldLabel>
+        <FieldLabel htmlFor={`custom-field-${field.key}`}>
+          {field.label}
+        </FieldLabel>
         <FieldContent className="items-end">
           <Checkbox
             id={`custom-field-${field.key}`}
@@ -84,7 +86,10 @@ export function MemberCustomFieldInput({
             value={typeof value === "string" ? value : ""}
             onValueChange={onChange}
           >
-            <SelectTrigger className="h-11 w-full rounded-2xl px-4" aria-invalid={Boolean(error)}>
+            <SelectTrigger
+              className="h-11 w-full px-4"
+              aria-invalid={Boolean(error)}
+            >
               <SelectValue placeholder="Select an option" />
             </SelectTrigger>
             <SelectContent>
@@ -127,7 +132,9 @@ export function MemberCustomFieldInput({
                     onCheckedChange={(nextChecked) => {
                       const nextValues = nextChecked
                         ? [...selectedValues, option]
-                        : selectedValues.filter((selected) => selected !== option);
+                        : selectedValues.filter(
+                            (selected) => selected !== option,
+                          );
 
                       onChange(nextValues);
                     }}
@@ -155,12 +162,18 @@ export function MemberCustomFieldInput({
 
   return (
     <Field data-invalid={Boolean(error)}>
-      <FieldLabel htmlFor={`custom-field-${field.key}`}>{field.label}</FieldLabel>
+      <FieldLabel htmlFor={`custom-field-${field.key}`}>
+        {field.label}
+      </FieldLabel>
       <FieldContent>
         <Input
           id={`custom-field-${field.key}`}
           type={inputType}
-          value={typeof value === "string" || typeof value === "number" ? String(value) : ""}
+          value={
+            typeof value === "string" || typeof value === "number"
+              ? String(value)
+              : ""
+          }
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={Boolean(error)}
         />

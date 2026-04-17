@@ -15,6 +15,7 @@ import {
   emailAdminSchema,
   organizationBootstrapSchema,
 } from "@/lib/bootstrap/setup-schemas";
+import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { splitMemberName } from "@/lib/member-custom-fields";
 import { actionClient } from "@/lib/safe-action";
 import { slugify } from "@/lib/slugify";
@@ -173,7 +174,7 @@ export const createSetupEmailAdminAction = actionClient
       body: {
         email: user.email,
         password: parsedInput.password,
-        callbackURL: "/setup",
+        callbackURL: buildAbsoluteAppUrl("/setup"),
       },
       headers: await headers(),
     });
