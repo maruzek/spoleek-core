@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
@@ -27,15 +27,14 @@ import {
   AlertDialogMedia,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BadgeOverflow } from "@/components/ui/badge-overflow";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatDateTime } from "@/lib/format";
-import { MemberEditSheet } from "./member-edit-sheet";
-import { MemberSheet } from "./member-sheet";
+import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
   approveMemberAction,
   bulkDeleteMembersAction,
@@ -46,10 +45,16 @@ import {
 } from "@/server/actions/member-admin";
 import type {
   MemberCustomField,
-  MemberInviteDeliveryStatus,
-  MemberInviteStatus,
   TenantMember,
 } from "@/server/db/schema";
+import type {
+  MemberEditorMetadata,
+  MemberGroupAssignment,
+  MemberInviteState,
+  MembersTableCategory,
+} from "@/server/queries/members";
+import { MemberEditSheet } from "./member-edit-sheet";
+import { MemberSheet } from "./member-sheet";
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
 
@@ -62,31 +67,108 @@ type MemberRow = {
   status: VisibleMemberStatus;
   userId: string | null;
   createdAt: Date;
-  linkedUserName: string | null;
-  inviteStatus: MemberInviteStatus | null;
-  inviteDeliveryStatus: MemberInviteDeliveryStatus | null;
-  inviteSentAt: Date | null;
-  inviteCompletedAt: Date | null;
-  inviteExpiresAt: Date | null;
-  inviteResendAvailableAt: Date | null;
-  inviteActivationBlockedUntil: Date | null;
-  inviteLastError: string | null;
+  primaryGroup: MemberGroupAssignment | null;
+  customFieldValues: Record<string, string>;
+  groupAssignmentsByCategory: Record<string, MemberGroupAssignment[]>;
+  inviteState: MemberInviteState;
 };
-
-const columnHelper = createColumnHelper<MemberRow>();
 
 type MemberEditorData = {
   member: Omit<TenantMember, "status"> & { status: VisibleMemberStatus };
   customFieldAnswers: Record<string, unknown>;
+  metadata: MemberEditorMetadata;
 };
+
+const columnHelper = createColumnHelper<MemberRow>();
+
+function getStatusVariant(status: VisibleMemberStatus) {
+  if (status === "active") {
+    return "success";
+  }
+
+  if (status === "pending") {
+    return "warning";
+  }
+
+  if (status === "invited") {
+    return "info";
+  }
+
+  return "default";
+}
+
+function getInviteIssue(member: MemberRow) {
+  if (member.inviteState.status === "failed") {
+    return {
+      label: "Invite failed",
+      variant: "destructive" as const,
+    };
+  }
+
+  if (member.inviteState.deliveryStatus === "bounced") {
+    return {
+      label: "Email bounced",
+      variant: "destructive" as const,
+    };
+  }
+
+  if (member.inviteState.deliveryStatus === "complained") {
+    return {
+      label: "Complaint",
+      variant: "destructive" as const,
+    };
+  }
+
+  if (member.inviteState.deliveryStatus === "suppressed") {
+    return {
+      label: "Suppressed",
+      variant: "destructive" as const,
+    };
+  }
+
+  return null;
+}
+
+function CategoryCell({
+  assignments,
+}: {
+  assignments: MemberGroupAssignment[];
+}) {
+  if (assignments.length === 0) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
+
+  return (
+    <BadgeOverflow
+      items={assignments}
+      getBadgeLabel={(item) => item.name}
+      className="max-w-[16rem] min-w-0"
+      renderBadge={(item) => (
+        <Badge
+          key={`${item.categoryId}-${item.id}`}
+          variant={item.role === "group_admin" ? "default" : "outline"}
+          className="max-w-full truncate"
+        >
+          <span className="truncate">
+            {item.name}
+            {item.role === "group_admin" ? " • admin" : ""}
+          </span>
+        </Badge>
+      )}
+      renderOverflow={(count) => <Badge variant="outline">+{count}</Badge>}
+    />
+  );
+}
 
 export function MemberAdmin({
   members,
   customFields,
+  memberCategories,
   selectedMember,
 }: {
   members: MemberRow[];
   customFields: MemberCustomField[];
+  memberCategories: MembersTableCategory[];
   selectedMember: MemberEditorData | null;
 }) {
   const pathname = usePathname();
@@ -95,7 +177,7 @@ export function MemberAdmin({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const updateSearchParam = (memberId: string | null) => {
+  const updateSearchParam = useCallback((memberId: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
 
     if (memberId) {
@@ -107,7 +189,7 @@ export function MemberAdmin({
     const nextUrl =
       params.toString().length > 0 ? `${pathname}?${params}` : pathname;
     router.replace(nextUrl, { scroll: false });
-  };
+  }, [pathname, router, searchParams]);
 
   const createAction = useAction(createShadowMemberAction, {
     onSuccess() {
@@ -226,226 +308,228 @@ export function MemberAdmin({
     },
   });
 
-  const columns = [
-    columnHelper.display({
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={
-            table.getIsAllPageRowsSelected() ||
-            (table.getIsSomePageRowsSelected() && "indeterminate")
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      enableHiding: false,
-    }),
-    columnHelper.accessor(
-      (member) =>
-        [member.firstName, member.lastName, member.email ?? ""]
-          .filter(Boolean)
-          .join(" "),
-      {
-        header: "Member",
-        id: "member",
-        cell: ({ row }) => {
-          const member = row.original;
-          return (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-foreground">
-                {getMemberDisplayName(member)}
-              </span>
-              <span className="text-sm text-muted-foreground line-clamp-1">
-                {member.email || "No email yet"}
-              </span>
-            </div>
-          );
-        },
-      },
-    ),
-    columnHelper.accessor("status", {
-      header: "Status",
-      cell: (info) => {
-        const status = info.getValue();
-        const variant =
-          status === "active"
-            ? "success"
-            : status === "pending"
-              ? "warning"
-              : status === "invited"
-                ? "info"
-                : "default";
-
-        return (
-          <Status variant={variant}>
-            <StatusIndicator />
-            <StatusLabel className="capitalize">
-              {status.replace("_", " ")}
-            </StatusLabel>
-          </Status>
-        );
-      },
-    }),
-    columnHelper.accessor("role", {
-      header: "Role",
-      cell: (info) => (
-        <span className="capitalize text-muted-foreground">
-          {info.getValue().replace("_", " ")}
-        </span>
-      ),
-    }),
-    columnHelper.accessor("userId", {
-      header: "Link",
-      cell: ({ row }) => {
-        const member = row.original;
-        return (
-          <span className="text-muted-foreground">
-            {member.userId
-              ? member.linkedUserName || "Linked"
-              : "Shadow profile"}
-          </span>
-        );
-      },
-    }),
-    columnHelper.accessor("inviteStatus", {
-      header: "Invite",
-      cell: ({ row }) => {
-        const member = row.original;
-
-        if (!member.email) {
-          return <span className="text-muted-foreground">No email</span>;
-        }
-
-        if (!member.inviteStatus) {
-          return <span className="text-muted-foreground">Not sent</span>;
-        }
-
-        const label =
-          member.inviteStatus === "sent" && member.inviteCompletedAt
-            ? "completed"
-            : member.inviteStatus;
-
-        return (
-          <div className="flex flex-col gap-1">
-            <Badge
-              variant={
-                member.inviteStatus === "completed"
-                  ? "default"
-                  : member.inviteDeliveryStatus === "bounced" ||
-                      member.inviteDeliveryStatus === "complained" ||
-                      member.inviteDeliveryStatus === "suppressed"
-                    ? "destructive"
-                    : "secondary"
+  const columns = useMemo(
+    () => {
+      const baseColumns = [
+        columnHelper.display({
+          id: "select",
+          meta: { label: "Select" },
+          header: ({ table }) => (
+            <Checkbox
+              checked={
+                table.getIsAllPageRowsSelected() ||
+                (table.getIsSomePageRowsSelected() && "indeterminate")
               }
-              className="w-fit capitalize"
-            >
-              {label.replace("_", " ")}
-            </Badge>
-            {member.inviteDeliveryStatus &&
-            member.inviteDeliveryStatus !== "sent" &&
-            member.inviteDeliveryStatus !== "pending" ? (
-              <span className="text-xs text-muted-foreground capitalize">
-                Delivery {member.inviteDeliveryStatus.replace("_", " ")}
+              onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+              aria-label="Select all"
+            />
+          ),
+          cell: ({ row }) => (
+            <Checkbox
+              checked={row.getIsSelected()}
+              onCheckedChange={(value) => row.toggleSelected(!!value)}
+              aria-label="Select row"
+            />
+          ),
+          enableSorting: false,
+          enableHiding: false,
+        }),
+        columnHelper.accessor(
+          (member) =>
+            [member.firstName, member.lastName, member.email ?? ""]
+              .filter(Boolean)
+              .join(" "),
+          {
+            id: "member",
+            meta: { label: "Member" },
+            header: "Member",
+            cell: ({ row }) => {
+              const member = row.original;
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => updateSearchParam(member.id)}
+                  className="flex min-w-0 max-w-[18rem] flex-col gap-1 rounded-md text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                >
+                  <span className="truncate font-medium text-foreground underline-offset-4 hover:underline">
+                    {getMemberDisplayName(member)}
+                  </span>
+                  <span className="truncate text-sm text-muted-foreground">
+                    {member.email || "No email yet"}
+                  </span>
+                </button>
+              );
+            },
+          },
+        ),
+        columnHelper.accessor("status", {
+          meta: { label: "Status" },
+          header: "Status",
+          cell: ({ row }) => {
+            const member = row.original;
+            const inviteIssue = getInviteIssue(member);
+
+            return (
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <Status variant={getStatusVariant(member.status)}>
+                  <StatusIndicator />
+                  <StatusLabel className="capitalize">
+                    {member.status.replace("_", " ")}
+                  </StatusLabel>
+                </Status>
+                {inviteIssue ? (
+                  <Badge variant={inviteIssue.variant} className="w-fit">
+                    {inviteIssue.label}
+                  </Badge>
+                ) : null}
+              </div>
+            );
+          },
+        }),
+        columnHelper.accessor("role", {
+          meta: { label: "Role" },
+          header: "Role",
+          cell: (info) => (
+            <span className="text-sm capitalize text-muted-foreground">
+              {info.getValue().replace("_", " ")}
+            </span>
+          ),
+        }),
+      ];
+
+      const categoryColumns = memberCategories.map((category) =>
+        columnHelper.display({
+          id: `category-${category.id}`,
+          meta: { label: category.name },
+          header: () => (
+            <div className="min-w-[9rem] text-sm font-medium text-foreground">
+              {category.name}
+            </div>
+          ),
+          cell: ({ row }) => (
+            <CategoryCell
+              assignments={row.original.groupAssignmentsByCategory[category.id] ?? []}
+            />
+          ),
+        }),
+      );
+
+      const customFieldColumns = customFields.map((field) =>
+        columnHelper.display({
+          id: `field-${field.key}`,
+          meta: { label: field.label },
+          header: () => (
+            <div className="min-w-[10rem] text-sm font-medium text-foreground">
+              {field.label}
+            </div>
+          ),
+          cell: ({ row }) => {
+            const value = row.original.customFieldValues[field.key];
+
+            return value ? (
+              <span className="block max-w-[14rem] truncate text-sm text-foreground">
+                {value}
               </span>
-            ) : null}
-            {member.inviteSentAt ? (
-              <span className="text-xs text-muted-foreground">
-                Sent {formatDateTime(member.inviteSentAt)}
-              </span>
-            ) : null}
-            {member.inviteResendAvailableAt &&
-            member.inviteResendAvailableAt > new Date() ? (
-              <span className="text-xs text-muted-foreground">
-                Resend after {formatDateTime(member.inviteResendAvailableAt)}
-              </span>
-            ) : null}
-            {member.inviteLastError ? (
-              <span className="text-xs text-destructive">{member.inviteLastError}</span>
-            ) : null}
-          </div>
-        );
-      },
-    }),
-    columnHelper.accessor("createdAt", {
-      header: "Created",
-      cell: (info) => (
-        <span className="text-muted-foreground">
-          {formatDateTime(info.getValue())}
-        </span>
-      ),
-    }),
-    columnHelper.display({
-      id: "actions",
-      header: "",
-      cell: ({ row }) => {
-        const member = row.original;
-        return (
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => updateSearchParam(member.id)}
-            >
-              <PencilIcon data-icon="inline-start" />
-              Edit
-            </Button>
-            {member.status === "pending" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="default"
-                onClick={() =>
-                  approveAction.execute({
-                    memberId: member.id,
-                    role: member.role,
-                  })
-                }
-                disabled={approveAction.isPending}
-              >
-                Approve
-              </Button>
-            ) : null}
-            {member.status === "invited" &&
-            member.email &&
-            member.inviteStatus !== "completed" &&
-            !member.userId ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  resendInviteAction.execute({
-                    memberId: member.id,
-                  })
-                }
-                disabled={
-                  resendInviteAction.isPending ||
-                  member.inviteDeliveryStatus === "suppressed" ||
-                  member.inviteDeliveryStatus === "complained" ||
-                  member.inviteDeliveryStatus === "bounced"
-                }
-              >
-                <MailIcon data-icon="inline-start" />
-                {member.inviteStatus === "sent" || member.inviteStatus === "failed"
-                  ? "Resend invite"
-                  : "Send invite"}
-              </Button>
-            ) : null}
-          </div>
-        );
-      },
-    }),
-  ];
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            );
+          },
+        }),
+      );
+
+      const trailingColumns = [
+        columnHelper.accessor("createdAt", {
+          meta: { label: "Joined" },
+          header: "Joined",
+          cell: (info) => (
+            <span className="text-sm text-muted-foreground">
+              {formatDateTime(info.getValue())}
+            </span>
+          ),
+        }),
+        columnHelper.display({
+          id: "actions",
+          meta: { label: "Actions" },
+          header: "",
+          cell: ({ row }) => {
+            const member = row.original;
+
+            return (
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => updateSearchParam(member.id)}
+                >
+                  <PencilIcon data-icon="inline-start" />
+                  Edit
+                </Button>
+                {member.status === "pending" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    onClick={() =>
+                      approveAction.execute({
+                        memberId: member.id,
+                        role: member.role,
+                      })
+                    }
+                    disabled={approveAction.isPending}
+                  >
+                    Approve
+                  </Button>
+                ) : null}
+                {member.status === "invited" &&
+                member.email &&
+                member.inviteState.status !== "completed" &&
+                !member.userId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      resendInviteAction.execute({
+                        memberId: member.id,
+                      })
+                    }
+                    disabled={
+                      resendInviteAction.isPending ||
+                      member.inviteState.deliveryStatus === "suppressed" ||
+                      member.inviteState.deliveryStatus === "complained" ||
+                      member.inviteState.deliveryStatus === "bounced"
+                    }
+                  >
+                    <MailIcon data-icon="inline-start" />
+                    {member.inviteState.status === "sent" ||
+                    member.inviteState.status === "failed"
+                      ? "Resend invite"
+                      : "Send invite"}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          },
+        }),
+      ];
+
+      return [
+        ...baseColumns,
+        ...categoryColumns,
+        ...customFieldColumns,
+        ...trailingColumns,
+      ];
+    },
+    [
+      approveAction,
+      customFields,
+      memberCategories,
+      resendInviteAction,
+      updateSearchParam,
+    ],
+  );
 
   const renderToolbarActions = (table: TanStackTable<MemberRow>) => {
     const selectedRows = table.getFilteredSelectedRowModel().rows;
@@ -493,7 +577,7 @@ export function MemberAdmin({
                     event.preventDefault();
                     void bulkDeleteAction
                       .executeAsync({
-                        memberIds: selectedRows.map((row) => row.original.id),
+                        memberIds: selectedRows.map((selectedRow) => selectedRow.original.id),
                       })
                       .then(() => {
                         table.resetRowSelection();
@@ -546,6 +630,7 @@ export function MemberAdmin({
             }
           }}
           member={selectedMember.member}
+          metadata={selectedMember.metadata}
           canDelete={selectedMember.member.role !== "org_admin"}
           customFields={customFields}
           customFieldAnswers={selectedMember.customFieldAnswers}

@@ -46,6 +46,7 @@ function toDefaultValues(
     isActive: category?.isActive ?? true,
     isPinnedToNavigation: category?.isPinnedToNavigation ?? false,
     showInRegistration: category?.showInRegistration ?? false,
+    showInMembersTable: category?.showInMembersTable ?? false,
     selectionMode: category?.selectionMode ?? "multiple",
     selectionRequired: category?.selectionRequired ?? false,
     maxSelections: category?.maxSelections ?? null,
@@ -359,9 +360,8 @@ export function GroupCategorySheet({
                 </form.Field>
               </div>
 
-              <form.Subscribe
-                selector={(state) => state.values.showInRegistration}
-                children={(showInRegistration) =>
+              <form.Subscribe selector={(state) => state.values.showInRegistration}>
+                {(showInRegistration) =>
                   showInRegistration ? (
                     <form.Field name="registrationFieldLabel">
                       {(formField) => (
@@ -422,7 +422,7 @@ export function GroupCategorySheet({
                     </form.Field>
                   ) : null
                 }
-              />
+              </form.Subscribe>
 
               <div className="grid gap-5 md:grid-cols-2">
                 <form.Field name="selectionRequired">
@@ -456,6 +456,25 @@ export function GroupCategorySheet({
                         <FieldLabel>Show in registration</FieldLabel>
                         <FieldDescription>
                           Reserve this category for the public join flow.
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  )}
+                </form.Field>
+
+                <form.Field name="showInMembersTable">
+                  {(formField) => (
+                    <Field orientation="horizontal">
+                      <Switch
+                        checked={formField.state.value}
+                        onCheckedChange={formField.handleChange}
+                        aria-label="Show in members table"
+                      />
+                      <FieldContent>
+                        <FieldLabel>Show in members table</FieldLabel>
+                        <FieldDescription>
+                          Add this category as its own column in the members
+                          admin table.
                         </FieldDescription>
                       </FieldContent>
                     </Field>

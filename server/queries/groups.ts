@@ -10,8 +10,50 @@ import {
   tenantMembers,
   users,
 } from "@/server/db/schema";
+import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
 
 export async function listGroupCategories(orgId: string) {
+  const hasMembersTableColumn = await hasGroupCategoryMembersTableColumn();
+
+  if (!hasMembersTableColumn) {
+    return db
+      .select({
+        id: groupCategories.id,
+        name: groupCategories.name,
+        slug: groupCategories.slug,
+        description: groupCategories.description,
+        registrationFieldLabel: groupCategories.registrationFieldLabel,
+        isActive: groupCategories.isActive,
+        isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+        showInRegistration: groupCategories.showInRegistration,
+        showInMembersTable: sql<boolean>`false`,
+        selectionMode: groupCategories.selectionMode,
+        selectionRequired: groupCategories.selectionRequired,
+        maxSelections: groupCategories.maxSelections,
+        defaultJoinPolicy: groupCategories.defaultJoinPolicy,
+        sortOrder: groupCategories.sortOrder,
+        createdAt: groupCategories.createdAt,
+        updatedAt: groupCategories.updatedAt,
+        groupCount: sql<number>`count(distinct ${groups.id})::int`,
+        adminCount: sql<number>`count(distinct ${categoryAdminAssignments.id})::int`,
+      })
+      .from(groupCategories)
+      .leftJoin(
+        groups,
+        and(eq(groups.categoryId, groupCategories.id), eq(groups.orgId, groupCategories.orgId)),
+      )
+      .leftJoin(
+        categoryAdminAssignments,
+        and(
+          eq(categoryAdminAssignments.categoryId, groupCategories.id),
+          eq(categoryAdminAssignments.orgId, groupCategories.orgId),
+        ),
+      )
+      .where(eq(groupCategories.orgId, orgId))
+      .groupBy(groupCategories.id)
+      .orderBy(asc(groupCategories.sortOrder), asc(groupCategories.name));
+  }
+
   return db
     .select({
       id: groupCategories.id,
@@ -22,6 +64,7 @@ export async function listGroupCategories(orgId: string) {
       isActive: groupCategories.isActive,
       isPinnedToNavigation: groupCategories.isPinnedToNavigation,
       showInRegistration: groupCategories.showInRegistration,
+      showInMembersTable: groupCategories.showInMembersTable,
       selectionMode: groupCategories.selectionMode,
       selectionRequired: groupCategories.selectionRequired,
       maxSelections: groupCategories.maxSelections,
@@ -53,11 +96,57 @@ export async function listGroupCategories(orgId: string) {
 }
 
 export async function getGroupCategoryById(orgId: string, categoryId: string) {
-  const [category] = await db
-    .select()
-    .from(groupCategories)
-    .where(and(eq(groupCategories.orgId, orgId), eq(groupCategories.id, categoryId)))
-    .limit(1);
+  const hasMembersTableColumn = await hasGroupCategoryMembersTableColumn();
+
+  const [category] = hasMembersTableColumn
+    ? await db
+        .select({
+          id: groupCategories.id,
+          orgId: groupCategories.orgId,
+          name: groupCategories.name,
+          slug: groupCategories.slug,
+          description: groupCategories.description,
+          registrationFieldLabel: groupCategories.registrationFieldLabel,
+          isActive: groupCategories.isActive,
+          isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+          showInRegistration: groupCategories.showInRegistration,
+          showInMembersTable: groupCategories.showInMembersTable,
+          selectionMode: groupCategories.selectionMode,
+          selectionRequired: groupCategories.selectionRequired,
+          maxSelections: groupCategories.maxSelections,
+          defaultJoinPolicy: groupCategories.defaultJoinPolicy,
+          sortOrder: groupCategories.sortOrder,
+          specialCapability: groupCategories.specialCapability,
+          createdAt: groupCategories.createdAt,
+          updatedAt: groupCategories.updatedAt,
+        })
+        .from(groupCategories)
+        .where(and(eq(groupCategories.orgId, orgId), eq(groupCategories.id, categoryId)))
+        .limit(1)
+    : await db
+        .select({
+          id: groupCategories.id,
+          orgId: groupCategories.orgId,
+          name: groupCategories.name,
+          slug: groupCategories.slug,
+          description: groupCategories.description,
+          registrationFieldLabel: groupCategories.registrationFieldLabel,
+          isActive: groupCategories.isActive,
+          isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+          showInRegistration: groupCategories.showInRegistration,
+          showInMembersTable: sql<boolean>`false`,
+          selectionMode: groupCategories.selectionMode,
+          selectionRequired: groupCategories.selectionRequired,
+          maxSelections: groupCategories.maxSelections,
+          defaultJoinPolicy: groupCategories.defaultJoinPolicy,
+          sortOrder: groupCategories.sortOrder,
+          specialCapability: groupCategories.specialCapability,
+          createdAt: groupCategories.createdAt,
+          updatedAt: groupCategories.updatedAt,
+        })
+        .from(groupCategories)
+        .where(and(eq(groupCategories.orgId, orgId), eq(groupCategories.id, categoryId)))
+        .limit(1);
 
   return category ?? null;
 }

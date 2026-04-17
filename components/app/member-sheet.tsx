@@ -120,6 +120,7 @@ export function MemberSheet({
                       <FieldContent>
                         <Input
                           id="field-first-name"
+                          autoComplete="given-name"
                           placeholder="Anna"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
@@ -164,6 +165,7 @@ export function MemberSheet({
                       <FieldContent>
                         <Input
                           id="field-last-name"
+                          autoComplete="family-name"
                           placeholder="Novak"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}
@@ -207,6 +209,8 @@ export function MemberSheet({
                         <Input
                           id="field-email"
                           type="email"
+                          autoComplete="email"
+                          spellCheck={false}
                           placeholder="anna@example.com"
                           value={formField.state.value}
                           onBlur={formField.handleBlur}

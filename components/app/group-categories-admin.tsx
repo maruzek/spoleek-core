@@ -26,6 +26,7 @@ type GroupCategoryRow = {
   isActive: boolean;
   isPinnedToNavigation: boolean;
   showInRegistration: boolean;
+  showInMembersTable: boolean;
   selectionMode: "single" | "multiple";
   selectionRequired: boolean;
   maxSelections: number | null;
@@ -106,6 +107,9 @@ export function GroupCategoriesAdmin({ categories }: { categories: GroupCategory
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">{row.original.selectionMode}</Badge>
             {row.original.selectionRequired ? <Badge variant="outline">Required</Badge> : null}
+            {row.original.showInMembersTable ? (
+              <Badge variant="outline">Members table</Badge>
+            ) : null}
             {row.original.maxSelections ? (
               <Badge variant="outline">Max {row.original.maxSelections}</Badge>
             ) : null}

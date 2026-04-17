@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { formatDateTime } from "@/lib/format";
 import type {
   MemberCustomField,
   MemberCustomFieldStage,
@@ -99,6 +100,12 @@ export type CustomFieldValueRecord = {
   valueBoolean: boolean | null;
   valueDate: Date | null;
   valueJson: string[] | null;
+};
+
+export type MemberCustomFieldDisplayItem = {
+  key: string;
+  label: string;
+  displayValue: string;
 };
 
 export function splitMemberName(fullName: string) {
@@ -307,6 +314,70 @@ export function extractAnswerValue(answer: {
   }
 
   return answer.valueText;
+}
+
+export function formatMemberCustomFieldValue(
+  field: Pick<MemberCustomField, "type">,
+  value: unknown,
+) {
+  if (value == null) {
+    return null;
+  }
+
+  if (field.type === "boolean") {
+    return value === true ? "Yes" : value === false ? "No" : null;
+  }
+
+  if (field.type === "date") {
+    const date =
+      value instanceof Date ? value : typeof value === "string" ? new Date(value) : null;
+
+    if (!date || Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return formatDateTime(date).replace(/,?\s+\d{1,2}:\d{2}\s?[AP]M$/i, "");
+  }
+
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+
+    return items.length > 0 ? items.join(", ") : null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  return String(value).trim() || null;
+}
+
+export function buildMemberCustomFieldDisplayItems(
+  fields: Array<Pick<MemberCustomField, "key" | "label" | "type">>,
+  answers: Record<string, unknown>,
+) {
+  return fields.reduce<MemberCustomFieldDisplayItem[]>((items, field) => {
+    const displayValue = formatMemberCustomFieldValue(field, answers[field.key]);
+
+    if (!displayValue) {
+      return items;
+    }
+
+    items.push({
+      key: field.key,
+      label: field.label,
+      displayValue,
+    });
+
+    return items;
+  }, []);
 }
 
 function emptyNormalizedValue(): CustomFieldValueRecord {

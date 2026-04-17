@@ -67,6 +67,26 @@ interface DataTableProps<TData, TValue> {
   toolbarActions?: (table: TanStackTable<TData>) => React.ReactNode;
 }
 
+function getColumnMenuLabel(column: {
+  id: string;
+  columnDef: {
+    header?: unknown;
+    meta?: unknown;
+  };
+}) {
+  const meta = column.columnDef.meta as { label?: string } | undefined;
+
+  if (meta?.label) {
+    return meta.label;
+  }
+
+  if (typeof column.columnDef.header === "string") {
+    return column.columnDef.header;
+  }
+
+  return column.id;
+}
+
 export function DataTable<TData, TValue>({
   columns,
   data,
@@ -134,11 +154,11 @@ export function DataTable<TData, TValue>({
                 return (
                   <DropdownMenuCheckboxItem
                     key={column.id}
-                    className="capitalize"
+                    className="max-w-[16rem]"
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) => column.toggleVisibility(!!value)}
                   >
-                    {column.id}
+                    <span className="truncate">{getColumnMenuLabel(column)}</span>
                   </DropdownMenuCheckboxItem>
                 );
               })}

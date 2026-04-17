@@ -78,6 +78,13 @@
       "when": 1776430926657,
       "tag": "0010_crazy_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776470400000,
+      "tag": "0011_member_table_categories",
+      "breakpoints": true
     }
   ]
 }

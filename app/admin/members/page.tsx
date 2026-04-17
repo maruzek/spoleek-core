@@ -2,7 +2,11 @@ import { AppPage } from "@/components/app/app-page";
 import { MemberAdmin } from "@/components/app/member-admin";
 import { requireAdminAccess } from "@/server/queries/access";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
-import { getMemberEditorData, listTenantMembers } from "@/server/queries/members";
+import {
+  getMemberEditorData,
+  listMembersTableCategories,
+  listTenantMembers,
+} from "@/server/queries/members";
 import type { TenantMember } from "@/server/db/schema";
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
@@ -19,9 +23,10 @@ export default async function AdminMembersPage({
   const params = searchParams ? await searchParams : {};
   const editMemberId =
     typeof params.edit === "string" && params.edit.length > 0 ? params.edit : null;
-  const [members, customFields, selectedMember] = await Promise.all([
+  const [members, customFields, memberCategories, selectedMember] = await Promise.all([
     listTenantMembers(organization.id),
     listMemberCustomFields(organization.id),
+    listMembersTableCategories(organization.id),
     editMemberId ? getMemberEditorData(organization.id, editMemberId) : Promise.resolve(null),
   ]);
 
@@ -35,6 +40,7 @@ export default async function AdminMembersPage({
       <MemberAdmin
         members={members as Array<(typeof members)[number] & { status: VisibleMemberStatus }>}
         customFields={customFields}
+        memberCategories={memberCategories}
         selectedMember={
           selectedMember
             ? {

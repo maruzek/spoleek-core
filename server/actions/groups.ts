@@ -29,6 +29,7 @@ import {
   requireOrgAdminAccess,
   requireOrganization,
 } from "@/server/queries/access";
+import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
 import { getGroupCategoryById, getGroupById } from "@/server/queries/groups";
 import { getMemberById } from "@/server/queries/members";
 
@@ -79,6 +80,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
   .inputSchema(groupCategorySchema)
   .action(async ({ parsedInput }) => {
     const { organization } = await requireOrgAdminAccess();
+    const hasMembersTableColumn = await hasGroupCategoryMembersTableColumn();
     const isUnique = await ensureUniqueCategorySlug(
       organization.id,
       parsedInput.slug,
@@ -100,9 +102,80 @@ export const saveGroupCategoryAction = orgAdminActionClient
         throw new Error("The selected category could not be found.");
       }
 
-      await db
-        .update(groupCategories)
-        .set({
+      const categoryWhere = and(
+        eq(groupCategories.id, parsedInput.id),
+        eq(groupCategories.orgId, organization.id),
+      );
+
+      if (hasMembersTableColumn) {
+        await db
+          .update(groupCategories)
+          .set({
+            name: parsedInput.name.trim(),
+            slug: parsedInput.slug.trim(),
+            description: parsedInput.description,
+            registrationFieldLabel: parsedInput.showInRegistration
+              ? parsedInput.registrationFieldLabel
+              : null,
+            isActive: parsedInput.isActive,
+            isPinnedToNavigation: parsedInput.isPinnedToNavigation,
+            showInRegistration: parsedInput.showInRegistration,
+            showInMembersTable: parsedInput.showInMembersTable,
+            selectionMode: parsedInput.selectionMode,
+            selectionRequired: parsedInput.selectionRequired,
+            maxSelections: parsedInput.maxSelections,
+            defaultJoinPolicy: parsedInput.defaultJoinPolicy,
+            sortOrder: parsedInput.sortOrder,
+            updatedAt: new Date(),
+          })
+          .where(categoryWhere);
+      } else {
+        await db
+          .update(groupCategories)
+          .set({
+            name: parsedInput.name.trim(),
+            slug: parsedInput.slug.trim(),
+            description: parsedInput.description,
+            registrationFieldLabel: parsedInput.showInRegistration
+              ? parsedInput.registrationFieldLabel
+              : null,
+            isActive: parsedInput.isActive,
+            isPinnedToNavigation: parsedInput.isPinnedToNavigation,
+            showInRegistration: parsedInput.showInRegistration,
+            selectionMode: parsedInput.selectionMode,
+            selectionRequired: parsedInput.selectionRequired,
+            maxSelections: parsedInput.maxSelections,
+            defaultJoinPolicy: parsedInput.defaultJoinPolicy,
+            sortOrder: parsedInput.sortOrder,
+            updatedAt: new Date(),
+          })
+          .where(categoryWhere);
+      }
+    } else {
+      if (hasMembersTableColumn) {
+        await db.insert(groupCategories).values({
+          id: randomUUID(),
+          orgId: organization.id,
+          name: parsedInput.name.trim(),
+          slug: parsedInput.slug.trim(),
+          description: parsedInput.description,
+          registrationFieldLabel: parsedInput.showInRegistration
+            ? parsedInput.registrationFieldLabel
+            : null,
+          isActive: parsedInput.isActive,
+          isPinnedToNavigation: parsedInput.isPinnedToNavigation,
+          showInRegistration: parsedInput.showInRegistration,
+          showInMembersTable: parsedInput.showInMembersTable,
+          selectionMode: parsedInput.selectionMode,
+          selectionRequired: parsedInput.selectionRequired,
+          maxSelections: parsedInput.maxSelections,
+          defaultJoinPolicy: parsedInput.defaultJoinPolicy,
+          sortOrder: parsedInput.sortOrder,
+        });
+      } else {
+        await db.insert(groupCategories).values({
+          id: randomUUID(),
+          orgId: organization.id,
           name: parsedInput.name.trim(),
           slug: parsedInput.slug.trim(),
           description: parsedInput.description,
@@ -117,33 +190,8 @@ export const saveGroupCategoryAction = orgAdminActionClient
           maxSelections: parsedInput.maxSelections,
           defaultJoinPolicy: parsedInput.defaultJoinPolicy,
           sortOrder: parsedInput.sortOrder,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(groupCategories.id, parsedInput.id),
-            eq(groupCategories.orgId, organization.id),
-          ),
-        );
-    } else {
-      await db.insert(groupCategories).values({
-        id: randomUUID(),
-        orgId: organization.id,
-        name: parsedInput.name.trim(),
-        slug: parsedInput.slug.trim(),
-        description: parsedInput.description,
-        registrationFieldLabel: parsedInput.showInRegistration
-          ? parsedInput.registrationFieldLabel
-          : null,
-        isActive: parsedInput.isActive,
-        isPinnedToNavigation: parsedInput.isPinnedToNavigation,
-        showInRegistration: parsedInput.showInRegistration,
-        selectionMode: parsedInput.selectionMode,
-        selectionRequired: parsedInput.selectionRequired,
-        maxSelections: parsedInput.maxSelections,
-        defaultJoinPolicy: parsedInput.defaultJoinPolicy,
-        sortOrder: parsedInput.sortOrder,
-      });
+        });
+      }
     }
 
     return { success: true };
