@@ -8,7 +8,7 @@ import { useAction } from "next-safe-action/hooks";
 import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { GroupSheet } from "@/components/app/group-sheet";
+import { GroupForm } from "@/components/app/group-form";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { formatDateTime } from "@/lib/format";
@@ -26,7 +26,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -93,7 +99,8 @@ type GroupDetailProps = {
   }>;
 };
 
-const memberColumnHelper = createColumnHelper<GroupDetailProps["members"][number]>();
+const memberColumnHelper =
+  createColumnHelper<GroupDetailProps["members"][number]>();
 
 type RemovalState =
   | {
@@ -108,9 +115,13 @@ type RemovalState =
     }
   | null;
 
-export function GroupDetail({ group, members, admins, assignableMembers }: GroupDetailProps) {
+export function GroupDetail({
+  group,
+  members,
+  admins,
+  assignableMembers,
+}: GroupDetailProps) {
   const router = useRouter();
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [memberSheetOpen, setMemberSheetOpen] = useState(false);
   const [adminSheetOpen, setAdminSheetOpen] = useState(false);
   const [removalState, setRemovalState] = useState<RemovalState>(null);
@@ -119,7 +130,6 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
     onSuccess({ data }) {
       if (data?.success) {
         toast.success("Group updated.");
-        setSettingsOpen(false);
         router.refresh();
       }
     },
@@ -128,9 +138,7 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
     onSuccess({ data }) {
       if (data?.success) {
         const count = data.requestedCount;
-        toast.success(
-          `${count} member${count === 1 ? "" : "s"} assigned.`,
-        );
+        toast.success(`${count} member${count === 1 ? "" : "s"} assigned.`);
         setMemberSheetOpen(false);
         router.refresh();
       }
@@ -183,7 +191,9 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         cell: ({ row }) => (
           <Checkbox
             checked={row.getIsSelected()}
-            onCheckedChange={(value: boolean | "indeterminate") => row.toggleSelected(!!value)}
+            onCheckedChange={(value: boolean | "indeterminate") =>
+              row.toggleSelected(!!value)
+            }
             aria-label="Select row"
           />
         ),
@@ -191,7 +201,10 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         enableHiding: false,
       }),
       memberColumnHelper.accessor(
-        (row) => [row.firstName, row.lastName, row.email ?? ""].filter(Boolean).join(" "),
+        (row) =>
+          [row.firstName, row.lastName, row.email ?? ""]
+            .filter(Boolean)
+            .join(" "),
         {
           id: "member",
           header: "Member",
@@ -214,7 +227,11 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
       memberColumnHelper.accessor("groupRole", {
         header: "Role",
         cell: (info) => (
-          <Badge variant={info.getValue() === "group_admin" ? "default" : "secondary"}>
+          <Badge
+            variant={
+              info.getValue() === "group_admin" ? "default" : "secondary"
+            }
+          >
             {info.getValue().replaceAll("_", " ")}
           </Badge>
         ),
@@ -222,7 +239,9 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
       memberColumnHelper.accessor("assignedAt", {
         header: "Assigned",
         cell: (info) => (
-          <span className="text-muted-foreground">{formatDateTime(info.getValue())}</span>
+          <span className="text-muted-foreground">
+            {formatDateTime(info.getValue())}
+          </span>
         ),
       }),
       memberColumnHelper.display({
@@ -257,7 +276,9 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
       memberColumnHelper.accessor("assignedAt", {
         header: "Promoted",
         cell: (info) => (
-          <span className="text-muted-foreground">{formatDateTime(info.getValue())}</span>
+          <span className="text-muted-foreground">
+            {formatDateTime(info.getValue())}
+          </span>
         ),
       }),
       memberColumnHelper.display({
@@ -310,7 +331,9 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
           <Badge variant={group.isActive ? "default" : "secondary"}>
             {group.isActive ? "Active" : "Archived"}
           </Badge>
-          <Badge variant="secondary">{group.joinPolicy.replaceAll("_", " ")}</Badge>
+          <Badge variant="secondary">
+            {group.joinPolicy.replaceAll("_", " ")}
+          </Badge>
           <Badge variant="outline">{group.categoryName}</Badge>
         </CardContent>
       </Card>
@@ -382,38 +405,44 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         </TabsContent>
 
         <TabsContent value="settings" className="pt-4">
-          <Card>
+          <Card className="overflow-hidden max-w-2xl mx-auto">
             <CardHeader>
               <CardTitle>Group settings</CardTitle>
               <CardDescription>
                 Edit metadata, join policy, and archive state for this group.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap items-center gap-3">
-              <Button onClick={() => setSettingsOpen(true)}>Edit settings</Button>
-              <span className="text-sm text-muted-foreground">
-                Last updated {formatDateTime(group.updatedAt)}
-              </span>
+            <CardContent className="flex flex-col gap-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={group.isActive ? "default" : "secondary"}>
+                  {group.isActive ? "Active" : "Archived"}
+                </Badge>
+                <Badge variant="secondary">
+                  {group.joinPolicy.replaceAll("_", " ")}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  Last updated {formatDateTime(group.updatedAt)}
+                </span>
+              </div>
+              <GroupForm
+                key={`${group.id}-${group.updatedAt.toISOString()}`}
+                categoryId={group.categoryId}
+                group={group}
+                isPending={saveGroup.isPending}
+                validationErrors={saveGroup.result.validationErrors}
+                submitLabel="Save group"
+                onSubmit={async (value: GroupFormValues) => {
+                  const result = await saveGroup.executeAsync(value);
+
+                  if (result?.serverError) {
+                    toast.error(result.serverError);
+                  }
+                }}
+              />
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      <GroupSheet
-        open={settingsOpen}
-        categoryId={group.categoryId}
-        group={group}
-        isPending={saveGroup.isPending}
-        validationErrors={saveGroup.result.validationErrors}
-        onOpenChange={setSettingsOpen}
-        onSubmit={async (value: GroupFormValues) => {
-          const result = await saveGroup.executeAsync(value);
-
-          if (result?.serverError) {
-            toast.error(result.serverError);
-          }
-        }}
-      />
 
       <MemberAssignmentSheet
         open={memberSheetOpen}
@@ -459,11 +488,16 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         }}
       />
 
-      <AlertDialog open={removalState != null} onOpenChange={(open) => !open && setRemovalState(null)}>
+      <AlertDialog
+        open={removalState != null}
+        onOpenChange={(open) => !open && setRemovalState(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {removalState?.kind === "admin" ? "Demote group admin?" : "Remove group member?"}
+              {removalState?.kind === "admin"
+                ? "Demote group admin?"
+                : "Remove group member?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {removalState
