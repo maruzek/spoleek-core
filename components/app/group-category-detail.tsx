@@ -218,7 +218,9 @@ export function GroupCategoryDetail({
   );
 
   const availableCategoryAdmins = assignableMembers.filter(
-    (member) => !categoryAdmins.some((admin) => admin.memberId === member.id),
+    (member) =>
+      member.status === "active" &&
+      !categoryAdmins.some((admin) => admin.memberId === member.id),
   );
 
   return (
@@ -344,7 +346,12 @@ export function GroupCategoryDetail({
         members={availableCategoryAdmins}
         isPending={assignCategoryAdmin.isPending}
         onOpenChange={setAdminSheetOpen}
-        onSubmit={async (memberId) => {
+        selectionMode="single"
+        onSubmit={async ([memberId]) => {
+          if (!memberId) {
+            return;
+          }
+
           const result = await assignCategoryAdmin.executeAsync({
             categoryId: category.id,
             memberId,

@@ -122,6 +122,11 @@ export const assignGroupMemberSchema = z.object({
   memberId: z.string().uuid(),
 });
 
+export const assignGroupMembersSchema = z.object({
+  groupId: z.string().uuid(),
+  memberIds: z.array(z.string().uuid()).min(1, "Select at least one member."),
+});
+
 export const removeGroupMemberSchema = assignGroupMemberSchema;
 
 export const assignGroupAdminSchema = assignGroupMemberSchema;

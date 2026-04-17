@@ -32,7 +32,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   assignGroupAdminAction,
-  assignGroupMemberAction,
+  assignGroupMembersAction,
   removeGroupAdminAction,
   removeGroupMemberAction,
   saveGroupAction,
@@ -124,10 +124,13 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
       }
     },
   });
-  const assignGroupMember = useAction(assignGroupMemberAction, {
+  const assignGroupMembers = useAction(assignGroupMembersAction, {
     onSuccess({ data }) {
       if (data?.success) {
-        toast.success("Member assigned.");
+        const count = data.requestedCount;
+        toast.success(
+          `${count} member${count === 1 ? "" : "s"} assigned.`,
+        );
         setMemberSheetOpen(false);
         router.refresh();
       }
@@ -284,10 +287,14 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
   );
 
   const availableMembers = assignableMembers.filter(
-    (member) => !members.some((assigned) => assigned.memberId === member.id),
+    (member) =>
+      member.status === "active" &&
+      !members.some((assigned) => assigned.memberId === member.id),
   );
   const availableAdmins = assignableMembers.filter(
-    (member) => !admins.some((assigned) => assigned.memberId === member.id),
+    (member) =>
+      member.status === "active" &&
+      !admins.some((assigned) => assigned.memberId === member.id),
   );
 
   return (
@@ -413,12 +420,13 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         title="Assign member"
         description="Add a member to this group."
         members={availableMembers}
-        isPending={assignGroupMember.isPending}
+        isPending={assignGroupMembers.isPending}
         onOpenChange={setMemberSheetOpen}
-        onSubmit={async (memberId) => {
-          const result = await assignGroupMember.executeAsync({
+        selectionMode="multiple"
+        onSubmit={async (memberIds) => {
+          const result = await assignGroupMembers.executeAsync({
             groupId: group.id,
-            memberId,
+            memberIds,
           });
 
           if (result?.serverError) {
@@ -434,7 +442,12 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
         members={availableAdmins}
         isPending={assignGroupAdmin.isPending}
         onOpenChange={setAdminSheetOpen}
-        onSubmit={async (memberId) => {
+        selectionMode="single"
+        onSubmit={async ([memberId]) => {
+          if (!memberId) {
+            return;
+          }
+
           const result = await assignGroupAdmin.executeAsync({
             groupId: group.id,
             memberId,

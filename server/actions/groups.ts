@@ -9,6 +9,7 @@ import {
   assignCategoryAdminSchema,
   assignGroupAdminSchema,
   assignGroupMemberSchema,
+  assignGroupMembersSchema,
   groupCategorySchema,
   groupSchema,
   removeCategoryAdminSchema,
@@ -329,6 +330,44 @@ export const assignGroupMemberAction = authActionClient
       .onConflictDoNothing();
 
     return { success: true };
+  });
+
+export const assignGroupMembersAction = authActionClient
+  .metadata({ actionName: "assignGroupMembers" })
+  .inputSchema(assignGroupMembersSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+    const group = await getGroupById(organization.id, parsedInput.groupId);
+
+    if (!group) {
+      throw new Error("The selected group could not be found.");
+    }
+
+    await requireGroupManagementAccess(parsedInput.groupId);
+
+    const uniqueMemberIds = [...new Set(parsedInput.memberIds)];
+
+    for (const memberId of uniqueMemberIds) {
+      await requireOrgMemberInOrganization(organization.id, memberId);
+    }
+
+    await db
+      .insert(groupMemberships)
+      .values(
+        uniqueMemberIds.map((memberId) => ({
+          id: randomUUID(),
+          orgId: organization.id,
+          groupId: parsedInput.groupId,
+          memberId,
+          role: "member" as const,
+        })),
+      )
+      .onConflictDoNothing();
+
+    return {
+      success: true,
+      requestedCount: uniqueMemberIds.length,
+    };
   });
 
 export const removeGroupMemberAction = authActionClient
