@@ -44,6 +44,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  CodeBlock,
+  CodeBlockContent,
+  CodeBlockGroup,
+  CodeBlockHeader,
+  CodeBlockIcon,
+} from "@/components/ui/code-block/code-block";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -63,8 +70,8 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { CopyButton } from "../ui/code-block/copy-button";
 
 type SetupWizardProps = {
   currentStep: SetupStep;
@@ -748,11 +755,18 @@ export function SetupWizard({
                     <p className="text-sm font-medium">
                       Suggested `.env` shape
                     </p>
-                    <Textarea
-                      readOnly
-                      value={instructions.envSnippet}
-                      className="min-h-72 font-mono text-xs"
-                    />
+                    <CodeBlock>
+                      <CodeBlockHeader>
+                        <CodeBlockGroup>
+                          <CodeBlockIcon language="env" />
+                          <span>.env</span>
+                        </CodeBlockGroup>
+                        <CopyButton content={instructions.envSnippet} />
+                      </CodeBlockHeader>
+                      <CodeBlockContent className="max-h-none overflow-x-auto p-4 text-xs leading-6 whitespace-pre-wrap">
+                        <code>{instructions.envSnippet}</code>
+                      </CodeBlockContent>
+                    </CodeBlock>
                   </div>
                 </CardContent>
                 <CardFooter className="justify-between gap-4">
