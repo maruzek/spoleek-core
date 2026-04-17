@@ -9,6 +9,7 @@ import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { GroupSheet } from "@/components/app/group-sheet";
+import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { formatDateTime } from "@/lib/format";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
@@ -332,11 +333,18 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
             searchPlaceholder="Search members..."
             emptyStateTitle="No members assigned"
             emptyStateDescription="Add the first member to this group."
-            toolbarActions={() => (
-              <Button onClick={() => setMemberSheetOpen(true)}>
-                <PlusIcon data-icon="inline-start" />
-                Add member
-              </Button>
+            toolbarActions={(table) => (
+              <div className="flex items-center gap-2">
+                <MailingListAction
+                  scope={{ kind: "group-members", contextId: group.id }}
+                  table={table}
+                  getMemberId={(member) => member.memberId}
+                />
+                <Button onClick={() => setMemberSheetOpen(true)}>
+                  <PlusIcon data-icon="inline-start" />
+                  Add member
+                </Button>
+              </div>
             )}
           />
         </TabsContent>
@@ -350,11 +358,18 @@ export function GroupDetail({ group, members, admins, assignableMembers }: Group
             searchPlaceholder="Search group admins..."
             emptyStateTitle="No group admins assigned"
             emptyStateDescription="Promote trusted members to group admins here."
-            toolbarActions={() => (
-              <Button onClick={() => setAdminSheetOpen(true)}>
-                <PlusIcon data-icon="inline-start" />
-                Add group admin
-              </Button>
+            toolbarActions={(table) => (
+              <div className="flex items-center gap-2">
+                <MailingListAction
+                  scope={{ kind: "group-admins", contextId: group.id }}
+                  table={table}
+                  getMemberId={(member) => member.memberId}
+                />
+                <Button onClick={() => setAdminSheetOpen(true)}>
+                  <PlusIcon data-icon="inline-start" />
+                  Add group admin
+                </Button>
+              </div>
             )}
           />
         </TabsContent>

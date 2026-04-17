@@ -55,6 +55,7 @@ import type {
   MembersTableCategory,
 } from "@/server/queries/members";
 import { MemberEditSheet } from "./member-edit-sheet";
+import { MailingListAction } from "./mailing-list-action";
 import { MemberSheet } from "./member-sheet";
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
@@ -574,6 +575,11 @@ export function MemberAdmin({
 
     return (
       <div className="flex items-center gap-2">
+        <MailingListAction
+          scope={{ kind: "members-admin" }}
+          table={table}
+          getMemberId={(member) => member.id}
+        />
         <Button onClick={() => setSheetOpen(true)}>
           <PlusIcon data-icon="inline-start" />
           New Member
