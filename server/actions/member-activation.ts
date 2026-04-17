@@ -22,12 +22,18 @@ import { getAppOrganization } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberById } from "@/server/queries/members";
 
-const completeMemberActivationSchema = z.object({
-  memberId: z.string().uuid(),
-  token: z.string().min(1, "Invitation token is required."),
-  password: z.string().min(8, "Password must be at least 8 characters long."),
-  customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
-});
+const completeMemberActivationSchema = z
+  .object({
+    memberId: z.string().uuid(),
+    token: z.string().min(1, "Invitation token is required."),
+    password: z.string().min(8, "Password must be at least 8 characters long."),
+    confirmPassword: z.string().min(1, "Confirm your password."),
+    customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match.",
+  });
 
 export const completeMemberActivationAction = actionClient
   .metadata({ actionName: "completeMemberActivation" })

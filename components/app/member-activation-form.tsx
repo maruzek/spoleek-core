@@ -41,7 +41,8 @@ export function MemberActivationForm({
       }
     },
   });
-  const customFieldErrors = activationAction.result.data?.customFieldErrors ?? {};
+  const customFieldErrors =
+    activationAction.result.data?.customFieldErrors ?? {};
   const validationErrors = activationAction.result.validationErrors;
 
   const form = useForm({
@@ -49,6 +50,7 @@ export function MemberActivationForm({
       memberId,
       token,
       password: "",
+      confirmPassword: "",
       customFieldAnswers,
     },
     onSubmit: async ({ value }) => {
@@ -68,8 +70,12 @@ export function MemberActivationForm({
       <FieldGroup>
         <form.Field name="password">
           {(formField) => (
-            <Field data-invalid={Boolean(validationErrors?.password?._errors?.[0])}>
-              <FieldLabel htmlFor="activation-password">Create password</FieldLabel>
+            <Field
+              data-invalid={Boolean(validationErrors?.password?._errors?.[0])}
+            >
+              <FieldLabel htmlFor="activation-password">
+                Create password
+              </FieldLabel>
               <FieldContent>
                 <Input
                   id="activation-password"
@@ -77,14 +83,51 @@ export function MemberActivationForm({
                   autoComplete="new-password"
                   value={formField.state.value}
                   onBlur={formField.handleBlur}
-                  onChange={(event) => formField.handleChange(event.target.value)}
-                  aria-invalid={Boolean(validationErrors?.password?._errors?.[0])}
+                  onChange={(event) =>
+                    formField.handleChange(event.target.value)
+                  }
+                  aria-invalid={Boolean(
+                    validationErrors?.password?._errors?.[0],
+                  )}
                 />
-                <FieldDescription>
-                  This password will be used with your approved email address when you sign in.
-                </FieldDescription>
                 {validationErrors?.password?._errors?.[0] ? (
-                  <FieldError>{validationErrors.password._errors[0]}</FieldError>
+                  <FieldError>
+                    {validationErrors.password._errors[0]}
+                  </FieldError>
+                ) : null}
+              </FieldContent>
+            </Field>
+          )}
+        </form.Field>
+
+        <form.Field name="confirmPassword">
+          {(formField) => (
+            <Field
+              data-invalid={Boolean(
+                validationErrors?.confirmPassword?._errors?.[0],
+              )}
+            >
+              <FieldLabel htmlFor="activation-confirm-password">
+                Confirm password
+              </FieldLabel>
+              <FieldContent>
+                <Input
+                  id="activation-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={formField.state.value}
+                  onBlur={formField.handleBlur}
+                  onChange={(event) =>
+                    formField.handleChange(event.target.value)
+                  }
+                  aria-invalid={Boolean(
+                    validationErrors?.confirmPassword?._errors?.[0],
+                  )}
+                />
+                {validationErrors?.confirmPassword?._errors?.[0] ? (
+                  <FieldError>
+                    {validationErrors.confirmPassword._errors[0]}
+                  </FieldError>
                 ) : null}
               </FieldContent>
             </Field>
@@ -96,7 +139,8 @@ export function MemberActivationForm({
             <FieldLabel>Required profile fields</FieldLabel>
             <FieldContent>
               <FieldDescription>
-                Finish the organization-specific questions below before entering the portal.
+                Finish the organization-specific questions below before entering
+                the portal.
               </FieldDescription>
             </FieldContent>
           </Field>
@@ -122,12 +166,16 @@ export function MemberActivationForm({
       {activationAction.result.serverError ? (
         <Alert variant="destructive">
           <AlertTitle>We couldn&apos;t finish the activation</AlertTitle>
-          <AlertDescription>{activationAction.result.serverError}</AlertDescription>
+          <AlertDescription>
+            {activationAction.result.serverError}
+          </AlertDescription>
         </Alert>
       ) : null}
 
       <Button type="submit" size="lg" disabled={activationAction.isPending}>
-        {activationAction.isPending ? "Finishing setup..." : "Finish account setup"}
+        {activationAction.isPending
+          ? "Finishing setup..."
+          : "Finish account setup"}
       </Button>
     </form>
   );
