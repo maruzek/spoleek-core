@@ -139,13 +139,14 @@ const authOptions: Array<{
   {
     value: "email-password",
     title: "Email and password only",
-    description: "The simplest bootstrap path with no Google provider setup.",
+    description:
+      "Members sign in with email/password after admins approve them and Spoleek emails an activation link.",
   },
   {
     value: "email-password-google",
     title: "Email/password + Google",
     description:
-      "Allow password auth and add Google as a secondary sign-in path.",
+      "Use invite-only email/password activation for members and also offer Google as a secondary sign-in path.",
   },
   {
     value: "google-first",
@@ -165,7 +166,11 @@ const stepIndex: Record<SetupStep, number> = {
 
 function readZodFieldError<
   TSchema extends {
-    safeParse: (value: unknown) => { success: true } | { success: false; error: { issues: Array<{ message: string }> } };
+    safeParse: (
+      value: unknown,
+    ) =>
+      | { success: true }
+      | { success: false; error: { issues: Array<{ message: string }> } };
   },
 >(schema: TSchema, value: unknown) {
   const result = schema.safeParse(value);
@@ -197,7 +202,10 @@ function collectMessages(error: unknown): string[] {
 }
 
 function toFieldErrors(errors: unknown[], serverErrors?: string[]) {
-  const messages = [...errors.flatMap(collectMessages), ...(serverErrors ?? [])];
+  const messages = [
+    ...errors.flatMap(collectMessages),
+    ...(serverErrors ?? []),
+  ];
   const uniqueMessages = [...new Set(messages.filter(Boolean))];
   return uniqueMessages.map((message) => ({ message }));
 }
@@ -376,7 +384,9 @@ export function SetupWizard({
     });
   }
 
-  function clearOrganizationFieldError(field: keyof OrganizationBootstrapValues) {
+  function clearOrganizationFieldError(
+    field: keyof OrganizationBootstrapValues,
+  ) {
     setOrganizationFormError(null);
     setOrganizationServerFieldErrors((current) => {
       if (!current[field]) {
@@ -403,7 +413,9 @@ export function SetupWizard({
             <p className="mt-4 text-base leading-8 text-muted-foreground">
               This wizard is strict on purpose. It guides deployment, auth,
               first-admin creation, and organization bootstrap in the right
-              order so `/` can safely become the login page afterward.
+              order so `/` can safely become the login page afterward. In
+              email/password setups, member access stays invite-only after admin
+              approval.
             </p>
           </div>
           <div className="flex gap-3">
@@ -511,7 +523,8 @@ export function SetupWizard({
                   <CardTitle>Step 1 · Choose your setup path</CardTitle>
                   <CardDescription>
                     These choices determine the instructions and env
-                    requirements shown next.
+                    requirements shown next, including whether member activation
+                    emails must be configured.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -550,12 +563,13 @@ export function SetupWizard({
                                 <ToggleGroup
                                   type="single"
                                   orientation="vertical"
-                                  className="grid w-full gap-3"
+                                  className="grid w-full"
                                   value={field.state.value}
                                   onValueChange={(value) => {
                                     setIntentError(null);
                                     field.handleChange(
-                                      (value as SetupDeploymentTrack | "") || "",
+                                      (value as SetupDeploymentTrack | "") ||
+                                        "",
                                     );
                                   }}
                                   aria-invalid={showErrors && errors.length > 0}
@@ -617,7 +631,7 @@ export function SetupWizard({
                                 <ToggleGroup
                                   type="single"
                                   orientation="vertical"
-                                  className="grid w-full gap-3"
+                                  className="grid w-full"
                                   value={field.state.value}
                                   onValueChange={(value) => {
                                     setIntentError(null);
@@ -699,10 +713,10 @@ export function SetupWizard({
                   <Alert>
                     <LockKeyholeIcon />
                     <AlertTitle>{instructions.deployment.title}</AlertTitle>
-                    <AlertDescription>
-                      <p className="font-medium">
+                    <AlertDescription className="mt-2">
+                      <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold">
                         {instructions.deployment.command}
-                      </p>
+                      </code>
                       <ul className="mt-3 flex flex-col gap-2">
                         {instructions.deployment.details.map((detail) => (
                           <li key={detail}>{detail}</li>
@@ -844,7 +858,8 @@ export function SetupWizard({
                   <CardTitle>Step 4 · Create the first admin account</CardTitle>
                   <CardDescription>
                     This account will own the first organization and unlock the
-                    post-setup login flow.
+                    post-setup login flow. Public member self-registration stays
+                    disabled in email/password modes.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-6">
@@ -876,6 +891,11 @@ export function SetupWizard({
                       >
                         <p className="text-sm font-medium">
                           Create admin with email and password
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          This creates the first internal admin account only.
+                          Members will still need admin approval and an
+                          activation email before they can set a password.
                         </p>
                         <FieldGroup>
                           <div className="grid gap-4 md:grid-cols-2">
@@ -1034,9 +1054,7 @@ export function SetupWizard({
                                       onBlur={field.handleBlur}
                                       onChange={(event) => {
                                         clearAdminFieldError("password");
-                                        field.handleChange(
-                                          event.target.value,
-                                        );
+                                        field.handleChange(event.target.value);
                                       }}
                                       aria-invalid={
                                         showErrors && errors.length > 0
@@ -1440,9 +1458,7 @@ export function SetupWizard({
                                     clearOrganizationFieldError("website");
                                     field.handleChange(event.target.value);
                                   }}
-                                  aria-invalid={
-                                    showErrors && errors.length > 0
-                                  }
+                                  aria-invalid={showErrors && errors.length > 0}
                                 />
                                 {showErrors ? (
                                   <FieldError errors={errors} />

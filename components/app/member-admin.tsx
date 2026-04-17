@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import {
   AlertTriangleIcon,
+  MailIcon,
   PencilIcon,
   PlusIcon,
   Trash2Icon,
@@ -39,9 +40,14 @@ import {
   bulkDeleteMembersAction,
   createShadowMemberAction,
   deleteMemberAction,
+  resendMemberInviteAction,
   updateMemberAction,
 } from "@/server/actions/member-admin";
-import type { MemberCustomField, TenantMember } from "@/server/db/schema";
+import type {
+  MemberCustomField,
+  MemberInviteStatus,
+  TenantMember,
+} from "@/server/db/schema";
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
 
@@ -55,6 +61,11 @@ type MemberRow = {
   userId: string | null;
   createdAt: Date;
   linkedUserName: string | null;
+  inviteStatus: MemberInviteStatus | null;
+  inviteSentAt: Date | null;
+  inviteCompletedAt: Date | null;
+  inviteExpiresAt: Date | null;
+  inviteLastError: string | null;
 };
 
 const columnHelper = createColumnHelper<MemberRow>();
@@ -107,6 +118,12 @@ export function MemberAdmin({
   const updateAction = useAction(updateMemberAction, {
     onSuccess() {
       updateSearchParam(null);
+      router.refresh();
+    },
+  });
+  const resendInviteAction = useAction(resendMemberInviteAction, {
+    onSuccess() {
+      toast.success("Activation email sent.");
       router.refresh();
     },
   });
@@ -255,6 +272,44 @@ export function MemberAdmin({
         );
       },
     }),
+    columnHelper.accessor("inviteStatus", {
+      header: "Invite",
+      cell: ({ row }) => {
+        const member = row.original;
+
+        if (!member.email) {
+          return <span className="text-muted-foreground">No email</span>;
+        }
+
+        if (!member.inviteStatus) {
+          return <span className="text-muted-foreground">Not sent</span>;
+        }
+
+        const label =
+          member.inviteStatus === "sent" && member.inviteCompletedAt
+            ? "completed"
+            : member.inviteStatus;
+
+        return (
+          <div className="flex flex-col gap-1">
+            <Badge
+              variant={member.inviteStatus === "completed" ? "default" : "secondary"}
+              className="w-fit capitalize"
+            >
+              {label.replace("_", " ")}
+            </Badge>
+            {member.inviteSentAt ? (
+              <span className="text-xs text-muted-foreground">
+                Sent {formatDateTime(member.inviteSentAt)}
+              </span>
+            ) : null}
+            {member.inviteLastError ? (
+              <span className="text-xs text-destructive">{member.inviteLastError}</span>
+            ) : null}
+          </div>
+        );
+      },
+    }),
     columnHelper.accessor("createdAt", {
       header: "Created",
       cell: (info) => (
@@ -293,6 +348,24 @@ export function MemberAdmin({
                 disabled={approveAction.isPending}
               >
                 Approve
+              </Button>
+            ) : null}
+            {member.status === "active" && member.email ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  resendInviteAction.execute({
+                    memberId: member.id,
+                  })
+                }
+                disabled={resendInviteAction.isPending}
+              >
+                <MailIcon data-icon="inline-start" />
+                {member.inviteStatus === "sent" || member.inviteStatus === "failed"
+                  ? "Resend invite"
+                  : "Send invite"}
               </Button>
             ) : null}
           </div>

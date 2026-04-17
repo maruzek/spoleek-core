@@ -38,6 +38,8 @@ const serverEnvSchema = z.object({
   APP_ENCRYPTION_KEY: z.string().min(32),
   DEFAULT_LOCALE: z.enum(["en", "cs"]),
   SMTP_FROM: optionalEmail,
+  RESEND_API_KEY: optionalString,
+  RESEND_FROM_EMAIL: optionalEmail,
   PURGE_CRON_SECRET: optionalString,
   WORKSPACE_SYNC_ENABLED: z
     .enum(["true", "false"])
@@ -158,6 +160,8 @@ export function getRawServerEnv() {
     APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY,
     DEFAULT_LOCALE: process.env.DEFAULT_LOCALE,
     SMTP_FROM: process.env.SMTP_FROM,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     PURGE_CRON_SECRET: process.env.PURGE_CRON_SECRET,
     WORKSPACE_SYNC_ENABLED: process.env.WORKSPACE_SYNC_ENABLED,
   };

@@ -1,7 +1,7 @@
 import { and, asc, eq, ilike, inArray, isNull, ne, or } from "drizzle-orm";
 
 import { db } from "@/server/db";
-import { tenantMembers, users } from "@/server/db/schema";
+import { memberInvites, tenantMembers, users } from "@/server/db/schema";
 import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
 
 export async function getTenantMemberByUserId(orgId: string, userId: string) {
@@ -65,9 +65,15 @@ export async function listTenantMembers(orgId: string) {
       userId: tenantMembers.userId,
       createdAt: tenantMembers.createdAt,
       linkedUserName: users.name,
+      inviteStatus: memberInvites.status,
+      inviteSentAt: memberInvites.sentAt,
+      inviteCompletedAt: memberInvites.completedAt,
+      inviteExpiresAt: memberInvites.resetTokenExpiresAt,
+      inviteLastError: memberInvites.lastError,
     })
     .from(tenantMembers)
     .leftJoin(users, eq(users.id, tenantMembers.userId))
+    .leftJoin(memberInvites, eq(memberInvites.memberId, tenantMembers.id))
     .where(
       and(
         eq(tenantMembers.orgId, orgId),

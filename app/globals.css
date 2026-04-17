@@ -136,4 +136,9 @@
   h4 {
     font-family: var(--font-heading);
   }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }

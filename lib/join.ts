@@ -23,6 +23,14 @@ export const joinApplicationSchema = z.object({
 export const joinPageSettingsSchema = z.object({
   joinPageHeadline: z.string().trim().min(5, "Join page headline is required."),
   joinPageBody: z.string().trim().min(20, "Add a short public introduction for applicants."),
+  memberInviteEmailSubject: z
+    .string()
+    .trim()
+    .min(5, "Invite email subject is required."),
+  memberInviteEmailBody: z
+    .string()
+    .trim()
+    .min(20, "Add the invite email instructions members should receive after approval."),
   termsOfServiceLabel: z.string().trim().min(5, "Terms label is required."),
   termsOfServiceText: z.string().trim().min(20, "Add the full terms of service text."),
   privacyPolicyLabel: z.string().trim().min(5, "Privacy label is required."),

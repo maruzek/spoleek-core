@@ -25,6 +25,8 @@ type JoinPageSettingsFormProps = {
   organization: Pick<Organization, "joinPageHeadline" | "joinPageBody">;
   policy: Pick<
     OrganizationPolicy,
+    | "memberInviteEmailSubject"
+    | "memberInviteEmailBody"
     | "termsOfServiceLabel"
     | "termsOfServiceText"
     | "privacyPolicyLabel"
@@ -67,6 +69,8 @@ export function JoinPageSettingsForm({
     defaultValues: {
       joinPageHeadline: organization.joinPageHeadline,
       joinPageBody: organization.joinPageBody,
+      memberInviteEmailSubject: policy.memberInviteEmailSubject,
+      memberInviteEmailBody: policy.memberInviteEmailBody,
       termsOfServiceLabel: policy.termsOfServiceLabel,
       termsOfServiceText: policy.termsOfServiceText,
       privacyPolicyLabel: policy.privacyPolicyLabel,
@@ -154,6 +158,69 @@ export function JoinPageSettingsForm({
       <Separator />
 
       <FieldGroup>
+        <form.Field name="memberInviteEmailSubject">
+          {(formField) => {
+            const errors = [
+              ...getFormFieldErrors(formField.state.meta.errors),
+              ...getErrorMessages(validationErrors?.memberInviteEmailSubject),
+            ];
+
+            return (
+              <Field data-invalid={errors.length > 0}>
+                <FieldLabel htmlFor="member-invite-email-subject">Invite email subject</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="member-invite-email-subject"
+                    name="memberInviteEmailSubject"
+                    autoComplete="off"
+                    value={formField.state.value}
+                    onBlur={formField.handleBlur}
+                    onChange={(event) => formField.handleChange(event.target.value)}
+                    aria-invalid={errors.length > 0}
+                  />
+                  <FieldDescription>
+                    This subject line is sent when an approved member is invited to activate their
+                    account.
+                  </FieldDescription>
+                  {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
+                </FieldContent>
+              </Field>
+            );
+          }}
+        </form.Field>
+
+        <form.Field name="memberInviteEmailBody">
+          {(formField) => {
+            const errors = [
+              ...getFormFieldErrors(formField.state.meta.errors),
+              ...getErrorMessages(validationErrors?.memberInviteEmailBody),
+            ];
+
+            return (
+              <Field data-invalid={errors.length > 0}>
+                <FieldLabel htmlFor="member-invite-email-body">Invite email body</FieldLabel>
+                <FieldContent>
+                  <Textarea
+                    id="member-invite-email-body"
+                    name="memberInviteEmailBody"
+                    autoComplete="off"
+                    value={formField.state.value}
+                    onBlur={formField.handleBlur}
+                    onChange={(event) => formField.handleChange(event.target.value)}
+                    aria-invalid={errors.length > 0}
+                    rows={5}
+                  />
+                  <FieldDescription>
+                    Keep the template instructions clear. Spoleek adds the activation button and
+                    expiration note automatically.
+                  </FieldDescription>
+                  {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
+                </FieldContent>
+              </Field>
+            );
+          }}
+        </form.Field>
+
         <form.Field name="termsOfServiceLabel">
           {(formField) => {
             const errors = [

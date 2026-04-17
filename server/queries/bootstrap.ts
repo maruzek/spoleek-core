@@ -122,6 +122,7 @@ export function getSetupInstructions(
   authStrategy: SetupAuthStrategy,
 ) {
   const requiredKeys = getRequiredEnvKeys(authStrategy);
+  const emailInviteEnabled = authStrategy !== "google-first";
 
   const deploymentInstructions: Record<
     SetupDeploymentTrack,
@@ -175,7 +176,9 @@ export function getSetupInstructions(
       authStrategy === "email-password"
         ? "GOOGLE_CLIENT_SECRET="
         : "GOOGLE_CLIENT_SECRET=your-google-client-secret",
-      "SMTP_FROM=",
+      emailInviteEnabled ? "RESEND_API_KEY=re_xxxxxxxxx" : "RESEND_API_KEY=",
+      emailInviteEnabled ? "RESEND_FROM_EMAIL=onboarding@example.com" : "RESEND_FROM_EMAIL=",
+      "SMTP_FROM=optional-fallback@example.com",
     ].join("\n"),
   };
 }
@@ -250,6 +253,18 @@ export async function getSetupEnvReadiness(
     });
   }
 
+  if (
+    raw.RESEND_FROM_EMAIL &&
+    raw.RESEND_FROM_EMAIL.trim().length > 0 &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.RESEND_FROM_EMAIL.trim())
+  ) {
+    issues.push({
+      key: "RESEND_FROM_EMAIL",
+      message: "RESEND_FROM_EMAIL must be a valid email address.",
+      severity: "error",
+    });
+  }
+
   let databaseConnectionOk = false;
 
   if (!issues.some((issue) => issue.key === "DATABASE_URL")) {
@@ -315,7 +330,17 @@ function getRequiredEnvKeys(authStrategy: SetupAuthStrategy) {
   ];
 
   if (authStrategy === "email-password") {
-    return base;
+    return [...base, "RESEND_API_KEY", "RESEND_FROM_EMAIL"];
+  }
+
+  if (authStrategy === "email-password-google") {
+    return [
+      ...base,
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET",
+      "RESEND_API_KEY",
+      "RESEND_FROM_EMAIL",
+    ];
   }
 
   return [...base, "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"];

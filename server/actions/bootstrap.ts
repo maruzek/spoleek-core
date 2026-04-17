@@ -131,30 +131,66 @@ export const createSetupEmailAdminAction = actionClient
 
     const { auth } = await import("@/lib/auth/auth");
     const { headers } = await import("next/headers");
+    const existingUser = await auth.$context.then((context) =>
+      context.internalAdapter.findUserByEmail(parsedInput.email.trim().toLowerCase()),
+    );
 
-    const result = await auth.api.signUpEmail({
+    if (existingUser?.user) {
+      returnValidationErrors(emailAdminSchema, {
+        email: {
+          _errors: ["That email is already in use."],
+        },
+      });
+    }
+
+    const context = await auth.$context;
+    const now = new Date();
+    const userId = context.generateId({ model: "user" }) || randomUUID();
+    const user = await context.internalAdapter.createUser({
+      id: userId,
+      name: parsedInput.name.trim(),
+      email: parsedInput.email.trim().toLowerCase(),
+      emailVerified: true,
+      image: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (!user) {
+      throw new Error("Unable to create the first admin account.");
+    }
+
+    const passwordHash = await context.password.hash(parsedInput.password);
+
+    await context.internalAdapter.linkAccount({
+      accountId: user.id,
+      providerId: "credential",
+      password: passwordHash,
+      userId: user.id,
+    });
+
+    const signInResult = await auth.api.signInEmail({
       body: {
-        name: parsedInput.name,
-        email: parsedInput.email,
+        email: user.email,
         password: parsedInput.password,
         callbackURL: "/setup",
       },
       headers: await headers(),
     });
 
-    if (!result?.user?.id) {
-      throw new Error("Unable to create the first admin account.");
+    if (!signInResult?.user?.id) {
+      throw new Error("The first admin account was created, but automatic sign-in failed.");
     }
 
     await setSetupWizardState({
       ...state,
-      adminUserId: result.user.id,
-      adminEmail: result.user.email,
+      adminUserId: user.id,
+      adminEmail: user.email,
     });
 
     return {
       success: true,
-      email: result.user.email,
+      email: user.email,
     };
   });
 

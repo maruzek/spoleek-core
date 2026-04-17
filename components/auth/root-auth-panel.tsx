@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CircleAlertIcon, LockKeyholeIcon } from "lucide-react";
+import { CircleAlertIcon, LockKeyholeIcon, MailIcon } from "lucide-react";
 
 import { type SetupAuthStrategy } from "@/lib/bootstrap";
 import { authClient } from "@/lib/auth/client";
@@ -30,7 +30,6 @@ export function RootAuthPanel({
   googleAvailable,
 }: RootAuthPanelProps) {
   const router = useRouter();
-  const [mode, setMode] = useState<"sign-in" | "register">("sign-in");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,18 +43,14 @@ export function RootAuthPanel({
     const payload = {
       email: String(formData.get("email") ?? ""),
       password: String(formData.get("password") ?? ""),
-      name: String(formData.get("name") ?? ""),
       callbackURL: "/portal",
     };
 
-    const result =
-      mode === "register"
-        ? await authClient.signUp.email(payload)
-        : await authClient.signIn.email({
-            email: payload.email,
-            password: payload.password,
-            callbackURL: "/portal",
-          });
+    const result = await authClient.signIn.email({
+      email: payload.email,
+      password: payload.password,
+      callbackURL: "/portal",
+    });
 
     setPending(false);
 
@@ -119,26 +114,7 @@ export function RootAuthPanel({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">
-              {emailAllowed ? (
-                <div className="flex gap-2 rounded-full border border-border bg-secondary/60 p-1">
-                  <Button
-                    type="button"
-                    variant={mode === "sign-in" ? "default" : "ghost"}
-                    className="flex-1 rounded-full"
-                    onClick={() => setMode("sign-in")}
-                  >
-                    Sign in
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={mode === "register" ? "default" : "ghost"}
-                    className="flex-1 rounded-full"
-                    onClick={() => setMode("register")}
-                  >
-                    Register
-                  </Button>
-                </div>
-              ) : (
+              {emailAllowed ? null : (
                 <Alert>
                   <LockKeyholeIcon />
                   <AlertTitle>Google-first deployment</AlertTitle>
@@ -150,12 +126,6 @@ export function RootAuthPanel({
 
               {emailAllowed ? (
                 <form action={handleSubmit} className="grid gap-4">
-                  {mode === "register" ? (
-                    <div className="grid gap-2">
-                      <Label htmlFor="auth-name">Full name</Label>
-                      <Input id="auth-name" name="name" required />
-                    </div>
-                  ) : null}
                   <div className="grid gap-2">
                     <Label htmlFor="auth-email">Email</Label>
                     <Input id="auth-email" name="email" type="email" required />
@@ -174,9 +144,21 @@ export function RootAuthPanel({
                   ) : null}
 
                   <Button type="submit" disabled={pending}>
-                    {pending ? "Working..." : mode === "register" ? "Create account" : "Sign in"}
+                    {pending ? "Working..." : "Sign in"}
                   </Button>
                 </form>
+              ) : null}
+
+              {emailAllowed ? (
+                <Alert>
+                  <MailIcon />
+                  <AlertTitle>Invite-only account setup</AlertTitle>
+                  <AlertDescription>
+                    New member accounts are created only after an administrator approves the join
+                    request and sends the activation email. If you are waiting for approval or need
+                    a fresh invite, contact your organization administrator.
+                  </AlertDescription>
+                </Alert>
               ) : null}
 
               {googleAllowed ? (

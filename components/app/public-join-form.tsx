@@ -77,7 +77,8 @@ export function PublicJoinForm({
         <AlertTitle>Application received</AlertTitle>
         <AlertDescription className="leading-7">
           Thank you for applying. We&apos;ve recorded your details and the organization can review
-          your request now. If they approve you, they will tell you what happens next.
+          your request now. If they approve you, they will email you a secure activation link with
+          the next login steps.
         </AlertDescription>
       </Alert>
     );

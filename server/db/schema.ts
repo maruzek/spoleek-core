@@ -29,6 +29,14 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "deleted",
 ]);
 
+export const memberInviteStatusEnum = pgEnum("member_invite_status", [
+  "pending",
+  "sent",
+  "completed",
+  "expired",
+  "failed",
+]);
+
 export const memberCustomFieldTypeEnum = pgEnum("member_custom_field_type", [
   "text",
   "textarea",
@@ -189,6 +197,14 @@ export const organizationPolicies = pgTable(
     termsOfServiceText: text("terms_of_service_text").notNull(),
     privacyPolicyLabel: text("privacy_policy_label").notNull(),
     privacyPolicyText: text("privacy_policy_text").notNull(),
+    memberInviteEmailSubject: text("member_invite_email_subject")
+      .notNull()
+      .default("Your membership has been approved"),
+    memberInviteEmailBody: text("member_invite_email_body")
+      .notNull()
+      .default(
+        "Your membership request has been approved. Use the button below to create your password and complete the remaining profile fields before signing in to the app.",
+      ),
     version: text("version").notNull().default("v1"),
     ...timestamps,
   },
@@ -407,6 +423,31 @@ export const memberCustomFieldValues = pgTable(
   }),
 );
 
+export const memberInvites = pgTable(
+  "member_invites",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    status: memberInviteStatusEnum("status").notNull().default("pending"),
+    tokenHash: text("token_hash"),
+    resetTokenExpiresAt: timestamp("reset_token_expires_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    resendCount: integer("resend_count").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => ({
+    memberIdx: uniqueIndex("member_invites_member_idx").on(table.memberId),
+    orgStatusIdx: index("member_invites_org_status_idx").on(table.orgId, table.status),
+  }),
+);
+
 export const schema = {
   users,
   sessions,
@@ -421,11 +462,13 @@ export const schema = {
   categoryAdminAssignments,
   memberCustomFields,
   memberCustomFieldValues,
+  memberInvites,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
 export type TenantRole = typeof tenantRoleEnum.enumValues[number];
 export type MembershipStatus = typeof membershipStatusEnum.enumValues[number];
+export type MemberInviteStatus = typeof memberInviteStatusEnum.enumValues[number];
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
 export type GroupCategorySelectionMode =
@@ -442,3 +485,4 @@ export type GroupMembership = typeof groupMemberships.$inferSelect;
 export type CategoryAdminAssignment = typeof categoryAdminAssignments.$inferSelect;
 export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;
+export type MemberInvite = typeof memberInvites.$inferSelect;

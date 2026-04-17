@@ -27,6 +27,8 @@ export const saveJoinPageSettingsAction = orgAdminActionClient
       await tx
         .update(organizationPolicies)
         .set({
+          memberInviteEmailSubject: parsedInput.memberInviteEmailSubject.trim(),
+          memberInviteEmailBody: parsedInput.memberInviteEmailBody.trim(),
           termsOfServiceLabel: parsedInput.termsOfServiceLabel.trim(),
           termsOfServiceText: parsedInput.termsOfServiceText.trim(),
           privacyPolicyLabel: parsedInput.privacyPolicyLabel.trim(),

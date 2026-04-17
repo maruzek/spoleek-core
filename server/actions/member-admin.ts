@@ -10,11 +10,13 @@ import {
   bulkDeleteMembersSchema,
   createMemberSchema,
   deleteMemberSchema,
+  resendMemberInviteSchema,
   updateMemberSchema,
 } from "@/lib/member-admin";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { tenantMembers } from "@/server/db/schema";
+import { sendMemberActivationInvite } from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import { requireOrganization } from "@/server/queries/access";
@@ -28,6 +30,10 @@ import {
 function normalizeEmail(email: string) {
   const normalized = email.trim().toLowerCase();
   return normalized.length > 0 ? normalized : null;
+}
+
+function usesEmailPasswordActivation(authStrategy: string | null) {
+  return authStrategy === "email-password" || authStrategy === "email-password-google";
 }
 
 export const createShadowMemberAction = orgAdminActionClient
@@ -95,7 +101,35 @@ export const approveMemberAction = orgAdminActionClient
         ),
       );
 
+    if (usesEmailPasswordActivation(organization.setupAuthStrategy)) {
+      await sendMemberActivationInvite({
+        memberId: parsedInput.memberId,
+      });
+    }
+
     return { success: true };
+  });
+
+export const resendMemberInviteAction = orgAdminActionClient
+  .metadata({ actionName: "resendMemberInvite" })
+  .inputSchema(resendMemberInviteSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    if (!usesEmailPasswordActivation(organization.setupAuthStrategy)) {
+      throw new Error("Member activation emails are only available for email/password sign-in.");
+    }
+
+    const result = await sendMemberActivationInvite({
+      memberId: parsedInput.memberId,
+      force: true,
+    });
+
+    return {
+      success: true,
+      sent: result.sent,
+      reason: result.reason,
+    };
   });
 
 export const updateMemberAction = orgAdminActionClient
