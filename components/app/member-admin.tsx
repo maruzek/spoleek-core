@@ -415,8 +415,10 @@ export function MemberAdmin({
                 Approve
               </Button>
             ) : null}
-            {(member.status === "invited" || member.status === "active") &&
-            member.email ? (
+            {member.status === "invited" &&
+            member.email &&
+            member.inviteStatus !== "completed" &&
+            !member.userId ? (
               <Button
                 type="button"
                 size="sm"
