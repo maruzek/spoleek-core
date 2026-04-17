@@ -37,6 +37,7 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url, token }) => {
       const inviteTools = await import("@/server/lib/member-invites");
+      const emailActivityTools = await import("@/server/lib/email-activity");
       const activationTarget = inviteTools.isMemberActivationResetUrl(url);
       const resend = getResendClient();
       const from = getResendFromEmail();
@@ -81,6 +82,17 @@ export const auth = betterAuth({
             token,
             providerEmailId: data?.id ?? null,
           });
+          await emailActivityTools.recordMemberInviteEmailSent({
+            memberId: activationTarget.memberId,
+            providerEmailId: data?.id ?? null,
+            fromEmail: from,
+            toEmail: emailContent.email,
+            toName: emailContent.memberName,
+            subject: emailContent.subject,
+            metadata: {
+              organizationName: emailContent.organizationName,
+            },
+          });
           if (existingInvite) {
             await inviteTools
               .logMemberAuthEvent({
@@ -97,10 +109,29 @@ export const auth = betterAuth({
           }
           return;
         } catch (error) {
+          const emailContent = await inviteTools
+            .getMemberInviteEmailContent(activationTarget.memberId)
+            .catch(() => null);
           await inviteTools.markMemberInviteFailed({
             memberId: activationTarget.memberId,
             error: error instanceof Error ? error.message : "Failed to send member invite email.",
           });
+          if (emailContent?.email) {
+            await emailActivityTools.recordMemberInviteEmailFailed({
+              memberId: activationTarget.memberId,
+              fromEmail: from,
+              toEmail: emailContent.email,
+              toName: emailContent.memberName,
+              subject: emailContent.subject,
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to send member invite email.",
+              metadata: {
+                organizationName: emailContent.organizationName,
+              },
+            });
+          }
           throw error;
         }
       }

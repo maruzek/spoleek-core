@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { updateEmailActivityStatusByProviderEmailId } from "@/server/lib/email-activity";
 import { getResendClient, getResendWebhookSecret } from "@/server/lib/email";
 import { updateMemberInviteDeliveryStatus } from "@/server/lib/member-invites";
 
@@ -68,6 +69,23 @@ export async function POST(request: Request) {
     providerEmailId: event.data.email_id,
     deliveryStatus,
     eventType: event.type,
+    metadata: event.data as unknown as Record<string, unknown>,
+  });
+
+  const message =
+    "bounce" in event.data && event.data.bounce?.message
+      ? event.data.bounce.message
+      : "suppressed" in event.data && event.data.suppressed?.message
+        ? event.data.suppressed.message
+        : "failed" in event.data && event.data.failed?.reason
+          ? event.data.failed.reason
+          : null;
+
+  await updateEmailActivityStatusByProviderEmailId({
+    providerEmailId: event.data.email_id,
+    status: deliveryStatus,
+    providerEventType: event.type,
+    message,
     metadata: event.data as unknown as Record<string, unknown>,
   });
 

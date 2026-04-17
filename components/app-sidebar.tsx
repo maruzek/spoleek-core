@@ -24,6 +24,7 @@ import {
   FolderTreeIcon,
   LayoutDashboardIcon,
   LifeBuoyIcon,
+  MailIcon,
   Settings2Icon,
   ShieldIcon,
   TerminalIcon,
@@ -97,6 +98,11 @@ function getSidebarData(appContext: AppShellContext) {
       icon: CreditCardIcon,
     },
     {
+      title: "Email",
+      href: "/admin/email",
+      icon: MailIcon,
+    },
+    {
       title: "Settings",
       href: "/admin/settings",
       icon: Settings2Icon,
@@ -116,6 +122,10 @@ function getSidebarData(appContext: AppShellContext) {
     }
 
     if (item.href === "/admin/settings" || item.href === "/admin/settings/custom-fields") {
+      return appContext.capabilities.canManageOrganization
+    }
+
+    if (item.href === "/admin/email") {
       return appContext.capabilities.canManageOrganization
     }
 

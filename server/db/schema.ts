@@ -58,6 +58,35 @@ export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
   "password_reset_sent",
 ]);
 
+export const emailDirectionEnum = pgEnum("email_direction", [
+  "outbound",
+  "inbound",
+]);
+
+export const emailKindEnum = pgEnum("email_kind", [
+  "member_activation_invite",
+]);
+
+export const emailActivityStatusEnum = pgEnum("email_activity_status", [
+  "sent",
+  "delivered",
+  "bounced",
+  "complained",
+  "suppressed",
+  "failed",
+]);
+
+export const emailActivityEventTypeEnum = pgEnum("email_activity_event_type", [
+  "api_accepted",
+  "resend_requested",
+  "sent",
+  "delivered",
+  "bounced",
+  "complained",
+  "suppressed",
+  "failed",
+]);
+
 export const memberCustomFieldTypeEnum = pgEnum("member_custom_field_type", [
   "text",
   "textarea",
@@ -520,6 +549,90 @@ export const memberAuthEvents = pgTable(
   }),
 );
 
+export const emailActivities = pgTable(
+  "email_activities",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    direction: emailDirectionEnum("direction").notNull().default("outbound"),
+    kind: emailKindEnum("kind").notNull(),
+    currentStatus: emailActivityStatusEnum("current_status").notNull(),
+    memberId: text("member_id").references(() => tenantMembers.id, {
+      onDelete: "set null",
+    }),
+    inviteId: text("invite_id").references(() => memberInvites.id, {
+      onDelete: "set null",
+    }),
+    resendOfEmailActivityId: text("resend_of_email_activity_id"),
+    actorUserId: text("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    providerEmailId: text("provider_email_id"),
+    fromEmail: text("from_email").notNull(),
+    toEmail: text("to_email").notNull(),
+    toName: text("to_name"),
+    subject: text("subject").notNull(),
+    providerEventType: text("provider_event_type"),
+    lastError: text("last_error"),
+    problemAt: timestamp("problem_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    bouncedAt: timestamp("bounced_at", { withTimezone: true }),
+    complainedAt: timestamp("complained_at", { withTimezone: true }),
+    suppressedAt: timestamp("suppressed_at", { withTimezone: true }),
+    failedAt: timestamp("failed_at", { withTimezone: true }),
+    lastStatusAt: timestamp("last_status_at", { withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    ...timestamps,
+  },
+  (table) => ({
+    providerEmailIdx: uniqueIndex("email_activities_provider_email_idx").on(
+      table.providerEmailId,
+    ),
+    orgStatusIdx: index("email_activities_org_status_idx").on(
+      table.orgId,
+      table.currentStatus,
+    ),
+    orgKindIdx: index("email_activities_org_kind_idx").on(table.orgId, table.kind),
+    orgSentIdx: index("email_activities_org_sent_idx").on(table.orgId, table.sentAt),
+    orgMemberIdx: index("email_activities_org_member_idx").on(table.orgId, table.memberId),
+  }),
+);
+
+export const emailActivityEvents = pgTable(
+  "email_activity_events",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    emailActivityId: text("email_activity_id")
+      .notNull()
+      .references(() => emailActivities.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    eventType: emailActivityEventTypeEnum("event_type").notNull(),
+    providerEventType: text("provider_event_type"),
+    message: text("message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    ...timestamps,
+  },
+  (table) => ({
+    activityOccurredIdx: index("email_activity_events_activity_occurred_idx").on(
+      table.emailActivityId,
+      table.occurredAt,
+    ),
+    orgOccurredIdx: index("email_activity_events_org_occurred_idx").on(
+      table.orgId,
+      table.occurredAt,
+    ),
+  }),
+);
+
 export const schema = {
   users,
   sessions,
@@ -536,6 +649,8 @@ export const schema = {
   memberCustomFieldValues,
   memberInvites,
   memberAuthEvents,
+  emailActivities,
+  emailActivityEvents,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
@@ -545,6 +660,11 @@ export type MemberInviteStatus = typeof memberInviteStatusEnum.enumValues[number
 export type MemberInviteDeliveryStatus =
   typeof memberInviteDeliveryStatusEnum.enumValues[number];
 export type MemberAuthEventType = typeof memberAuthEventTypeEnum.enumValues[number];
+export type EmailDirection = typeof emailDirectionEnum.enumValues[number];
+export type EmailKind = typeof emailKindEnum.enumValues[number];
+export type EmailActivityStatus = typeof emailActivityStatusEnum.enumValues[number];
+export type EmailActivityEventType =
+  typeof emailActivityEventTypeEnum.enumValues[number];
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
 export type GroupCategorySelectionMode =
@@ -563,3 +683,5 @@ export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;
 export type MemberInvite = typeof memberInvites.$inferSelect;
 export type MemberAuthEvent = typeof memberAuthEvents.$inferSelect;
+export type EmailActivity = typeof emailActivities.$inferSelect;
+export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;
