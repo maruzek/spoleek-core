@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/code-block/copy-button";
 import {
   Field,
   FieldContent,
@@ -32,6 +33,11 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   Select,
   SelectContent,
@@ -60,7 +66,11 @@ import {
   TimelineTime,
   TimelineTitle,
 } from "@/components/ui/timeline";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/format";
 import {
   type UpdateMemberValues,
@@ -125,7 +135,9 @@ function DefinitionRow({
       <dd className="min-w-0">
         <div className="text-sm font-medium text-foreground">{value}</div>
         {description ? (
-          <div className="pt-0.5 text-sm text-muted-foreground">{description}</div>
+          <div className="pt-0.5 text-sm text-muted-foreground">
+            {description}
+          </div>
         ) : null}
       </dd>
     </div>
@@ -176,7 +188,8 @@ export function MemberEditSheet({
     if (!member.email) {
       return {
         value: "No email on file",
-        description: "Invites stay disabled until the member has an email address.",
+        description:
+          "Invites stay disabled until the member has an email address.",
       };
     }
 
@@ -196,7 +209,8 @@ export function MemberEditSheet({
 
     return {
       value: metadata.inviteState.status.replace("_", " "),
-      description: metadata.inviteState.lastError ?? issue ?? "Invite state is healthy.",
+      description:
+        metadata.inviteState.lastError ?? issue ?? "Invite state is healthy.",
     };
   }, [
     member.email,
@@ -219,12 +233,10 @@ export function MemberEditSheet({
     {
       label: "Email",
       value: member.email ?? "No email yet",
-      description: member.email ? "Primary contact used for activation." : "Add an email to enable invite delivery.",
     },
     {
       label: "Invite",
       value: inviteSummary.value,
-      description: inviteSummary.description,
     },
     {
       label: "Primary group",
@@ -293,7 +305,10 @@ export function MemberEditSheet({
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="group-assignments" className="border-none">
+                <AccordionItem
+                  value="group-assignments"
+                  className="border-none"
+                >
                   <AccordionTrigger className="py-1 hover:no-underline">
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="text-sm font-medium text-foreground">
@@ -308,7 +323,10 @@ export function MemberEditSheet({
                     <div className="flex flex-col gap-3">
                       {metadata.groupAssignments.length > 0 ? (
                         metadata.groupAssignments.map((assignment, index) => (
-                          <div key={assignment.id} className="flex flex-col gap-2">
+                          <div
+                            key={assignment.id}
+                            className="flex flex-col gap-2"
+                          >
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-sm font-medium text-foreground">
                                 {assignment.name}
@@ -337,37 +355,10 @@ export function MemberEditSheet({
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="custom-field-snapshot" className="border-none">
-                  <AccordionTrigger className="py-1 hover:no-underline">
-                    <div className="flex min-w-0 flex-col gap-1">
-                      <span className="text-sm font-medium text-foreground">
-                        Custom Field Snapshot
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Non-empty answers shown as a clean reference list.
-                      </span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-2">
-                    {metadata.customFieldDetails.length > 0 ? (
-                      <dl className="divide-y">
-                        {metadata.customFieldDetails.map((item) => (
-                          <DefinitionRow
-                            key={item.key}
-                            label={item.label}
-                            value={item.displayValue}
-                          />
-                        ))}
-                      </dl>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">
-                        No custom member data recorded yet.
-                      </span>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
-
-                <AccordionItem value="membership-timeline" className="border-none">
+                <AccordionItem
+                  value="membership-timeline"
+                  className="border-none"
+                >
                   <AccordionTrigger className="py-1 hover:no-underline">
                     <div className="flex min-w-0 flex-col gap-1">
                       <span className="text-sm font-medium text-foreground">
@@ -381,7 +372,9 @@ export function MemberEditSheet({
                   </AccordionTrigger>
                   <AccordionContent className="pt-2">
                     {metadata.memberTimeline.length > 0 ? (
-                      <Timeline activeIndex={metadata.memberTimeline.length - 1}>
+                      <Timeline
+                        activeIndex={metadata.memberTimeline.length - 1}
+                      >
                         {metadata.memberTimeline.map((event, index) => (
                           <TimelineItem key={event.id}>
                             <TimelineHeader>
@@ -502,50 +495,6 @@ export function MemberEditSheet({
                   )}
                 </form.Field>
 
-                <form.Field name="email">
-                  {(formField) => (
-                    <Field
-                      data-invalid={
-                        (formField.state.meta.isTouched ||
-                          form.state.submissionAttempts > 0) &&
-                        (formField.state.meta.errors.length > 0 ||
-                          getFieldError("email").length > 0)
-                      }
-                    >
-                      <FieldLabel htmlFor="edit-member-email">Email</FieldLabel>
-                      <FieldContent>
-                        <Input
-                          id="edit-member-email"
-                          type="email"
-                          autoComplete="email"
-                          spellCheck={false}
-                          value={formField.state.value}
-                          onBlur={formField.handleBlur}
-                          onChange={(event) =>
-                            formField.handleChange(event.target.value)
-                          }
-                          aria-invalid={
-                            (formField.state.meta.isTouched ||
-                              form.state.submissionAttempts > 0) &&
-                            (formField.state.meta.errors.length > 0 ||
-                              getFieldError("email").length > 0)
-                          }
-                        />
-                        <FieldError
-                          errors={[
-                            ...getClientFieldErrors(
-                              formField.state.meta.errors,
-                            ).map((message) => ({ message })),
-                            ...getFieldError("email").map((message) => ({
-                              message,
-                            })),
-                          ]}
-                        />
-                      </FieldContent>
-                    </Field>
-                  )}
-                </form.Field>
-
                 <form.Field name="role">
                   {(formField) => (
                     <Field>
@@ -607,6 +556,62 @@ export function MemberEditSheet({
                   )}
                 </form.Field>
               </div>
+
+              <form.Field name="email">
+                {(formField) => (
+                  <Field
+                    data-invalid={
+                      (formField.state.meta.isTouched ||
+                        form.state.submissionAttempts > 0) &&
+                      (formField.state.meta.errors.length > 0 ||
+                        getFieldError("email").length > 0)
+                    }
+                  >
+                    <FieldLabel htmlFor="edit-member-email">Email</FieldLabel>
+                    <FieldContent>
+                      <InputGroup>
+                        <InputGroupInput
+                          id="edit-member-email"
+                          type="email"
+                          autoComplete="email"
+                          spellCheck={false}
+                          value={formField.state.value}
+                          onBlur={formField.handleBlur}
+                          onChange={(event) =>
+                            formField.handleChange(event.target.value)
+                          }
+                          aria-invalid={
+                            (formField.state.meta.isTouched ||
+                              form.state.submissionAttempts > 0) &&
+                            (formField.state.meta.errors.length > 0 ||
+                              getFieldError("email").length > 0)
+                          }
+                        />
+                        {formField.state.value.trim().length > 0 ? (
+                          <InputGroupAddon align="inline-end">
+                            <CopyButton
+                              content={formField.state.value.trim()}
+                              className="text-muted-foreground hover:text-foreground"
+                              aria-label="Copy personal email"
+                              title="Copy personal email"
+                            />
+                          </InputGroupAddon>
+                        ) : null}
+                      </InputGroup>
+                      <FieldError
+                        errors={[
+                          ...getClientFieldErrors(
+                            formField.state.meta.errors,
+                          ).map((message) => ({ message })),
+                          ...getFieldError("email").map((message) => ({
+                            message,
+                          })),
+                        ]}
+                      />
+                    </FieldContent>
+                  </Field>
+                )}
+              </form.Field>
 
               {customFields.length > 0 ? (
                 <Field>
@@ -674,8 +679,8 @@ export function MemberEditSheet({
                       Delete {member.firstName} {member.lastName}?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
-                      This soft-deletes the member immediately, hides them from the
-                      table, and schedules permanent removal after 30 days.
+                      This soft-deletes the member immediately, hides them from
+                      the table, and schedules permanent removal after 30 days.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

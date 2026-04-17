@@ -35,6 +35,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatDateTime } from "@/lib/format";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
+import { copyToClipboard } from "@/utils/copy";
 import {
   approveMemberAction,
   bulkDeleteMembersAction,
@@ -176,6 +177,17 @@ export function MemberAdmin({
   const searchParams = useSearchParams();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+
+  const copyEmail = useCallback(async (email: string) => {
+    const copied = await copyToClipboard(email);
+
+    if (copied) {
+      toast.success("Personal email copied.");
+      return;
+    }
+
+    toast.error("Could not copy personal email.");
+  }, []);
 
   const updateSearchParam = useCallback((memberId: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -396,6 +408,30 @@ export function MemberAdmin({
             </span>
           ),
         }),
+        columnHelper.display({
+          id: "personal-email",
+          meta: { label: "Personal Email" },
+          header: "Personal Email",
+          cell: ({ row }) => {
+            const email = row.original.email;
+
+            if (!email) {
+              return <span className="text-sm text-muted-foreground">—</span>;
+            }
+
+            return (
+              <button
+                type="button"
+                onClick={() => void copyEmail(email)}
+                className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+                aria-label={`Copy personal email ${email}`}
+                title="Copy personal email"
+              >
+                {email}
+              </button>
+            );
+          },
+        }),
       ];
 
       const categoryColumns = memberCategories.map((category) =>
@@ -524,6 +560,7 @@ export function MemberAdmin({
     },
     [
       approveAction,
+      copyEmail,
       customFields,
       memberCategories,
       resendInviteAction,
