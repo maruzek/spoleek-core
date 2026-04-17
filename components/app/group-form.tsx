@@ -19,9 +19,9 @@ import {
   FieldLegend,
   FieldTitle,
 } from "@/components/ui/field";
+import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 export type GroupValidationErrors = Partial<
@@ -216,7 +216,7 @@ export function GroupForm({
           )}
         </form.Field>
 
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="flex flex-col gap-5">
           <form.Field name="sortOrder">
             {(formField) => (
               <Field>
@@ -237,20 +237,13 @@ export function GroupForm({
 
           <form.Field name="isActive">
             {(formField) => (
-              <Field orientation="horizontal">
-                <Switch
-                  checked={formField.state.value}
-                  onCheckedChange={formField.handleChange}
-                  aria-label="Active group"
-                />
-                <FieldContent>
-                  <FieldLabel>Active group</FieldLabel>
-                  <FieldDescription>
-                    Archived groups remain visible in admin history but stop acting like live
-                    structure.
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
+              <SwitchChoiceField
+                id="group-active"
+                title="Active group"
+                description="Archived groups remain visible in admin history but stop acting like live structure."
+                checked={formField.state.value}
+                onCheckedChange={formField.handleChange}
+              />
             )}
           </form.Field>
         </div>

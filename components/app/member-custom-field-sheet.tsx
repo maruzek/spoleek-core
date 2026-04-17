@@ -21,6 +21,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -38,7 +39,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { MemberCustomField } from "@/server/db/schema";
 
@@ -343,30 +343,28 @@ export function MemberCustomFieldSheet({
                 </form.Field>
               </div>
 
-              <div className="grid gap-5 md:grid-cols-2">
+              <div className="flex flex-col gap-5">
                 <form.Field name="required">
                   {(formField) => (
-                    <Field orientation="horizontal">
-                      <FieldLabel htmlFor="field-required">Required</FieldLabel>
-                      <Switch
-                        id="field-required"
-                        checked={formField.state.value}
-                        onCheckedChange={formField.handleChange}
-                      />
-                    </Field>
+                    <SwitchChoiceField
+                      id="field-required"
+                      title="Required"
+                      description="Members must provide a value before they can continue through the relevant flow."
+                      checked={formField.state.value}
+                      onCheckedChange={formField.handleChange}
+                    />
                   )}
                 </form.Field>
 
                 <form.Field name="isActive">
                   {(formField) => (
-                    <Field orientation="horizontal">
-                      <FieldLabel htmlFor="field-active">Active</FieldLabel>
-                      <Switch
-                        id="field-active"
-                        checked={formField.state.value}
-                        onCheckedChange={formField.handleChange}
-                      />
-                    </Field>
+                    <SwitchChoiceField
+                      id="field-active"
+                      title="Active"
+                      description="Inactive fields stay in the admin setup but disappear from live member-facing forms."
+                      checked={formField.state.value}
+                      onCheckedChange={formField.handleChange}
+                    />
                   )}
                 </form.Field>
               </div>
