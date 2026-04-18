@@ -85,6 +85,7 @@ type CategoryDetailProps = {
     createdAt: Date;
   }>;
   canManageCategoryAdmins: boolean;
+  canCreateGroups: boolean;
 };
 
 const columnHelper = createColumnHelper<CategoryDetailProps["groups"][number]>();
@@ -95,6 +96,7 @@ export function GroupCategoryDetail({
   categoryAdmins,
   assignableMembers,
   canManageCategoryAdmins,
+  canCreateGroups,
 }: CategoryDetailProps) {
   const router = useRouter();
   const [groupSheetState, setGroupSheetState] = useState<{
@@ -306,21 +308,33 @@ export function GroupCategoryDetail({
         searchKey="group"
         searchPlaceholder="Search groups..."
         emptyStateTitle="No groups in this category yet"
-        emptyStateDescription="Create the first active group inside this category."
-        toolbarActions={() => (
-          <div className="flex items-center gap-2">
-            {canManageCategoryAdmins ? (
-              <Button variant="outline" onClick={() => setAdminSheetOpen(true)}>
-                <ShieldIcon data-icon="inline-start" />
-                Add category admin
-              </Button>
-            ) : null}
-            <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
-              <PlusIcon data-icon="inline-start" />
-              New group
-            </Button>
-          </div>
-        )}
+        emptyStateDescription={
+          canCreateGroups
+            ? "Create the first active group inside this category."
+            : "No groups you can manage are assigned in this category."
+        }
+        toolbarActions={() => {
+          if (!canManageCategoryAdmins && !canCreateGroups) {
+            return null;
+          }
+
+          return (
+            <div className="flex items-center gap-2">
+              {canManageCategoryAdmins ? (
+                <Button variant="outline" onClick={() => setAdminSheetOpen(true)}>
+                  <ShieldIcon data-icon="inline-start" />
+                  Add category admin
+                </Button>
+              ) : null}
+              {canCreateGroups ? (
+                <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
+                  <PlusIcon data-icon="inline-start" />
+                  New group
+                </Button>
+              ) : null}
+            </div>
+          );
+        }}
       />
 
       <GroupSheet

@@ -287,7 +287,7 @@ export async function requireGroupAdminModuleAccess() {
   return context;
 }
 
-export async function requireCategoryManagementAccess(categoryId: string) {
+export async function requireCategoryOverviewAccess(categoryId: string) {
   const context = await requireGroupAdminModuleAccess();
 
   if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
@@ -302,6 +302,26 @@ export async function requireCategoryManagementAccess(categoryId: string) {
     context.organization.id,
     context.member.id,
   );
+
+  if (!scopedCategoryIds.includes(categoryId)) {
+    forbidden();
+  }
+
+  return context;
+}
+
+export async function requireCategoryManagementAccess(categoryId: string) {
+  const context = await requireGroupAdminModuleAccess();
+
+  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
+    return context;
+  }
+
+  if (!context.member) {
+    forbidden();
+  }
+
+  const scopedCategoryIds = await listScopedCategoryIds(context.organization.id, context.member.id);
 
   if (!scopedCategoryIds.includes(categoryId)) {
     forbidden();

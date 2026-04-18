@@ -6,6 +6,8 @@ import { listGroupCategories } from "@/server/queries/groups";
 export default async function AdminGroupsPage() {
   const access = await requireGroupAdminModuleAccess();
   const categories = await listGroupCategories(access.organization.id);
+  const canManageCategories =
+    access.adminAccessLevel === "full" || access.member?.role === "leader";
   const scopedCategoryIds =
     access.adminAccessLevel === "full" || access.member?.role === "leader" || !access.member
       ? null
@@ -18,6 +20,7 @@ export default async function AdminGroupsPage() {
       description="Manage category rules, registration hooks, delegated managers, and the groups that live inside each structural layer."
     >
       <GroupCategoriesAdmin
+        canManageCategories={canManageCategories}
         categories={
           scopedCategoryIds == null
             ? categories

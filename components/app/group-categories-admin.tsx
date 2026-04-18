@@ -40,7 +40,13 @@ type GroupCategoryRow = {
 
 const columnHelper = createColumnHelper<GroupCategoryRow>();
 
-export function GroupCategoriesAdmin({ categories }: { categories: GroupCategoryRow[] }) {
+export function GroupCategoriesAdmin({
+  categories,
+  canManageCategories,
+}: {
+  categories: GroupCategoryRow[];
+  canManageCategories: boolean;
+}) {
   const router = useRouter();
   const [sheetState, setSheetState] = useState<{
     open: boolean;
@@ -137,12 +143,21 @@ export function GroupCategoriesAdmin({ categories }: { categories: GroupCategory
         header: "",
         cell: ({ row }) => (
           <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setSheetState({
-              open: true,
-              category: row.original,
-            })}>
-              Edit
-            </Button>
+            {canManageCategories ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setSheetState({
+                    open: true,
+                    category: row.original,
+                  })
+                }
+              >
+                Edit
+              </Button>
+            ) : null}
             <Button asChild size="sm" variant="ghost">
               <Link href={`/admin/groups/${row.original.id}`}>Open</Link>
             </Button>
@@ -150,7 +165,7 @@ export function GroupCategoriesAdmin({ categories }: { categories: GroupCategory
         ),
       }),
     ],
-    [],
+    [canManageCategories],
   );
 
   return (
@@ -163,12 +178,14 @@ export function GroupCategoriesAdmin({ categories }: { categories: GroupCategory
         searchPlaceholder="Search categories..."
         emptyStateTitle="No group categories yet"
         emptyStateDescription="Start by defining the top-level structure your organization uses."
-        toolbarActions={() => (
-          <Button onClick={() => setSheetState({ open: true, category: null })}>
-            <PlusIcon data-icon="inline-start" />
-            New category
-          </Button>
-        )}
+        toolbarActions={() =>
+          canManageCategories ? (
+            <Button onClick={() => setSheetState({ open: true, category: null })}>
+              <PlusIcon data-icon="inline-start" />
+              New category
+            </Button>
+          ) : null
+        }
       />
 
       <GroupCategorySheet

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { db } from "@/server/db";
@@ -151,7 +151,17 @@ export async function getGroupCategoryById(orgId: string, categoryId: string) {
   return category ?? null;
 }
 
-export async function listGroupsByCategory(orgId: string, categoryId: string) {
+export async function listGroupsByCategory(
+  orgId: string,
+  categoryId: string,
+  options?: { visibleGroupIds?: string[] | null },
+) {
+  const visibleGroupIds = options?.visibleGroupIds;
+
+  if (visibleGroupIds?.length === 0) {
+    return [];
+  }
+
   return db
     .select({
       id: groups.id,
@@ -172,7 +182,13 @@ export async function listGroupsByCategory(orgId: string, categoryId: string) {
       groupMemberships,
       and(eq(groupMemberships.groupId, groups.id), eq(groupMemberships.orgId, groups.orgId)),
     )
-    .where(and(eq(groups.orgId, orgId), eq(groups.categoryId, categoryId)))
+    .where(
+      and(
+        eq(groups.orgId, orgId),
+        eq(groups.categoryId, categoryId),
+        visibleGroupIds ? inArray(groups.id, visibleGroupIds) : undefined,
+      ),
+    )
     .groupBy(groups.id)
     .orderBy(asc(groups.sortOrder), asc(groups.name));
 }
@@ -291,11 +307,15 @@ export async function listAssignableTenantMembers(orgId: string) {
     );
 }
 
-export async function getCategoryDetailData(orgId: string, categoryId: string) {
+export async function getCategoryDetailData(
+  orgId: string,
+  categoryId: string,
+  options?: { visibleGroupIds?: string[] | null },
+) {
   const [category, categoryAdmins, groupsInCategory, assignableMembers] = await Promise.all([
     getGroupCategoryById(orgId, categoryId),
     listCategoryAdmins(orgId, categoryId),
-    listGroupsByCategory(orgId, categoryId),
+    listGroupsByCategory(orgId, categoryId, options),
     listAssignableTenantMembers(orgId),
   ]);
 
