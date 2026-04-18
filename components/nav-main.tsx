@@ -24,6 +24,7 @@ import { ChevronRightIcon } from "lucide-react"
 export type NavMainSubItem = {
   title: string
   href: string
+  exact?: boolean
   items?: NavMainSubItem[]
 }
 
@@ -31,17 +32,22 @@ export type NavMainItem = {
   title: string
   href: string
   icon: LucideIcon
+  exact?: boolean
   items?: NavMainSubItem[]
 }
 
-function isItemActive(pathname: string, href: string) {
+function isItemActive(pathname: string, href: string, exact = false) {
+  if (exact) {
+    return pathname === href
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 function isSubtreeActive(pathname: string, items: NavMainSubItem[]): boolean {
   return items.some(
     (item) =>
-      isItemActive(pathname, item.href) ||
+      isItemActive(pathname, item.href, item.exact) ||
       (item.items?.length ? isSubtreeActive(pathname, item.items) : false),
   )
 }
@@ -56,7 +62,7 @@ function NavSubItems({
   return (
     <SidebarMenuSub>
       {items.map((item) => {
-        const isActive = isItemActive(pathname, item.href)
+        const isActive = isItemActive(pathname, item.href, item.exact)
         const isOpen =
           item.items?.length != null && item.items.length > 0
             ? isActive || isSubtreeActive(pathname, item.items)
@@ -86,7 +92,7 @@ function NavSubItems({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="flex size-7 items-center justify-center rounded-md text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:rotate-90"
+                    className="flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 data-[state=open]:rotate-90 [&>svg]:size-4 [&>svg]:shrink-0"
                   >
                     <ChevronRightIcon />
                     <span className="sr-only">Toggle {item.title}</span>
@@ -122,7 +128,7 @@ export function NavMain({
             key={item.href}
             asChild
             defaultOpen={
-              isItemActive(pathname, item.href) ||
+              isItemActive(pathname, item.href, item.exact) ||
               (item.items?.length ? isSubtreeActive(pathname, item.items) : false)
             }
           >
@@ -130,7 +136,7 @@ export function NavMain({
               <SidebarMenuButton
                 asChild
                 tooltip={item.title}
-                isActive={isItemActive(pathname, item.href)}
+                isActive={isItemActive(pathname, item.href, item.exact)}
               >
                 <Link href={item.href}>
                   <item.icon />

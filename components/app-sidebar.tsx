@@ -71,6 +71,7 @@ function getSidebarData(appContext: AppShellContext) {
       title: "Dashboard",
       href: "/admin",
       icon: ShieldIcon,
+      exact: true,
     },
     {
       title: "Members",
