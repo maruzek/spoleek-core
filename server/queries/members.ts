@@ -18,6 +18,15 @@ import {
   type MemberInviteStatus,
 } from "@/server/db/schema";
 import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
+import type {
+  MemberManagementGroupCategory,
+  MemberManagementScope,
+} from "@/server/lib/member-management-scope";
+import {
+  canAccessMemberInScope,
+  resolveMemberManagementScope,
+} from "@/server/lib/member-management-scope";
+import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
 
 export type MemberGroupAssignment = {
@@ -68,6 +77,22 @@ export type MembersTableCategory = {
   id: string;
   name: string;
   slug: string;
+};
+
+export type MemberAdminAccess = {
+  level: MemberManagementScope["accessLevel"];
+  canAssignElevatedRoles: boolean;
+  roleOptions: MemberManagementScope["roleOptions"];
+  description: string;
+};
+
+export type MembersAdminPageData = {
+  access: MemberAdminAccess;
+  members: Awaited<ReturnType<typeof listTenantMembers>>;
+  customFields: Awaited<ReturnType<typeof listMemberCustomFields>>;
+  memberCategories: MembersTableCategory[];
+  manageableGroupCategories: MemberManagementGroupCategory[];
+  selectedMember: MemberEditorData | null;
 };
 
 type MemberInviteRow = {
@@ -196,15 +221,29 @@ function buildMemberTimeline(args: {
   return events.sort((left, right) => left.date.getTime() - right.date.getTime());
 }
 
-async function listMemberGroupAssignments(orgId: string, memberIds?: string[]) {
+async function listMemberGroupAssignments(
+  orgId: string,
+  options?: {
+    memberIds?: string[];
+    visibleGroupIds?: string[] | null;
+  },
+) {
   const filters = [
     eq(groupMemberships.orgId, orgId),
     eq(groups.isActive, true),
     eq(groupCategories.isActive, true),
   ];
 
-  if (memberIds && memberIds.length > 0) {
-    filters.push(inArray(groupMemberships.memberId, memberIds));
+  if (options?.memberIds && options.memberIds.length > 0) {
+    filters.push(inArray(groupMemberships.memberId, options.memberIds));
+  }
+
+  if (options?.visibleGroupIds) {
+    if (options.visibleGroupIds.length === 0) {
+      return new Map<string, MemberGroupAssignment[]>();
+    }
+
+    filters.push(inArray(groupMemberships.groupId, options.visibleGroupIds));
   }
 
   const rows = await db
@@ -319,10 +358,35 @@ async function getMemberInviteRow(memberId: string) {
   return invite ?? null;
 }
 
-export async function listMembersTableCategories(orgId: string) {
+async function listVisibleScopedMemberIds(orgId: string, visibleGroupIds: string[]) {
+  if (visibleGroupIds.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({ memberId: groupMemberships.memberId })
+    .from(groupMemberships)
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        inArray(groupMemberships.groupId, visibleGroupIds),
+      ),
+    );
+
+  return [...new Set(rows.map((row) => row.memberId))];
+}
+
+export async function listMembersTableCategories(
+  orgId: string,
+  options?: { visibleCategoryIds?: string[] | null },
+) {
   const hasColumn = await hasGroupCategoryMembersTableColumn();
 
   if (!hasColumn) {
+    return [];
+  }
+
+  if (options?.visibleCategoryIds?.length === 0) {
     return [];
   }
 
@@ -338,9 +402,19 @@ export async function listMembersTableCategories(orgId: string) {
         eq(groupCategories.orgId, orgId),
         eq(groupCategories.showInMembersTable, true),
         eq(groupCategories.isActive, true),
+        options?.visibleCategoryIds
+          ? inArray(groupCategories.id, options.visibleCategoryIds)
+          : undefined,
       ),
     )
     .orderBy(asc(groupCategories.sortOrder), asc(groupCategories.name));
+}
+
+export async function listManageableGroupCategories(
+  _orgId: string,
+  scope: MemberManagementScope,
+) {
+  return scope.manageableGroupCategories;
 }
 
 export async function getTenantMemberByUserId(orgId: string, userId: string) {
@@ -392,7 +466,20 @@ export async function findTenantMemberByEmail(orgId: string, email: string) {
   return member ?? null;
 }
 
-export async function listTenantMembers(orgId: string) {
+export async function listTenantMembers(
+  orgId: string,
+  options?: {
+    visibleGroupIds?: string[] | null;
+  },
+) {
+  const visibleGroupIds = options?.visibleGroupIds;
+  const visibleMemberIds =
+    visibleGroupIds == null ? null : await listVisibleScopedMemberIds(orgId, visibleGroupIds);
+
+  if (visibleMemberIds && visibleMemberIds.length === 0) {
+    return [];
+  }
+
   const [members, groupAssignmentsByMember, customFieldDisplayByMember] = await Promise.all([
     db
       .select({
@@ -416,11 +503,15 @@ export async function listTenantMembers(orgId: string) {
         and(
           eq(tenantMembers.orgId, orgId),
           ne(tenantMembers.status, "deleted"),
+          visibleMemberIds ? inArray(tenantMembers.id, visibleMemberIds) : undefined,
         ),
       )
       .orderBy(asc(tenantMembers.createdAt)),
-    listMemberGroupAssignments(orgId),
-    listMemberCustomFieldDisplayMap(orgId),
+    listMemberGroupAssignments(orgId, {
+      memberIds: visibleMemberIds ?? undefined,
+      visibleGroupIds,
+    }),
+    listMemberCustomFieldDisplayMap(orgId, visibleMemberIds ?? undefined),
   ]);
 
   return members.map((member) => {
@@ -485,17 +576,41 @@ export async function getMemberByUserId(orgId: string, userId: string) {
   return member ?? null;
 }
 
-export async function getMemberEditorData(orgId: string, memberId: string) {
+export async function getMemberEditorData(
+  orgId: string,
+  memberId: string,
+  options?: {
+    visibleGroupIds?: string[] | null;
+  },
+) {
   const member = await getMemberById(orgId, memberId);
 
   if (!member) {
     return null;
   }
 
+  if (options?.visibleGroupIds) {
+    const canAccess = await canAccessMemberInScope(
+      orgId,
+      memberId,
+      {
+        accessLevel: "scoped",
+        managedGroupIds: options.visibleGroupIds,
+      },
+    );
+
+    if (!canAccess) {
+      return null;
+    }
+  }
+
   const [customFieldAnswers, groupAssignmentsByMember, customFieldDisplayByMember, invite, linkedUser] =
     await Promise.all([
       getMemberCustomFieldAnswerMap(orgId, member.id),
-      listMemberGroupAssignments(orgId, [member.id]),
+      listMemberGroupAssignments(orgId, {
+        memberIds: [member.id],
+        visibleGroupIds: options?.visibleGroupIds,
+      }),
       listMemberCustomFieldDisplayMap(orgId, [member.id]),
       getMemberInviteRow(member.id),
       member.userId ? findUserById(member.userId) : Promise.resolve(null),
@@ -564,4 +679,39 @@ export async function getMembersByIds(orgId: string, memberIds: string[]) {
         ne(tenantMembers.status, "deleted"),
       ),
     );
+}
+
+export async function getMembersAdminPageData(editMemberId: string | null) {
+  const scope = await resolveMemberManagementScope();
+
+  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember] =
+    await Promise.all([
+      listTenantMembers(scope.organizationId, {
+        visibleGroupIds: scope.managedGroupIds,
+      }),
+      listMemberCustomFields(scope.organizationId),
+      listMembersTableCategories(scope.organizationId, {
+        visibleCategoryIds: scope.managedCategoryIds,
+      }),
+      listManageableGroupCategories(scope.organizationId, scope),
+      editMemberId
+        ? getMemberEditorData(scope.organizationId, editMemberId, {
+            visibleGroupIds: scope.managedGroupIds,
+          })
+        : Promise.resolve(null),
+    ]);
+
+  return {
+    access: {
+      level: scope.accessLevel,
+      canAssignElevatedRoles: scope.canAssignElevatedRoles,
+      roleOptions: scope.roleOptions,
+      description: scope.description,
+    },
+    members,
+    customFields,
+    memberCategories,
+    manageableGroupCategories,
+    selectedMember,
+  } satisfies MembersAdminPageData;
 }

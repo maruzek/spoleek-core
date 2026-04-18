@@ -2,6 +2,7 @@
 
 import { useForm } from "@tanstack/react-form";
 
+import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
 import {
   createMemberSchema,
   type CreateMemberValues,
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -31,12 +33,25 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import type { TenantRole } from "@/server/db/schema";
+import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 
 export type ShadowMemberFormValues = CreateMemberValues;
+
+type ValidationFieldError =
+  | { _errors?: string[] }
+  | Array<{ _errors?: string[] }>
+  | undefined;
+type MemberSheetValidationErrors = Partial<
+  Record<keyof ShadowMemberFormValues, Exclude<ValidationFieldError, undefined>>
+>;
 
 export function MemberSheet({
   open,
   isPending,
+  accessLevel,
+  roleOptions,
+  manageableGroupCategories,
   serverError,
   validationErrors,
   onOpenChange,
@@ -44,10 +59,11 @@ export function MemberSheet({
 }: {
   open: boolean;
   isPending: boolean;
+  accessLevel: "full" | "scoped";
+  roleOptions: TenantRole[];
+  manageableGroupCategories: MemberManagementGroupCategory[];
   serverError?: string;
-  validationErrors?: Partial<
-    Record<keyof ShadowMemberFormValues, { _errors?: string[] }>
-  >;
+  validationErrors?: MemberSheetValidationErrors;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: ShadowMemberFormValues) => Promise<void>;
 }) {
@@ -57,6 +73,7 @@ export function MemberSheet({
     email: "",
     role: "member",
     status: "active",
+    groupIds: [],
   };
 
   const form = useForm({
@@ -73,8 +90,15 @@ export function MemberSheet({
     },
   });
 
-  const getFieldError = (fieldName: keyof ShadowMemberFormValues): string[] =>
-    validationErrors?.[fieldName]?._errors ?? [];
+  const getFieldError = (fieldName: keyof ShadowMemberFormValues): string[] => {
+    const error = validationErrors?.[fieldName] as ValidationFieldError;
+
+    if (Array.isArray(error)) {
+      return error.flatMap((item) => item?._errors ?? []);
+    }
+
+    return error?._errors ?? [];
+  };
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
       ? errors.filter(
@@ -88,8 +112,9 @@ export function MemberSheet({
         <SheetHeader>
           <SheetTitle>Create member or shadow profile</SheetTitle>
           <SheetDescription>
-            Add a member record directly and optionally link it to an existing
-            account when the email already belongs to a signed-in user.
+            {accessLevel === "full"
+              ? "Add a member record directly and optionally link it to an existing account when the email already belongs to a signed-in user."
+              : "Add a member directly into the groups you administer so the record stays inside your scope."}
           </SheetDescription>
         </SheetHeader>
 
@@ -251,20 +276,30 @@ export function MemberSheet({
                               value as ShadowMemberFormValues["role"],
                             )
                           }
+                          disabled={roleOptions.length === 1}
                         >
                           <SelectTrigger className="h-11 w-full px-4">
                             <SelectValue placeholder="Choose role" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="member">Member</SelectItem>
-                              <SelectItem value="leader">Leader</SelectItem>
-                              <SelectItem value="org_admin">
-                                Org admin
-                              </SelectItem>
+                              {roleOptions.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {role === "org_admin"
+                                    ? "Org admin"
+                                    : role.charAt(0).toUpperCase() +
+                                      role.slice(1)}
+                                </SelectItem>
+                              ))}
                             </SelectGroup>
                           </SelectContent>
                         </Select>
+                        {roleOptions.length === 1 ? (
+                          <FieldDescription>
+                            Scoped admins can only create members with the
+                            standard member role.
+                          </FieldDescription>
+                        ) : null}
                       </FieldContent>
                     </Field>
                   )}
@@ -300,6 +335,22 @@ export function MemberSheet({
                   )}
                 </form.Field>
               </div>
+
+              <form.Field name="groupIds">
+                {(formField) => (
+                  <MemberGroupAssignmentField
+                    categories={manageableGroupCategories}
+                    groupIds={formField.state.value}
+                    description={
+                      accessLevel === "full"
+                        ? "Assign the member to any active groups now, or leave them unassigned."
+                        : "Assign at least one group you manage so this new member stays inside your delegated scope."
+                    }
+                    error={getFieldError("groupIds")[0]}
+                    onChange={(value) => formField.handleChange(value)}
+                  />
+                )}
+              </form.Field>
 
               {serverError ? (
                 <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">

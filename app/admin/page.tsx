@@ -21,9 +21,17 @@ export default async function AdminOverviewPage() {
       description:
         adminAccessLevel === "full"
           ? "Approve, link, and manage member records across the organization."
-          : "Scoped member management will appear here once special-category assignments are in place.",
-      href: capabilities.canManageMembers ? "/admin/members" : undefined,
-      cta: capabilities.canManageMembers ? "Open members" : "Waiting on scoped data model",
+          : capabilities.canManageScopedMembers
+            ? "Manage members assigned to the groups you administer in delegated categories."
+            : "Member management becomes available when one of your administered categories enables delegated member admin.",
+      href:
+        capabilities.canManageMembers || capabilities.canManageScopedMembers
+          ? "/admin/members"
+          : undefined,
+      cta:
+        capabilities.canManageMembers || capabilities.canManageScopedMembers
+          ? "Open members"
+          : "No delegated member scope yet",
     },
     {
       title: "Groups",

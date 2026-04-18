@@ -85,6 +85,13 @@
       "when": 1776470400000,
       "tag": "0011_member_table_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776500307353,
+      "tag": "0012_damp_thing",
+      "breakpoints": true
     }
   ]
 }

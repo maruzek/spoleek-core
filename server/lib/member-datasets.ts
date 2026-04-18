@@ -1,11 +1,10 @@
-import { and, asc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
 import type { MailingListScope } from "@/lib/mailing-list";
 import { db } from "@/server/db";
+import { resolveMemberManagementScope } from "@/server/lib/member-management-scope";
 import { groupMemberships, groups, tenantMembers } from "@/server/db/schema";
 import {
-  listAccessibleCategoryIds,
-  listScopedGroupIds,
   requireAdminAccess,
   requireGroupManagementAccess,
 } from "@/server/queries/access";
@@ -42,24 +41,9 @@ function toResolvedDatasetRow(row: {
   };
 }
 
-async function listScopedMembersAdminDataset(orgId: string, memberId: string) {
-  const [accessibleCategoryIds, scopedGroupIds] = await Promise.all([
-    listAccessibleCategoryIds(orgId, memberId),
-    listScopedGroupIds(orgId, memberId),
-  ]);
-
-  if (accessibleCategoryIds.length === 0 && scopedGroupIds.length === 0) {
+async function listScopedMembersAdminDataset(orgId: string, scopedGroupIds: string[]) {
+  if (scopedGroupIds.length === 0) {
     return [];
-  }
-
-  const membershipScopeFilters = [];
-
-  if (accessibleCategoryIds.length > 0) {
-    membershipScopeFilters.push(inArray(groups.categoryId, accessibleCategoryIds));
-  }
-
-  if (scopedGroupIds.length > 0) {
-    membershipScopeFilters.push(inArray(groupMemberships.groupId, scopedGroupIds));
   }
 
   const rows = await db
@@ -78,7 +62,7 @@ async function listScopedMembersAdminDataset(orgId: string, memberId: string) {
         eq(groupMemberships.orgId, orgId),
         eq(tenantMembers.orgId, orgId),
         ne(tenantMembers.status, "deleted"),
-        or(...membershipScopeFilters),
+        inArray(groupMemberships.groupId, scopedGroupIds),
       ),
     )
     .orderBy(asc(tenantMembers.createdAt), asc(groupMemberships.createdAt));
@@ -95,20 +79,17 @@ async function listScopedMembersAdminDataset(orgId: string, memberId: string) {
 }
 
 async function resolveMembersAdminDataset() {
-  const access = await requireAdminAccess({
+  await requireAdminAccess({
     capability: "canManageScopedMembers",
   });
+  const scope = await resolveMemberManagementScope();
 
-  if (access.adminAccessLevel === "full") {
-    const members = await listTenantMembers(access.organization.id);
+  if (scope.accessLevel === "full") {
+    const members = await listTenantMembers(scope.organizationId);
     return members.map((member) => toResolvedDatasetRow(member));
   }
 
-  if (!access.member) {
-    return [];
-  }
-
-  return listScopedMembersAdminDataset(access.organization.id, access.member.id);
+  return listScopedMembersAdminDataset(scope.organizationId, scope.managedGroupIds ?? []);
 }
 
 async function resolveGroupMembersDataset(groupId: string) {

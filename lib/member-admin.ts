@@ -13,6 +13,7 @@ export const adminMemberIdentitySchema = z.object({
   email: emailSchema,
   role: tenantRoleSchema.default("member"),
   status: membershipStatusSchema.default("active"),
+  groupIds: z.array(z.string().uuid()).default([]),
 });
 
 export const createMemberSchema = adminMemberIdentitySchema;

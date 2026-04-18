@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
@@ -13,9 +13,14 @@ import {
   resendMemberInviteSchema,
   updateMemberSchema,
 } from "@/lib/member-admin";
-import { orgAdminActionClient } from "@/lib/safe-action-auth";
+import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
-import { tenantMembers } from "@/server/db/schema";
+import { groupMemberships, tenantMembers } from "@/server/db/schema";
+import {
+  canAccessMemberInScope,
+  resolveMemberManagementScope,
+  validateManagedGroupSelection,
+} from "@/server/lib/member-management-scope";
 import { logMemberAuthEvent, sendMemberActivationInvite } from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
@@ -36,11 +41,148 @@ function usesEmailPasswordActivation(authStrategy: string | null) {
   return authStrategy === "email-password" || authStrategy === "email-password-google";
 }
 
-export const createShadowMemberAction = orgAdminActionClient
+function resolveAllowedRole(
+  requestedRole: "member" | "leader" | "org_admin",
+  canAssignElevatedRoles: boolean,
+) {
+  return canAssignElevatedRoles ? requestedRole : "member";
+}
+
+function validateGroupSelectionOrThrow(args: {
+  schema: typeof createMemberSchema | typeof updateMemberSchema;
+  scopeAccessLevel: "full" | "scoped";
+  manageableGroupCategories: Awaited<ReturnType<typeof resolveMemberManagementScope>>["manageableGroupCategories"];
+  groupIds: string[];
+  requireAtLeastOneGroup: boolean;
+}) {
+  const uniqueGroupIds = [...new Set(args.groupIds)];
+  const selectionError = validateManagedGroupSelection(
+    args.manageableGroupCategories,
+    uniqueGroupIds,
+  );
+
+  if (selectionError) {
+    returnValidationErrors(args.schema, {
+      groupIds: {
+        _errors: [selectionError],
+      },
+    });
+  }
+
+  if (
+    args.scopeAccessLevel === "scoped" &&
+    args.requireAtLeastOneGroup &&
+    uniqueGroupIds.length === 0
+  ) {
+    returnValidationErrors(args.schema, {
+      groupIds: {
+        _errors: ["Assign at least one managed group."],
+      },
+    });
+  }
+
+  return uniqueGroupIds;
+}
+
+async function assertMemberInScopeOrThrow(args: {
+  memberId: string;
+  orgId: string;
+  scope: Awaited<ReturnType<typeof resolveMemberManagementScope>>;
+}) {
+  const member = await getMemberById(args.orgId, args.memberId);
+
+  if (!member) {
+    throw new Error("The selected member could not be found.");
+  }
+
+  const inScope = await canAccessMemberInScope(args.orgId, args.memberId, args.scope);
+
+  if (!inScope) {
+    throw new Error("You can only manage members in your delegated scope.");
+  }
+
+  return member;
+}
+
+async function syncManageableGroupMemberships(args: {
+  memberId: string;
+  orgId: string;
+  allowedGroupIds: string[];
+  nextGroupIds: string[];
+  tx: Pick<typeof db, "select" | "insert" | "delete">;
+}) {
+  const uniqueAllowedGroupIds = [...new Set(args.allowedGroupIds)];
+  const uniqueNextGroupIds = [...new Set(args.nextGroupIds)];
+
+  if (uniqueAllowedGroupIds.length === 0) {
+    return;
+  }
+
+  const existingMemberships = await args.tx
+    .select({
+      id: groupMemberships.id,
+      groupId: groupMemberships.groupId,
+    })
+    .from(groupMemberships)
+    .where(
+      and(
+        eq(groupMemberships.orgId, args.orgId),
+        eq(groupMemberships.memberId, args.memberId),
+        inArray(groupMemberships.groupId, uniqueAllowedGroupIds),
+      ),
+    );
+
+  const existingGroupIds = new Set(existingMemberships.map((membership) => membership.groupId));
+  const nextGroupIdsSet = new Set(uniqueNextGroupIds);
+
+  const membershipIdsToDelete = existingMemberships
+    .filter((membership) => !nextGroupIdsSet.has(membership.groupId))
+    .map((membership) => membership.id);
+
+  if (membershipIdsToDelete.length > 0) {
+    await args.tx
+      .delete(groupMemberships)
+      .where(
+        and(
+          eq(groupMemberships.orgId, args.orgId),
+          inArray(groupMemberships.id, membershipIdsToDelete),
+        ),
+      );
+  }
+
+  const groupIdsToInsert = uniqueNextGroupIds.filter((groupId) => !existingGroupIds.has(groupId));
+
+  if (groupIdsToInsert.length > 0) {
+    await args.tx
+      .insert(groupMemberships)
+      .values(
+        groupIdsToInsert.map((groupId) => ({
+          id: randomUUID(),
+          orgId: args.orgId,
+          groupId,
+          memberId: args.memberId,
+          role: "member" as const,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+}
+
+export const createShadowMemberAction = authActionClient
   .metadata({ actionName: "createShadowMember" })
   .inputSchema(createMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const organization = await requireOrganization();
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    const groupIds = validateGroupSelectionOrThrow({
+      schema: createMemberSchema,
+      scopeAccessLevel: scope.accessLevel,
+      manageableGroupCategories: scope.manageableGroupCategories,
+      groupIds: parsedInput.groupIds,
+      requireAtLeastOneGroup: true,
+    });
     const email = normalizeEmail(parsedInput.email);
     const matchedUser = email ? await findUserByEmail(email) : null;
 
@@ -56,18 +198,32 @@ export const createShadowMemberAction = orgAdminActionClient
       }
     }
 
-    await db.insert(tenantMembers).values({
-      id: randomUUID(),
-      orgId: organization.id,
-      userId: matchedUser?.id ?? null,
-      email,
-      firstName: parsedInput.firstName.trim(),
-      lastName: parsedInput.lastName.trim(),
-      role: parsedInput.role,
-      status: parsedInput.status,
-      linkedAt: matchedUser ? new Date() : null,
-      acceptedTermsAt: matchedUser ? new Date() : null,
-      acceptedPrivacyAt: matchedUser ? new Date() : null,
+    const memberId = randomUUID();
+
+    await db.transaction(async (tx) => {
+      await tx.insert(tenantMembers).values({
+        id: memberId,
+        orgId: organization.id,
+        userId: matchedUser?.id ?? null,
+        email,
+        firstName: parsedInput.firstName.trim(),
+        lastName: parsedInput.lastName.trim(),
+        role: resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles),
+        status: parsedInput.status,
+        linkedAt: matchedUser ? new Date() : null,
+        acceptedTermsAt: matchedUser ? new Date() : null,
+        acceptedPrivacyAt: matchedUser ? new Date() : null,
+      });
+
+      await syncManageableGroupMemberships({
+        tx,
+        orgId: organization.id,
+        memberId,
+        allowedGroupIds: scope.manageableGroupCategories.flatMap((category) =>
+          category.groups.map((group) => group.id),
+        ),
+        nextGroupIds: groupIds,
+      });
     });
 
     return {
@@ -76,7 +232,7 @@ export const createShadowMemberAction = orgAdminActionClient
     };
   });
 
-export const approveMemberAction = orgAdminActionClient
+export const approveMemberAction = authActionClient
   .metadata({ actionName: "approveMember" })
   .inputSchema(
     z.object({
@@ -85,15 +241,24 @@ export const approveMemberAction = orgAdminActionClient
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    const organization = await requireOrganization();
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
     const nextStatus = usesEmailPasswordActivation(organization.setupAuthStrategy)
       ? "invited"
       : "active";
+    const nextRole = resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles);
 
     await db
       .update(tenantMembers)
       .set({
-        role: parsedInput.role,
+        role: nextRole,
         status: nextStatus,
         updatedAt: new Date(),
       })
@@ -110,7 +275,7 @@ export const approveMemberAction = orgAdminActionClient
       actorUserId: ctx.auth.user.id,
       eventType: "member_approved",
       metadata: {
-        role: parsedInput.role,
+        role: nextRole,
         status: nextStatus,
       },
     });
@@ -131,11 +296,20 @@ export const approveMemberAction = orgAdminActionClient
     };
   });
 
-export const resendMemberInviteAction = orgAdminActionClient
+export const resendMemberInviteAction = authActionClient
   .metadata({ actionName: "resendMemberInvite" })
   .inputSchema(resendMemberInviteSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const organization = await requireOrganization();
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
 
     if (!usesEmailPasswordActivation(organization.setupAuthStrategy)) {
       throw new Error("Member activation emails are only available for email/password sign-in.");
@@ -154,17 +328,26 @@ export const resendMemberInviteAction = orgAdminActionClient
     };
   });
 
-export const updateMemberAction = orgAdminActionClient
+export const updateMemberAction = authActionClient
   .metadata({ actionName: "updateMember" })
   .inputSchema(updateMemberSchema)
   .action(async ({ parsedInput }) => {
-    const organization = await requireOrganization();
-    const member = await getMemberById(organization.id, parsedInput.memberId);
-
-    if (!member) {
-      throw new Error("The selected member could not be found.");
-    }
-
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    const member = await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+    const groupIds = validateGroupSelectionOrThrow({
+      schema: updateMemberSchema,
+      scopeAccessLevel: scope.accessLevel,
+      manageableGroupCategories: scope.manageableGroupCategories,
+      groupIds: parsedInput.groupIds,
+      requireAtLeastOneGroup: false,
+    });
     const email = normalizeEmail(parsedInput.email);
     const matchedUser = email ? await findUserByEmail(email) : null;
 
@@ -189,15 +372,12 @@ export const updateMemberAction = orgAdminActionClient
           firstName: parsedInput.firstName.trim(),
           lastName: parsedInput.lastName.trim(),
           email,
-          role: parsedInput.role,
+          role: resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles),
           status: parsedInput.status,
           userId: member.userId ?? matchedUser?.id ?? null,
-          linkedAt:
-            member.linkedAt ??
-            (member.userId == null && matchedUser ? new Date() : null),
+          linkedAt: member.linkedAt ?? (member.userId == null && matchedUser ? new Date() : null),
           acceptedTermsAt:
-            member.acceptedTermsAt ??
-            (member.userId == null && matchedUser ? new Date() : null),
+            member.acceptedTermsAt ?? (member.userId == null && matchedUser ? new Date() : null),
           acceptedPrivacyAt:
             member.acceptedPrivacyAt ??
             (member.userId == null && matchedUser ? new Date() : null),
@@ -209,6 +389,16 @@ export const updateMemberAction = orgAdminActionClient
             eq(tenantMembers.orgId, organization.id),
           ),
         );
+
+      await syncManageableGroupMemberships({
+        tx,
+        orgId: organization.id,
+        memberId: parsedInput.memberId,
+        allowedGroupIds: scope.manageableGroupCategories.flatMap((category) =>
+          category.groups.map((group) => group.id),
+        ),
+        nextGroupIds: groupIds,
+      });
 
       const answerResult = await upsertMemberCustomFieldAnswers(tx, {
         orgId: organization.id,
@@ -233,11 +423,20 @@ export const updateMemberAction = orgAdminActionClient
     return result;
   });
 
-export const deleteMemberAction = orgAdminActionClient
+export const deleteMemberAction = authActionClient
   .metadata({ actionName: "deleteMember" })
   .inputSchema(deleteMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const organization = await requireOrganization();
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
 
     return softDeleteMembers({
       actorUserId: ctx.auth.user.id,
@@ -246,11 +445,22 @@ export const deleteMemberAction = orgAdminActionClient
     });
   });
 
-export const bulkDeleteMembersAction = orgAdminActionClient
+export const bulkDeleteMembersAction = authActionClient
   .metadata({ actionName: "bulkDeleteMembers" })
   .inputSchema(bulkDeleteMembersSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const organization = await requireOrganization();
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    for (const memberId of parsedInput.memberIds) {
+      await assertMemberInScopeOrThrow({
+        orgId: organization.id,
+        memberId,
+        scope,
+      });
+    }
 
     return softDeleteMembers({
       actorUserId: ctx.auth.user.id,

@@ -114,7 +114,10 @@ function getSidebarData(appContext: AppShellContext) {
     },
   ].filter((item) => {
     if (item.href === "/admin/members") {
-      return appContext.capabilities.canManageMembers
+      return (
+        appContext.capabilities.canManageMembers ||
+        appContext.capabilities.canManageScopedMembers
+      )
     }
 
     if (item.href === "/admin/groups") {

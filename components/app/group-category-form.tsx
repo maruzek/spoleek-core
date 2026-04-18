@@ -51,6 +51,7 @@ function toDefaultValues(
     isPinnedToNavigation: category?.isPinnedToNavigation ?? false,
     showInRegistration: category?.showInRegistration ?? false,
     showInMembersTable: category?.showInMembersTable ?? false,
+    groupAdminsManageMembers: category?.groupAdminsManageMembers ?? false,
     selectionMode: category?.selectionMode ?? "multiple",
     selectionRequired: category?.selectionRequired ?? false,
     maxSelections: category?.maxSelections ?? null,
@@ -449,6 +450,18 @@ export function GroupCategoryForm({
                 id="group-category-show-in-members-table"
                 title="Show in members table"
                 description="Add this category as its own column in the members admin table."
+                checked={formField.state.value}
+                onCheckedChange={formField.handleChange}
+              />
+            )}
+          </form.Field>
+
+          <form.Field name="groupAdminsManageMembers">
+            {(formField) => (
+              <SwitchChoiceField
+                id="group-category-group-admins-manage-members"
+                title="Scoped member admin"
+                description="Allow group admins in this category to manage members assigned to the groups they administer."
                 checked={formField.state.value}
                 onCheckedChange={formField.handleChange}
               />

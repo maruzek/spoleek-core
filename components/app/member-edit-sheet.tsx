@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { AlertTriangleIcon, InfoIcon, Trash2Icon } from "lucide-react";
 
+import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import {
   Accordion,
@@ -28,6 +29,7 @@ import { CopyButton } from "@/components/ui/code-block/copy-button";
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -77,25 +79,35 @@ import {
   updateMemberSchema,
 } from "@/lib/member-admin";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
+import type { TenantRole } from "@/server/db/schema";
+import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import type { MemberEditorMetadata } from "@/server/queries/members";
 
 type EditableMemberStatus = Exclude<TenantMember["status"], "deleted">;
 type EditableMember = Omit<TenantMember, "status"> & {
   status: EditableMemberStatus;
 };
+type ValidationFieldError =
+  | { _errors?: string[] }
+  | Array<{ _errors?: string[] }>
+  | undefined;
+type MemberEditValidationErrors = Partial<
+  Record<keyof UpdateMemberValues, Exclude<ValidationFieldError, undefined>>
+>;
 
 type MemberEditSheetProps = {
+  accessLevel: "full" | "scoped";
   canDelete: boolean;
   customFields: MemberCustomField[];
   isDeletePending: boolean;
   isPending: boolean;
+  manageableGroupCategories: MemberManagementGroupCategory[];
   member: EditableMember;
   metadata: MemberEditorMetadata;
   open: boolean;
+  roleOptions: TenantRole[];
   serverError?: string;
-  validationErrors?: Partial<
-    Record<keyof UpdateMemberValues, { _errors?: string[] }>
-  >;
+  validationErrors?: MemberEditValidationErrors;
   customFieldErrors?: Record<string, string[]>;
   customFieldAnswers: Record<string, unknown>;
   onDelete: () => Promise<void>;
@@ -105,6 +117,7 @@ type MemberEditSheetProps = {
 
 function toDefaultValues(
   member: EditableMember,
+  metadata: MemberEditorMetadata,
   customFieldAnswers: Record<string, unknown>,
 ): UpdateMemberValues {
   return {
@@ -114,6 +127,7 @@ function toDefaultValues(
     email: member.email ?? "",
     role: member.role,
     status: member.status,
+    groupIds: metadata.groupAssignments.map((assignment) => assignment.id),
     customFieldAnswers,
   };
 }
@@ -145,13 +159,16 @@ function DefinitionRow({
 }
 
 export function MemberEditSheet({
+  accessLevel,
   canDelete,
   customFields,
   isDeletePending,
   isPending,
+  manageableGroupCategories,
   member,
   metadata,
   open,
+  roleOptions,
   serverError,
   validationErrors,
   customFieldErrors,
@@ -162,7 +179,7 @@ export function MemberEditSheet({
 }: MemberEditSheetProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const form = useForm({
-    defaultValues: toDefaultValues(member, customFieldAnswers),
+    defaultValues: toDefaultValues(member, metadata, customFieldAnswers),
     onSubmit: async ({ value }) => {
       const parsed = updateMemberSchema.safeParse(value);
 
@@ -174,8 +191,15 @@ export function MemberEditSheet({
     },
   });
 
-  const getFieldError = (fieldName: keyof UpdateMemberValues): string[] =>
-    validationErrors?.[fieldName]?._errors ?? [];
+  const getFieldError = (fieldName: keyof UpdateMemberValues): string[] => {
+    const error = validationErrors?.[fieldName] as ValidationFieldError;
+
+    if (Array.isArray(error)) {
+      return error.flatMap((item) => item?._errors ?? []);
+    }
+
+    return error?._errors ?? [];
+  };
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
       ? errors.filter(
@@ -507,20 +531,29 @@ export function MemberEditSheet({
                               value as UpdateMemberValues["role"],
                             )
                           }
+                          disabled={roleOptions.length === 1}
                         >
                           <SelectTrigger className="w-full px-4">
                             <SelectValue placeholder="Choose role" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectGroup>
-                              <SelectItem value="member">Member</SelectItem>
-                              <SelectItem value="leader">Leader</SelectItem>
-                              <SelectItem value="org_admin">
-                                Org admin
-                              </SelectItem>
+                              {roleOptions.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {role === "org_admin"
+                                    ? "Org admin"
+                                    : role.charAt(0).toUpperCase() + role.slice(1)}
+                                </SelectItem>
+                              ))}
                             </SelectGroup>
                           </SelectContent>
                         </Select>
+                        {roleOptions.length === 1 ? (
+                          <FieldDescription>
+                            Scoped admins can only manage members with the
+                            standard member role.
+                          </FieldDescription>
+                        ) : null}
                       </FieldContent>
                     </Field>
                   )}
@@ -556,6 +589,22 @@ export function MemberEditSheet({
                   )}
                 </form.Field>
               </div>
+
+              <form.Field name="groupIds">
+                {(formField) => (
+                  <MemberGroupAssignmentField
+                    categories={manageableGroupCategories}
+                    groupIds={formField.state.value}
+                    description={
+                      accessLevel === "full"
+                        ? "Adjust active group assignments for this member."
+                        : "You can manage assignments inside the groups you administer. If you remove the last in-scope group, this member will disappear from your table after save."
+                    }
+                    error={getFieldError("groupIds")[0]}
+                    onChange={(value) => formField.handleChange(value)}
+                  />
+                )}
+              </form.Field>
 
               <form.Field name="email">
                 {(formField) => (

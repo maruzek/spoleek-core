@@ -307,6 +307,9 @@ export const groupCategories = pgTable(
     isPinnedToNavigation: boolean("is_pinned_to_navigation").notNull().default(false),
     showInRegistration: boolean("show_in_registration").notNull().default(false),
     showInMembersTable: boolean("show_in_members_table").notNull().default(false),
+    groupAdminsManageMembers: boolean("group_admins_manage_members")
+      .notNull()
+      .default(false),
     selectionMode: groupCategorySelectionModeEnum("selection_mode")
       .notNull()
       .default("multiple"),

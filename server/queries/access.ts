@@ -5,6 +5,7 @@ import type { AppCapabilities, AppShellContext } from "@/lib/app-shell";
 import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
+  groupCategories,
   groupMemberships,
   groups,
   tenantMembers,
@@ -44,11 +45,13 @@ export async function getCurrentMember(userId: string) {
 function getCapabilities({
   hasActiveMember,
   hasScopedGroupManagement,
+  hasScopedMemberManagement,
   memberRole,
   systemRole,
 }: {
   hasActiveMember: boolean;
   hasScopedGroupManagement: boolean;
+  hasScopedMemberManagement: boolean;
   memberRole: "member" | "leader" | "org_admin" | null;
   systemRole: "member" | "system_admin";
 }): { adminAccessLevel: AppShellContext["adminAccessLevel"]; capabilities: AppCapabilities } {
@@ -93,7 +96,7 @@ function getCapabilities({
         canManageGroups: true,
         canManageOrganization: false,
         canManageMembers: false,
-        canManageScopedMembers: true,
+        canManageScopedMembers: hasScopedMemberManagement,
         canManageEvents: true,
         canManagePayments: false,
       },
@@ -109,7 +112,7 @@ function getCapabilities({
         canManageGroups: true,
         canManageOrganization: false,
         canManageMembers: false,
-        canManageScopedMembers: true,
+        canManageScopedMembers: hasScopedMemberManagement,
         canManageEvents: false,
         canManagePayments: false,
       },
@@ -164,9 +167,14 @@ export async function getViewerAppContext(): Promise<
     hasActiveMember && member
       ? await hasScopedGroupManagementAccess(organization.id, member.id)
       : false;
+  const hasScopedMemberManagement =
+    hasActiveMember && member
+      ? await hasScopedMemberManagementAccess(organization.id, member.id)
+      : false;
   const { adminAccessLevel, capabilities } = getCapabilities({
     hasActiveMember,
     hasScopedGroupManagement,
+    hasScopedMemberManagement,
     memberRole: member?.role ?? null,
     systemRole: user?.systemRole ?? "member",
   });
@@ -226,6 +234,34 @@ async function hasScopedGroupManagementAccess(orgId: string, memberId: string) {
           eq(groupMemberships.role, "group_admin"),
           eq(categoryAdminAssignments.memberId, memberId),
         ),
+      ),
+    )
+    .limit(1);
+
+  return assignment != null;
+}
+
+async function hasScopedMemberManagementAccess(orgId: string, memberId: string) {
+  const [assignment] = await db
+    .select({ memberId: tenantMembers.id })
+    .from(tenantMembers)
+    .innerJoin(
+      groupMemberships,
+      and(
+        eq(groupMemberships.orgId, orgId),
+        eq(groupMemberships.memberId, tenantMembers.id),
+        eq(groupMemberships.role, "group_admin"),
+      ),
+    )
+    .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
+    .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))
+    .where(
+      and(
+        eq(tenantMembers.orgId, orgId),
+        eq(tenantMembers.id, memberId),
+        eq(groupCategories.groupAdminsManageMembers, true),
+        eq(groupCategories.isActive, true),
+        eq(groups.isActive, true),
       ),
     )
     .limit(1);

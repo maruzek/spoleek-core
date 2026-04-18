@@ -27,6 +27,7 @@ type GroupCategoryRow = {
   isPinnedToNavigation: boolean;
   showInRegistration: boolean;
   showInMembersTable: boolean;
+  groupAdminsManageMembers: boolean;
   selectionMode: "single" | "multiple";
   selectionRequired: boolean;
   maxSelections: number | null;
@@ -115,6 +116,9 @@ export function GroupCategoriesAdmin({
             {row.original.selectionRequired ? <Badge variant="outline">Required</Badge> : null}
             {row.original.showInMembersTable ? (
               <Badge variant="outline">Members table</Badge>
+            ) : null}
+            {row.original.groupAdminsManageMembers ? (
+              <Badge variant="outline">Scoped member admin</Badge>
             ) : null}
             {row.original.maxSelections ? (
               <Badge variant="outline">Max {row.original.maxSelections}</Badge>

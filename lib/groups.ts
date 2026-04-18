@@ -71,6 +71,7 @@ export const groupCategorySchema = z
     isPinnedToNavigation: z.boolean().default(false),
     showInRegistration: z.boolean().default(false),
     showInMembersTable: z.boolean().default(false),
+    groupAdminsManageMembers: z.boolean().default(false),
     selectionMode: z.enum(["single", "multiple"]).default("multiple"),
     selectionRequired: z.boolean().default(false),
     maxSelections: z.union([z.number().int().min(1), z.null()]).default(null),

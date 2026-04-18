@@ -49,11 +49,13 @@ import type {
   TenantMember,
 } from "@/server/db/schema";
 import type {
+  MemberAdminAccess,
   MemberEditorMetadata,
   MemberGroupAssignment,
   MemberInviteState,
   MembersTableCategory,
 } from "@/server/queries/members";
+import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import { MemberEditSheet } from "./member-edit-sheet";
 import { MailingListAction } from "./mailing-list-action";
 import { MemberSheet } from "./member-sheet";
@@ -163,14 +165,18 @@ function CategoryCell({
 }
 
 export function MemberAdmin({
+  access,
   members,
   customFields,
   memberCategories,
+  manageableGroupCategories,
   selectedMember,
 }: {
+  access: MemberAdminAccess;
   members: MemberRow[];
   customFields: MemberCustomField[];
   memberCategories: MembersTableCategory[];
+  manageableGroupCategories: MemberManagementGroupCategory[];
   selectedMember: MemberEditorData | null;
 }) {
   const pathname = usePathname();
@@ -582,7 +588,7 @@ export function MemberAdmin({
         />
         <Button onClick={() => setSheetOpen(true)}>
           <PlusIcon data-icon="inline-start" />
-          New Member
+          {access.level === "full" ? "New member" : "New scoped member"}
         </Button>
         {selectedCount > 0 ? (
           <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
@@ -648,7 +654,11 @@ export function MemberAdmin({
         searchKey="member"
         searchPlaceholder="Search members..."
         emptyStateTitle="No members found"
-        emptyStateDescription="Create members or invite them via the portal."
+        emptyStateDescription={
+          access.level === "full"
+            ? "Create members or invite them via the portal."
+            : "Create members directly into the groups you administer."
+        }
         toolbarActions={renderToolbarActions}
       />
 
@@ -656,6 +666,9 @@ export function MemberAdmin({
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         isPending={createAction.isPending}
+        accessLevel={access.level}
+        roleOptions={access.roleOptions}
+        manageableGroupCategories={manageableGroupCategories}
         serverError={createAction.result.serverError}
         validationErrors={createAction.result.validationErrors}
         onSubmit={async (value) => {
@@ -675,8 +688,11 @@ export function MemberAdmin({
           member={selectedMember.member}
           metadata={selectedMember.metadata}
           canDelete={selectedMember.member.role !== "org_admin"}
+          accessLevel={access.level}
           customFields={customFields}
           customFieldAnswers={selectedMember.customFieldAnswers}
+          manageableGroupCategories={manageableGroupCategories}
+          roleOptions={access.roleOptions}
           isDeletePending={deleteAction.isPending}
           isPending={updateAction.isPending}
           serverError={updateAction.result.serverError}
