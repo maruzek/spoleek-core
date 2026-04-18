@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useForm } from "@tanstack/react-form";
-import { AlertTriangleIcon, InfoIcon, Trash2Icon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  BadgeCheckIcon,
+  FingerprintIcon,
+  InfoIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
@@ -25,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/code-block/copy-button";
 import {
   Field,
@@ -301,6 +308,34 @@ export function MemberEditSheet({
           }}
         >
           <div className="flex-1 overflow-y-auto px-4 pb-4">
+            {member.workspaceUserEmail ? (
+              <Card className="mb-6 mt-1 overflow-hidden border-primary/20 bg-primary/5">
+                <CardHeader className="flex flex-row items-center gap-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary/70">
+                      Workspace Identity <BadgeCheckIcon className="size-4" />
+                    </div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <span className="truncate">
+                        {member.workspaceUserEmail}
+                      </span>
+                      <CopyButton
+                        content={member.workspaceUserEmail}
+                        className="size-6 text-muted-foreground hover:text-foreground"
+                        aria-label="Copy workspace email"
+                      />
+                    </CardTitle>
+                    {member.workspaceProvisionedAt ? (
+                      <p className="text-xs text-muted-foreground">
+                        Provisioned{" "}
+                        {formatDateTime(member.workspaceProvisionedAt)}
+                      </p>
+                    ) : null}
+                  </div>
+                </CardHeader>
+              </Card>
+            ) : null}
+
             <div className="mb-6 rounded-2xl border bg-muted/20 px-4 py-3">
               <Accordion type="multiple" className="gap-2">
                 <AccordionItem value="known-metadata" className="border-none">
@@ -542,7 +577,8 @@ export function MemberEditSheet({
                                 <SelectItem key={role} value={role}>
                                   {role === "org_admin"
                                     ? "Org admin"
-                                    : role.charAt(0).toUpperCase() + role.slice(1)}
+                                    : role.charAt(0).toUpperCase() +
+                                      role.slice(1)}
                                 </SelectItem>
                               ))}
                             </SelectGroup>
