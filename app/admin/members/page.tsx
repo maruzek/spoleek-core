@@ -46,6 +46,7 @@ export default async function AdminMembersPage({
               }
             : null
         }
+        workspace={data.workspace}
       />
     </AppPage>
   );

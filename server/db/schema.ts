@@ -56,6 +56,8 @@ export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
   "invite_completed",
   "activation_attempt_blocked",
   "password_reset_sent",
+  "workspace_provisioned",
+  "workspace_provision_failed",
 ]);
 
 export const emailDirectionEnum = pgEnum("email_direction", [
@@ -65,6 +67,7 @@ export const emailDirectionEnum = pgEnum("email_direction", [
 
 export const emailKindEnum = pgEnum("email_kind", [
   "member_activation_invite",
+  "workspace_welcome",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -226,6 +229,14 @@ export const organizations = pgTable(
     setupAuthStrategy: text("setup_auth_strategy"),
     workspaceDomain: text("workspace_domain"),
     workspaceSyncEnabled: boolean("workspace_sync_enabled").notNull().default(false),
+    workspaceModuleEnabled: boolean("workspace_module_enabled").notNull().default(false),
+    workspaceEmailTemplate: text("workspace_email_template")
+      .notNull()
+      .default("{first}.{last}"),
+    workspaceConnectedAt: timestamp("workspace_connected_at", {
+      withTimezone: true,
+    }),
+    workspaceAdminEmail: text("workspace_admin_email"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -279,6 +290,10 @@ export const tenantMembers = pgTable(
     acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
     acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
     linkedAt: timestamp("linked_at", { withTimezone: true }),
+    workspaceUserEmail: text("workspace_user_email"),
+    workspaceProvisionedAt: timestamp("workspace_provisioned_at", {
+      withTimezone: true,
+    }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedByUserId: text("deleted_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -553,6 +568,32 @@ export const memberAuthEvents = pgTable(
   }),
 );
 
+export const workspaceConnections = pgTable(
+  "workspace_connections",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    refreshTokenEncrypted: text("refresh_token_encrypted").notNull(),
+    accessToken: text("access_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+      withTimezone: true,
+    }),
+    scope: text("scope"),
+    grantedByUserId: text("granted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    grantedByEmail: text("granted_by_email"),
+    grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => ({
+    orgIdx: uniqueIndex("workspace_connections_org_idx").on(table.orgId),
+  }),
+);
+
 export const emailActivities = pgTable(
   "email_activities",
   {
@@ -653,6 +694,7 @@ export const schema = {
   memberCustomFieldValues,
   memberInvites,
   memberAuthEvents,
+  workspaceConnections,
   emailActivities,
   emailActivityEvents,
 };
@@ -687,5 +729,6 @@ export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;
 export type MemberInvite = typeof memberInvites.$inferSelect;
 export type MemberAuthEvent = typeof memberAuthEvents.$inferSelect;
+export type WorkspaceConnection = typeof workspaceConnections.$inferSelect;
 export type EmailActivity = typeof emailActivities.$inferSelect;
 export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;

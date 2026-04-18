@@ -10,7 +10,7 @@ import {
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 
 function getResendAvailability(params: {
-  kind: "member_activation_invite";
+  kind: "member_activation_invite" | "workspace_welcome";
   memberId: string | null;
   memberStatus: string | null;
   memberUserId: string | null;

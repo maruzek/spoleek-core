@@ -52,7 +52,9 @@ export const auth = betterAuth({
           );
 
           if (!emailContent.email) {
-            throw new Error("Invite email could not be sent because the member has no email.");
+            throw new Error(
+              "Invite email could not be sent because the member has no email.",
+            );
           }
 
           const { data, error } = await resend.emails.send(
@@ -114,7 +116,10 @@ export const auth = betterAuth({
             .catch(() => null);
           await inviteTools.markMemberInviteFailed({
             memberId: activationTarget.memberId,
-            error: error instanceof Error ? error.message : "Failed to send member invite email.",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to send member invite email.",
           });
           if (emailContent?.email) {
             await emailActivityTools.recordMemberInviteEmailFailed({
@@ -158,6 +163,7 @@ export const auth = betterAuth({
         google: {
           clientId: env.GOOGLE_CLIENT_ID!,
           clientSecret: env.GOOGLE_CLIENT_SECRET!,
+          prompt: "select_account",
         },
       }
     : {},

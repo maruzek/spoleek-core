@@ -58,7 +58,17 @@ import type {
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import { MemberEditSheet } from "./member-edit-sheet";
 import { MailingListAction } from "./mailing-list-action";
+import {
+  MemberApproveWorkspaceDialog,
+  type WorkspaceApprovalMember,
+} from "./member-approve-workspace-dialog";
 import { MemberSheet } from "./member-sheet";
+
+type WorkspaceModuleProp = {
+  enabled: boolean;
+  connected: boolean;
+  domain: string | null;
+};
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
 
@@ -171,6 +181,7 @@ export function MemberAdmin({
   memberCategories,
   manageableGroupCategories,
   selectedMember,
+  workspace,
 }: {
   access: MemberAdminAccess;
   members: MemberRow[];
@@ -178,12 +189,18 @@ export function MemberAdmin({
   memberCategories: MembersTableCategory[];
   manageableGroupCategories: MemberManagementGroupCategory[];
   selectedMember: MemberEditorData | null;
+  workspace: WorkspaceModuleProp;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [workspaceApproveMember, setWorkspaceApproveMember] =
+    useState<WorkspaceApprovalMember | null>(null);
+  const [workspaceApproveError, setWorkspaceApproveError] = useState<string | null>(null);
+  const workspaceReady =
+    workspace.enabled && workspace.connected && Boolean(workspace.domain);
 
   const copyEmail = useCallback(async (email: string) => {
     const copied = await copyToClipboard(email);
@@ -218,19 +235,41 @@ export function MemberAdmin({
   });
   const approveAction = useAction(approveMemberAction, {
     onSuccess({ data }) {
-      if (data?.inviteReason === "cooldown") {
+      if (!data?.success) {
+        const error = data?.workspace?.error;
+        if (error) {
+          setWorkspaceApproveError(error);
+          toast.error(error);
+        }
+        return;
+      }
+      if ("workspace" in data && data.workspace) {
+        setWorkspaceApproveMember(null);
+        setWorkspaceApproveError(null);
+        toast.success(
+          `Member approved. Workspace account created for ${data.workspace.primaryEmail}.`,
+        );
+        router.refresh();
+        return;
+      }
+      if (data.inviteReason === "cooldown") {
         toast.error("The invite was not resent because the resend cooldown is still active.");
-      } else if (data?.inviteReason === "already-completed") {
+      } else if (data.inviteReason === "already-completed") {
         toast.success("Member approved. This account was already activated.");
-      } else if (data?.inviteReason === "suppressed") {
+      } else if (data.inviteReason === "suppressed") {
         toast.error("Member approved, but the invite email is blocked due to a bounce, complaint, or suppression.");
-      } else if (data?.inviteSent) {
+      } else if (data.inviteSent) {
         toast.success("Member approved and activation email sent.");
       } else {
         toast.success("Member approved.");
       }
 
       router.refresh();
+    },
+    onError({ error }) {
+      if (error.serverError) {
+        setWorkspaceApproveError(error.serverError);
+      }
     },
   });
   const updateAction = useAction(updateMemberAction, {
@@ -514,12 +553,23 @@ export function MemberAdmin({
                     type="button"
                     size="sm"
                     variant="default"
-                    onClick={() =>
+                    onClick={() => {
+                      if (workspaceReady) {
+                        setWorkspaceApproveError(null);
+                        setWorkspaceApproveMember({
+                          id: member.id,
+                          firstName: member.firstName,
+                          lastName: member.lastName,
+                          email: member.email,
+                          role: member.role,
+                        });
+                        return;
+                      }
                       approveAction.execute({
                         memberId: member.id,
                         role: member.role,
-                      })
-                    }
+                      });
+                    }}
                     disabled={approveAction.isPending}
                   >
                     Approve
@@ -572,6 +622,7 @@ export function MemberAdmin({
       memberCategories,
       resendInviteAction,
       updateSearchParam,
+      workspaceReady,
     ],
   );
 
@@ -673,6 +724,29 @@ export function MemberAdmin({
         validationErrors={createAction.result.validationErrors}
         onSubmit={async (value) => {
           await createAction.executeAsync(value);
+        }}
+      />
+
+      <MemberApproveWorkspaceDialog
+        open={Boolean(workspaceApproveMember)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWorkspaceApproveMember(null);
+            setWorkspaceApproveError(null);
+          }
+        }}
+        member={workspaceApproveMember}
+        workspaceDomain={workspace.domain ?? ""}
+        isPending={approveAction.isPending}
+        submitError={workspaceApproveError}
+        onConfirm={async ({ primaryEmail }) => {
+          if (!workspaceApproveMember) return;
+          setWorkspaceApproveError(null);
+          await approveAction.executeAsync({
+            memberId: workspaceApproveMember.id,
+            role: workspaceApproveMember.role,
+            workspace: { primaryEmail },
+          });
         }}
       />
 

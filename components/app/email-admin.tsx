@@ -51,7 +51,7 @@ import { cn } from "@/lib/utils";
 type EmailActivityRow = {
   id: string;
   direction: "outbound" | "inbound";
-  kind: "member_activation_invite";
+  kind: "member_activation_invite" | "workspace_welcome";
   currentStatus:
     | "sent"
     | "delivered"
@@ -96,7 +96,7 @@ type EmailActivityRow = {
 type EmailActivityDetail = {
   id: string;
   direction: "outbound" | "inbound";
-  kind: "member_activation_invite";
+  kind: "member_activation_invite" | "workspace_welcome";
   currentStatus:
     | "sent"
     | "delivered"
@@ -175,6 +175,10 @@ function getStatusVariant(
 function getKindLabel(kind: EmailActivityRow["kind"] | EmailActivityDetail["kind"]) {
   if (kind === "member_activation_invite") {
     return "Member activation invite";
+  }
+
+  if (kind === "workspace_welcome") {
+    return "Workspace welcome";
   }
 
   return String(kind).replaceAll("_", " ");

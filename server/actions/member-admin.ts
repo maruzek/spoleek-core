@@ -24,6 +24,16 @@ import {
 import { logMemberAuthEvent, sendMemberActivationInvite } from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
+import {
+  WorkspaceApiError,
+  WorkspaceNotConnectedError,
+  checkWorkspaceUserExists,
+} from "@/server/lib/workspace/client";
+import {
+  DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+  buildWorkspaceEmail,
+} from "@/server/lib/workspace/email-template";
+import { provisionWorkspaceAccountForMember } from "@/server/lib/workspace/provision";
 import { requireOrganization } from "@/server/queries/access";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import {
@@ -31,6 +41,18 @@ import {
   getMemberById,
   getMemberByUserId,
 } from "@/server/queries/members";
+
+function isWorkspaceModuleReady(organization: {
+  workspaceModuleEnabled: boolean;
+  workspaceConnectedAt: Date | null;
+  workspaceDomain: string | null;
+}) {
+  return (
+    organization.workspaceModuleEnabled &&
+    organization.workspaceConnectedAt !== null &&
+    Boolean(organization.workspaceDomain)
+  );
+}
 
 function normalizeEmail(email: string) {
   const normalized = email.trim().toLowerCase();
@@ -238,6 +260,11 @@ export const approveMemberAction = authActionClient
     z.object({
       memberId: z.string().uuid(),
       role: z.enum(["member", "leader", "org_admin"]).default("member"),
+      workspace: z
+        .object({
+          primaryEmail: z.string().email(),
+        })
+        .optional(),
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
@@ -245,15 +272,83 @@ export const approveMemberAction = authActionClient
       requireOrganization(),
       resolveMemberManagementScope(),
     ]);
-    await assertMemberInScopeOrThrow({
+    const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,
       memberId: parsedInput.memberId,
       scope,
     });
+    const nextRole = resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles);
+    const workspaceReady = isWorkspaceModuleReady(organization);
+
+    if (workspaceReady) {
+      if (!parsedInput.workspace?.primaryEmail) {
+        throw new Error("A Workspace email is required to approve this member.");
+      }
+
+      await db
+        .update(tenantMembers)
+        .set({ role: nextRole, updatedAt: new Date() })
+        .where(
+          and(
+            eq(tenantMembers.id, parsedInput.memberId),
+            eq(tenantMembers.orgId, organization.id),
+          ),
+        );
+
+      const provision = await provisionWorkspaceAccountForMember({
+        orgId: organization.id,
+        memberId: parsedInput.memberId,
+        firstName: member.firstName ?? "",
+        lastName: member.lastName ?? "",
+        primaryEmail: parsedInput.workspace.primaryEmail.trim().toLowerCase(),
+        toEmail: (member.email ?? "").trim().toLowerCase(),
+        actorUserId: ctx.auth.user.id,
+      });
+
+      if (!provision.success) {
+        return {
+          success: false as const,
+          workspace: { error: provision.error, reason: provision.reason ?? null },
+        };
+      }
+
+      await db
+        .update(tenantMembers)
+        .set({
+          status: "active",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tenantMembers.id, parsedInput.memberId),
+            eq(tenantMembers.orgId, organization.id),
+          ),
+        );
+
+      await logMemberAuthEvent({
+        orgId: organization.id,
+        memberId: parsedInput.memberId,
+        actorUserId: ctx.auth.user.id,
+        eventType: "member_approved",
+        metadata: {
+          role: nextRole,
+          status: "active",
+          via: "workspace",
+          workspaceUserEmail: provision.primaryEmail,
+        },
+      });
+
+      return {
+        success: true as const,
+        workspace: {
+          primaryEmail: provision.primaryEmail,
+        },
+      };
+    }
+
     const nextStatus = usesEmailPasswordActivation(organization.setupAuthStrategy)
       ? "invited"
       : "active";
-    const nextRole = resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles);
 
     await db
       .update(tenantMembers)
@@ -290,10 +385,96 @@ export const approveMemberAction = authActionClient
     }
 
     return {
-      success: true,
+      success: true as const,
       inviteSent: inviteResult?.sent ?? false,
       inviteReason: inviteResult?.reason ?? null,
     };
+  });
+
+export const checkWorkspaceEmailAvailabilityAction = authActionClient
+  .metadata({ actionName: "checkWorkspaceEmailAvailability" })
+  .inputSchema(
+    z.object({
+      memberId: z.string().uuid(),
+      primaryEmail: z.string().email(),
+    }),
+  )
+  .action(async ({ parsedInput }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+
+    if (!isWorkspaceModuleReady(organization)) {
+      return {
+        status: "module_off" as const,
+      };
+    }
+
+    try {
+      const result = await checkWorkspaceUserExists(
+        organization.id,
+        parsedInput.primaryEmail.trim().toLowerCase(),
+      );
+      return result.exists
+        ? {
+            status: "taken" as const,
+            existingFullName: result.fullName ?? null,
+          }
+        : { status: "available" as const };
+    } catch (error) {
+      if (error instanceof WorkspaceNotConnectedError) {
+        return { status: "not_connected" as const };
+      }
+      if (error instanceof WorkspaceApiError) {
+        return {
+          status: "error" as const,
+          message: error.message,
+          reason: error.reason ?? null,
+        };
+      }
+      return {
+        status: "error" as const,
+        message:
+          error instanceof Error ? error.message : "Failed to reach Google Workspace.",
+        reason: null,
+      };
+    }
+  });
+
+export const suggestWorkspaceEmailAction = authActionClient
+  .metadata({ actionName: "suggestWorkspaceEmail" })
+  .inputSchema(
+    z.object({ memberId: z.string().uuid() }),
+  )
+  .action(async ({ parsedInput }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    const member = await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+
+    if (!isWorkspaceModuleReady(organization) || !organization.workspaceDomain) {
+      return { suggestion: null as string | null };
+    }
+
+    const suggestion = buildWorkspaceEmail({
+      template: organization.workspaceEmailTemplate || DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+      firstName: member.firstName ?? "",
+      lastName: member.lastName ?? "",
+      domain: organization.workspaceDomain,
+    });
+
+    return { suggestion };
   });
 
 export const resendMemberInviteAction = authActionClient

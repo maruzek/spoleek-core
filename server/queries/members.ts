@@ -12,6 +12,7 @@ import {
   memberCustomFields,
   memberCustomFieldValues,
   memberInvites,
+  organizations as organizationsTable,
   tenantMembers,
   users,
   type MemberInviteDeliveryStatus,
@@ -86,6 +87,13 @@ export type MemberAdminAccess = {
   description: string;
 };
 
+export type WorkspaceModuleState = {
+  enabled: boolean;
+  connected: boolean;
+  domain: string | null;
+  emailTemplate: string;
+};
+
 export type MembersAdminPageData = {
   access: MemberAdminAccess;
   members: Awaited<ReturnType<typeof listTenantMembers>>;
@@ -93,6 +101,7 @@ export type MembersAdminPageData = {
   memberCategories: MembersTableCategory[];
   manageableGroupCategories: MemberManagementGroupCategory[];
   selectedMember: MemberEditorData | null;
+  workspace: WorkspaceModuleState;
 };
 
 type MemberInviteRow = {
@@ -684,7 +693,7 @@ export async function getMembersByIds(orgId: string, memberIds: string[]) {
 export async function getMembersAdminPageData(editMemberId: string | null) {
   const scope = await resolveMemberManagementScope();
 
-  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember] =
+  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, organization] =
     await Promise.all([
       listTenantMembers(scope.organizationId, {
         visibleGroupIds: scope.managedGroupIds,
@@ -699,6 +708,17 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
             visibleGroupIds: scope.managedGroupIds,
           })
         : Promise.resolve(null),
+      db
+        .select({
+          workspaceModuleEnabled: organizationsTable.workspaceModuleEnabled,
+          workspaceConnectedAt: organizationsTable.workspaceConnectedAt,
+          workspaceDomain: organizationsTable.workspaceDomain,
+          workspaceEmailTemplate: organizationsTable.workspaceEmailTemplate,
+        })
+        .from(organizationsTable)
+        .where(eq(organizationsTable.id, scope.organizationId))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
     ]);
 
   return {
@@ -713,5 +733,12 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
     memberCategories,
     manageableGroupCategories,
     selectedMember,
+    workspace: {
+      enabled: Boolean(organization?.workspaceModuleEnabled),
+      connected: Boolean(organization?.workspaceConnectedAt),
+      domain: organization?.workspaceDomain ?? null,
+      emailTemplate:
+        organization?.workspaceEmailTemplate ?? "{first}.{last}",
+    },
   } satisfies MembersAdminPageData;
 }
