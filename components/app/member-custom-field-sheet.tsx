@@ -8,6 +8,7 @@ import {
   getFieldOptionList,
   memberCustomFieldSchema,
   memberCustomFieldStageOptions,
+  memberCustomFieldDiscoveryModeOptions,
   memberCustomFieldTypeOptions,
   stringifyFieldOptions,
   type MemberCustomFieldFormValues,
@@ -52,6 +53,7 @@ function toFormValues(
     description: field?.description ?? "",
     type: field?.type ?? "text",
     stage: field?.stage ?? "optional",
+    discoveryMode: field?.discoveryMode ?? "available",
     required: field?.required ?? false,
     isActive: field?.isActive ?? true,
     sortOrder: field?.sortOrder ?? 0,
@@ -365,6 +367,43 @@ function InnerForm({
                   )}
                 </form.Field>
               </div>
+
+              <form.Field name="discoveryMode">
+                {(formField) => (
+                  <Field>
+                    <FieldLabel>Table discovery</FieldLabel>
+                    <FieldContent>
+                      <Select
+                        value={formField.state.value}
+                        onValueChange={(value) =>
+                          formField.handleChange(
+                            value as MemberCustomField["discoveryMode"],
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-11 w-full px-4">
+                          <SelectValue placeholder="Choose table discovery mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {memberCustomFieldDiscoveryModeOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        Determines how this field behaves in the main members table.
+                      </FieldDescription>
+                    </FieldContent>
+                  </Field>
+                )}
+              </form.Field>
 
               <div className="flex flex-col gap-5">
                 <form.Field name="required">

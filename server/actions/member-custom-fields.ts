@@ -43,6 +43,7 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       description: parsedInput.description?.trim() || null,
       type: parsedInput.type,
       stage: parsedInput.stage,
+      discoveryMode: parsedInput.discoveryMode,
       required: parsedInput.required,
       isActive: parsedInput.isActive,
       sortOrder: parsedInput.sortOrder,

@@ -109,6 +109,11 @@ export const memberCustomFieldStageEnum = pgEnum("member_custom_field_stage", [
   "optional",
 ]);
 
+export const memberCustomFieldDiscoveryModeEnum = pgEnum(
+  "member_custom_field_discovery_mode",
+  ["visible", "available", "hidden"]
+);
+
 export const groupCategorySelectionModeEnum = pgEnum(
   "group_category_selection_mode",
   ["single", "multiple"],
@@ -444,6 +449,7 @@ export const memberCustomFields = pgTable(
     description: text("description"),
     type: memberCustomFieldTypeEnum("type").notNull(),
     stage: memberCustomFieldStageEnum("stage").notNull().default("optional"),
+    discoveryMode: memberCustomFieldDiscoveryModeEnum("discovery_mode").notNull().default("available"),
     required: boolean("required").notNull().default(false),
     options: jsonb("options").$type<string[]>().notNull().default([]),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -714,6 +720,7 @@ export type EmailActivityEventType =
   typeof emailActivityEventTypeEnum.enumValues[number];
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
+export type MemberCustomFieldDiscoveryMode = typeof memberCustomFieldDiscoveryModeEnum.enumValues[number];
 export type GroupCategorySelectionMode =
   typeof groupCategorySelectionModeEnum.enumValues[number];
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];

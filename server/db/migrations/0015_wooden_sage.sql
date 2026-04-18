@@ -1,0 +1,2 @@
+CREATE TYPE "public"."member_custom_field_discovery_mode" AS ENUM('visible', 'available', 'hidden');--> statement-breakpoint
+ALTER TABLE "member_custom_fields" ADD COLUMN "discovery_mode" "member_custom_field_discovery_mode" DEFAULT 'available' NOT NULL;

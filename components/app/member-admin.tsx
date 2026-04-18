@@ -44,10 +44,7 @@ import {
   resendMemberInviteAction,
   updateMemberAction,
 } from "@/server/actions/member-admin";
-import type {
-  MemberCustomField,
-  TenantMember,
-} from "@/server/db/schema";
+import type { MemberCustomField, TenantMember } from "@/server/db/schema";
 import type {
   MemberAdminAccess,
   MemberEditorMetadata,
@@ -199,7 +196,9 @@ export function MemberAdmin({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [workspaceApproveMember, setWorkspaceApproveMember] =
     useState<WorkspaceApprovalMember | null>(null);
-  const [workspaceApproveError, setWorkspaceApproveError] = useState<string | null>(null);
+  const [workspaceApproveError, setWorkspaceApproveError] = useState<
+    string | null
+  >(null);
   const workspaceReady =
     workspace.enabled && workspace.connected && Boolean(workspace.domain);
 
@@ -214,19 +213,22 @@ export function MemberAdmin({
     toast.error("Could not copy personal email.");
   }, []);
 
-  const updateSearchParam = useCallback((memberId: string | null) => {
-    const params = new URLSearchParams(searchParams.toString());
+  const updateSearchParam = useCallback(
+    (memberId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
 
-    if (memberId) {
-      params.set("edit", memberId);
-    } else {
-      params.delete("edit");
-    }
+      if (memberId) {
+        params.set("edit", memberId);
+      } else {
+        params.delete("edit");
+      }
 
-    const nextUrl =
-      params.toString().length > 0 ? `${pathname}?${params}` : pathname;
-    router.replace(nextUrl, { scroll: false });
-  }, [pathname, router, searchParams]);
+      const nextUrl =
+        params.toString().length > 0 ? `${pathname}?${params}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const createAction = useAction(createShadowMemberAction, {
     onSuccess() {
@@ -254,11 +256,15 @@ export function MemberAdmin({
         return;
       }
       if (data.inviteReason === "cooldown") {
-        toast.error("The invite was not resent because the resend cooldown is still active.");
+        toast.error(
+          "The invite was not resent because the resend cooldown is still active.",
+        );
       } else if (data.inviteReason === "already-completed") {
         toast.success("Member approved. This account was already activated.");
       } else if (data.inviteReason === "suppressed") {
-        toast.error("Member approved, but the invite email is blocked due to a bounce, complaint, or suppression.");
+        toast.error(
+          "Member approved, but the invite email is blocked due to a bounce, complaint, or suppression.",
+        );
       } else if (data.inviteSent) {
         toast.success("Member approved and activation email sent.");
       } else {
@@ -367,167 +373,172 @@ export function MemberAdmin({
     },
   });
 
-  const columns = useMemo(
-    () => {
-      const baseColumns = [
-        columnHelper.display({
-          id: "select",
-          meta: { label: "Select" },
-          header: ({ table }) => (
-            <Checkbox
-              checked={
-                table.getIsAllPageRowsSelected() ||
-                (table.getIsSomePageRowsSelected() && "indeterminate")
-              }
-              onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-              aria-label="Select all"
-            />
-          ),
-          cell: ({ row }) => (
-            <Checkbox
-              checked={row.getIsSelected()}
-              onCheckedChange={(value) => row.toggleSelected(!!value)}
-              aria-label="Select row"
-            />
-          ),
-          enableSorting: false,
-          enableHiding: false,
-        }),
-        columnHelper.accessor(
-          (member) =>
-            [member.firstName, member.lastName, member.email ?? ""]
-              .filter(Boolean)
-              .join(" "),
-          {
-            id: "member",
-            meta: { label: "Member" },
-            header: "Member",
-            cell: ({ row }) => {
-              const member = row.original;
-
-              return (
-                <button
-                  type="button"
-                  onClick={() => updateSearchParam(member.id)}
-                  className="flex min-w-0 max-w-[18rem] flex-col gap-1 rounded-md text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
-                >
-                  <span className="truncate font-medium text-foreground underline-offset-4 hover:underline">
-                    {getMemberDisplayName(member)}
-                  </span>
-                  <span className="truncate text-sm text-muted-foreground">
-                    {member.email || "No email yet"}
-                  </span>
-                </button>
-              );
-            },
-          },
+  const columns = useMemo(() => {
+    const baseColumns = [
+      columnHelper.display({
+        id: "select",
+        meta: { label: "Select" },
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
         ),
-        columnHelper.accessor("status", {
-          meta: { label: "Status" },
-          header: "Status",
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      }),
+      columnHelper.accessor(
+        (member) =>
+          [member.firstName, member.lastName, member.email ?? ""]
+            .filter(Boolean)
+            .join(" "),
+        {
+          id: "member",
+          meta: { label: "Member" },
+          header: "Member",
           cell: ({ row }) => {
             const member = row.original;
-            const inviteIssue = getInviteIssue(member);
 
             return (
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <Status variant={getStatusVariant(member.status)}>
-                  <StatusIndicator />
-                  <StatusLabel className="capitalize">
-                    {member.status.replace("_", " ")}
-                  </StatusLabel>
-                </Status>
-                {inviteIssue ? (
-                  <Badge variant={inviteIssue.variant} className="w-fit">
-                    {inviteIssue.label}
-                  </Badge>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                onClick={() => updateSearchParam(member.id)}
+                className="flex min-w-0 max-w-[18rem] flex-col gap-1 rounded-md text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
+                <span className="truncate font-medium text-foreground underline-offset-4 hover:underline">
+                  {getMemberDisplayName(member)}
+                </span>
+                {/* <span className="truncate text-sm text-muted-foreground">
+                    {member.email || "No email yet"}
+                  </span> */}
+              </button>
             );
           },
-        }),
-        columnHelper.accessor("role", {
-          meta: { label: "Role" },
-          header: "Role",
-          cell: (info) => (
-            <span className="text-sm capitalize text-muted-foreground">
-              {info.getValue().replace("_", " ")}
-            </span>
-          ),
-        }),
-        columnHelper.display({
-          id: "personal-email",
-          meta: { label: "Personal Email" },
-          header: "Personal Email",
-          cell: ({ row }) => {
-            const email = row.original.email;
+        },
+      ),
+      columnHelper.accessor("status", {
+        meta: { label: "Status" },
+        header: "Status",
+        cell: ({ row }) => {
+          const member = row.original;
+          const inviteIssue = getInviteIssue(member);
 
-            if (!email) {
+          return (
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <Status variant={getStatusVariant(member.status)}>
+                <StatusIndicator />
+                <StatusLabel className="capitalize">
+                  {member.status.replace("_", " ")}
+                </StatusLabel>
+              </Status>
+              {inviteIssue ? (
+                <Badge variant={inviteIssue.variant} className="w-fit">
+                  {inviteIssue.label}
+                </Badge>
+              ) : null}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor("role", {
+        meta: { label: "Role" },
+        header: "Role",
+        cell: (info) => (
+          <span className="text-sm capitalize text-muted-foreground">
+            {info.getValue().replace("_", " ")}
+          </span>
+        ),
+      }),
+      columnHelper.display({
+        id: "personal-email",
+        meta: { label: "Personal Email" },
+        header: "Personal Email",
+        cell: ({ row }) => {
+          const email = row.original.email;
+
+          if (!email) {
+            return <span className="text-sm text-muted-foreground">—</span>;
+          }
+
+          return (
+            <button
+              type="button"
+              onClick={() => void copyEmail(email)}
+              className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+              aria-label={`Copy personal email ${email}`}
+              title="Copy personal email"
+            >
+              {email}
+            </button>
+          );
+        },
+      }),
+    ];
+
+    if (workspaceReady) {
+      baseColumns.push(
+        columnHelper.display({
+          id: "workspace-email",
+          meta: { label: "Workspace Email" },
+          header: "Workspace Email",
+          cell: ({ row }) => {
+            const wsEmail = row.original.workspaceUserEmail;
+
+            if (!wsEmail) {
               return <span className="text-sm text-muted-foreground">—</span>;
             }
 
             return (
               <button
                 type="button"
-                onClick={() => void copyEmail(email)}
+                onClick={() => void copyEmail(wsEmail)}
                 className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
-                aria-label={`Copy personal email ${email}`}
-                title="Copy personal email"
+                aria-label={`Copy workspace email ${wsEmail}`}
+                title="Copy workspace email"
               >
-                {email}
+                {wsEmail}
               </button>
             );
           },
         }),
-      ];
-
-      if (workspaceReady) {
-        baseColumns.push(
-          columnHelper.display({
-            id: "workspace-email",
-            meta: { label: "Workspace Email" },
-            header: "Workspace Email",
-            cell: ({ row }) => {
-              const wsEmail = row.original.workspaceUserEmail;
-
-              if (!wsEmail) {
-                return <span className="text-sm text-muted-foreground">—</span>;
-              }
-
-              return (
-                <button
-                  type="button"
-                  onClick={() => void copyEmail(wsEmail)}
-                  className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
-                  aria-label={`Copy workspace email ${wsEmail}`}
-                  title="Copy workspace email"
-                >
-                  {wsEmail}
-                </button>
-              );
-            },
-          }),
-        );
-      }
-
-      const categoryColumns = memberCategories.map((category) =>
-        columnHelper.display({
-          id: `category-${category.id}`,
-          meta: { label: category.name },
-          header: () => (
-            <div className="min-w-[9rem] text-sm font-medium text-foreground">
-              {category.name}
-            </div>
-          ),
-          cell: ({ row }) => (
-            <CategoryCell
-              assignments={row.original.groupAssignmentsByCategory[category.id] ?? []}
-            />
-          ),
-        }),
       );
+    }
 
-      const customFieldColumns = customFields.map((field) =>
+    const categoryColumns = memberCategories.map((category) =>
+      columnHelper.display({
+        id: `category-${category.id}`,
+        meta: { label: category.name },
+        header: () => (
+          <div className="min-w-[9rem] text-sm font-medium text-foreground">
+            {category.name}
+          </div>
+        ),
+        cell: ({ row }) => (
+          <CategoryCell
+            assignments={
+              row.original.groupAssignmentsByCategory[category.id] ?? []
+            }
+          />
+        ),
+      }),
+    );
+
+    const customFieldColumns = customFields
+      .filter((field) => field.discoveryMode !== "hidden")
+      .map((field) =>
         columnHelper.display({
           id: `field-${field.key}`,
           meta: { label: field.label },
@@ -550,111 +561,119 @@ export function MemberAdmin({
         }),
       );
 
-      const trailingColumns = [
-        columnHelper.accessor("createdAt", {
-          meta: { label: "Joined" },
-          header: "Joined",
-          cell: (info) => (
-            <span className="text-sm text-muted-foreground">
-              {formatDateTime(info.getValue())}
-            </span>
-          ),
-        }),
-        columnHelper.display({
-          id: "actions",
-          meta: { label: "Actions" },
-          header: "",
-          cell: ({ row }) => {
-            const member = row.original;
+    const trailingColumns = [
+      columnHelper.accessor("createdAt", {
+        meta: { label: "Joined" },
+        header: "Joined",
+        cell: (info) => (
+          <span className="text-sm text-muted-foreground">
+            {formatDateTime(info.getValue())}
+          </span>
+        ),
+      }),
+      columnHelper.display({
+        id: "actions",
+        meta: { label: "Actions" },
+        header: "",
+        cell: ({ row }) => {
+          const member = row.original;
 
-            return (
-              <div className="flex justify-end gap-2">
+          return (
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => updateSearchParam(member.id)}
+              >
+                <PencilIcon data-icon="inline-start" />
+                Edit
+              </Button>
+              {member.status === "pending" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  onClick={() => {
+                    if (workspaceReady) {
+                      setWorkspaceApproveError(null);
+                      setWorkspaceApproveMember({
+                        id: member.id,
+                        firstName: member.firstName,
+                        lastName: member.lastName,
+                        email: member.email,
+                        role: member.role,
+                      });
+                      return;
+                    }
+                    approveAction.execute({
+                      memberId: member.id,
+                      role: member.role,
+                    });
+                  }}
+                  disabled={approveAction.isPending}
+                >
+                  Approve
+                </Button>
+              ) : null}
+              {member.status === "invited" &&
+              member.email &&
+              member.inviteState.status !== "completed" &&
+              !member.userId ? (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => updateSearchParam(member.id)}
+                  onClick={() =>
+                    resendInviteAction.execute({
+                      memberId: member.id,
+                    })
+                  }
+                  disabled={
+                    resendInviteAction.isPending ||
+                    member.inviteState.deliveryStatus === "suppressed" ||
+                    member.inviteState.deliveryStatus === "complained" ||
+                    member.inviteState.deliveryStatus === "bounced"
+                  }
                 >
-                  <PencilIcon data-icon="inline-start" />
-                  Edit
+                  <MailIcon data-icon="inline-start" />
+                  {member.inviteState.status === "sent" ||
+                  member.inviteState.status === "failed"
+                    ? "Resend invite"
+                    : "Send invite"}
                 </Button>
-                {member.status === "pending" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="default"
-                    onClick={() => {
-                      if (workspaceReady) {
-                        setWorkspaceApproveError(null);
-                        setWorkspaceApproveMember({
-                          id: member.id,
-                          firstName: member.firstName,
-                          lastName: member.lastName,
-                          email: member.email,
-                          role: member.role,
-                        });
-                        return;
-                      }
-                      approveAction.execute({
-                        memberId: member.id,
-                        role: member.role,
-                      });
-                    }}
-                    disabled={approveAction.isPending}
-                  >
-                    Approve
-                  </Button>
-                ) : null}
-                {member.status === "invited" &&
-                member.email &&
-                member.inviteState.status !== "completed" &&
-                !member.userId ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      resendInviteAction.execute({
-                        memberId: member.id,
-                      })
-                    }
-                    disabled={
-                      resendInviteAction.isPending ||
-                      member.inviteState.deliveryStatus === "suppressed" ||
-                      member.inviteState.deliveryStatus === "complained" ||
-                      member.inviteState.deliveryStatus === "bounced"
-                    }
-                  >
-                    <MailIcon data-icon="inline-start" />
-                    {member.inviteState.status === "sent" ||
-                    member.inviteState.status === "failed"
-                      ? "Resend invite"
-                      : "Send invite"}
-                  </Button>
-                ) : null}
-              </div>
-            );
-          },
-        }),
-      ];
+              ) : null}
+            </div>
+          );
+        },
+      }),
+    ];
 
-      return [
-        ...baseColumns,
-        ...categoryColumns,
-        ...customFieldColumns,
-        ...trailingColumns,
-      ];
-    },
-    [
-      approveAction,
-      copyEmail,
-      customFields,
-      memberCategories,
-      resendInviteAction,
-      updateSearchParam,
-      workspaceReady,
-    ],
-  );
+    return [
+      ...baseColumns,
+      ...categoryColumns,
+      ...customFieldColumns,
+      ...trailingColumns,
+    ];
+  }, [
+    approveAction,
+    copyEmail,
+    customFields,
+    memberCategories,
+    resendInviteAction,
+    updateSearchParam,
+    workspaceReady,
+  ]);
+
+  const initialColumnVisibility = useMemo(() => {
+    const visibility: Record<string, boolean> = {};
+    for (const field of customFields) {
+      if (field.discoveryMode === "available") {
+        visibility[`field-${field.key}`] = false;
+      }
+    }
+    return visibility;
+  }, [customFields]);
 
   const renderToolbarActions = (table: TanStackTable<MemberRow>) => {
     const selectedRows = table.getFilteredSelectedRowModel().rows;
@@ -707,7 +726,9 @@ export function MemberAdmin({
                     event.preventDefault();
                     void bulkDeleteAction
                       .executeAsync({
-                        memberIds: selectedRows.map((selectedRow) => selectedRow.original.id),
+                        memberIds: selectedRows.map(
+                          (selectedRow) => selectedRow.original.id,
+                        ),
                       })
                       .then(() => {
                         table.resetRowSelection();
@@ -740,6 +761,7 @@ export function MemberAdmin({
             ? "Create members or invite them via the portal."
             : "Create members directly into the groups you administer."
         }
+        initialColumnVisibility={initialColumnVisibility}
         toolbarActions={renderToolbarActions}
       />
 

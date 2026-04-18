@@ -64,6 +64,7 @@ interface DataTableProps<TData, TValue> {
   searchPlaceholder?: string;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
+  initialColumnVisibility?: VisibilityState;
   toolbarActions?: (table: TanStackTable<TData>) => React.ReactNode;
 }
 
@@ -94,11 +95,12 @@ export function DataTable<TData, TValue>({
   searchPlaceholder = "Filter...",
   emptyStateTitle = "No results found",
   emptyStateDescription = "Try adjusting your filters.",
+  initialColumnVisibility = {},
   toolbarActions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = useState({});
 
   const table = useReactTable({

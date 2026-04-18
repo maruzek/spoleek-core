@@ -5,6 +5,7 @@ import type {
   MemberCustomField,
   MemberCustomFieldStage,
   MemberCustomFieldType,
+  MemberCustomFieldDiscoveryMode,
 } from "@/server/db/schema";
 
 export const memberCustomFieldTypeOptions: Array<{
@@ -29,6 +30,15 @@ export const memberCustomFieldStageOptions: Array<{
   { value: "registration", label: "Registration" },
   { value: "post_approval", label: "After approval" },
   { value: "optional", label: "Optional only" },
+];
+
+export const memberCustomFieldDiscoveryModeOptions: Array<{
+  value: MemberCustomFieldDiscoveryMode;
+  label: string;
+}> = [
+  { value: "visible", label: "Displayed by default" },
+  { value: "available", label: "Hidden by default (Available in Columns)" },
+  { value: "hidden", label: "Completely hidden" },
 ];
 
 export const memberCustomFieldSchema = z
@@ -56,6 +66,7 @@ export const memberCustomFieldSchema = z
       "multi_select",
     ]),
     stage: z.enum(["registration", "post_approval", "optional"]),
+    discoveryMode: z.enum(["visible", "available", "hidden"]),
     required: z.boolean(),
     isActive: z.boolean(),
     sortOrder: z.number().int().min(0).default(0),
