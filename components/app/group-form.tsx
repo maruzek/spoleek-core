@@ -7,6 +7,7 @@ import {
   groupSchema,
   type GroupFormValues,
 } from "@/lib/groups";
+import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -108,7 +109,10 @@ export function GroupForm({
                     id="group-name"
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
-                    onChange={(event) => formField.handleChange(event.target.value)}
+                    onChange={(event) => {
+                      formField.handleChange(event.target.value);
+                      form.setFieldValue("slug", slugify(event.target.value));
+                    }}
                     aria-invalid={
                       (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
                       (formField.state.meta.errors.length > 0 || getFieldError("name").length > 0)

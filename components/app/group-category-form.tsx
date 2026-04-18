@@ -8,6 +8,7 @@ import {
   groupJoinPolicyOptions,
   type GroupCategoryFormValues,
 } from "@/lib/groups";
+import { slugify } from "@/lib/slugify";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -124,9 +125,13 @@ export function GroupCategoryForm({
                     id="group-category-name"
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
-                    onChange={(event) =>
-                      formField.handleChange(event.target.value)
-                    }
+                    onChange={(event) => {
+                      formField.handleChange(event.target.value);
+                      form.setFieldValue(
+                        "slug",
+                        slugify(event.target.value),
+                      );
+                    }}
                     aria-invalid={
                       (formField.state.meta.isTouched ||
                         form.state.submissionAttempts > 0) &&
