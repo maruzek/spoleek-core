@@ -29,6 +29,20 @@ export const auth = betterAuth({
       },
     },
   },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          const { linkUserToWorkspaceMember } = await import(
+            "@/server/lib/workspace/link-user-to-member"
+          );
+          await linkUserToWorkspaceMember({ id: user.id, email: user.email }).catch(
+            () => undefined,
+          );
+        },
+      },
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,

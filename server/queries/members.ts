@@ -499,6 +499,7 @@ export async function listTenantMembers(
         role: tenantMembers.role,
         status: tenantMembers.status,
         userId: tenantMembers.userId,
+        workspaceUserEmail: tenantMembers.workspaceUserEmail,
         createdAt: tenantMembers.createdAt,
         linkedUserName: users.name,
         inviteStatus: memberInvites.status,

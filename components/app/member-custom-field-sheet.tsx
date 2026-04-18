@@ -112,6 +112,41 @@ export function MemberCustomFieldSheet({
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: MemberCustomFieldFormValues) => Promise<void>;
 }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>
+            {field ? "Edit custom field" : "Create custom field"}
+          </SheetTitle>
+          <SheetDescription>
+            Control where this question appears and how members are expected to
+            answer it.
+          </SheetDescription>
+        </SheetHeader>
+
+        <InnerForm
+          field={field}
+          isPending={isPending}
+          validationErrors={validationErrors}
+          onSubmit={onSubmit}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function InnerForm({
+  field,
+  isPending,
+  validationErrors,
+  onSubmit,
+}: {
+  field: MemberCustomField | null;
+  isPending: boolean;
+  validationErrors: unknown;
+  onSubmit: (value: MemberCustomFieldFormValues) => Promise<void>;
+}) {
   const [optionsInput, setOptionsInput] = useState(() =>
     stringifyFieldOptions(field?.options ?? []),
   );
@@ -131,27 +166,15 @@ export function MemberCustomFieldSheet({
   });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>
-            {field ? "Edit custom field" : "Create custom field"}
-          </SheetTitle>
-          <SheetDescription>
-            Control where this question appears and how members are expected to
-            answer it.
-          </SheetDescription>
-        </SheetHeader>
-
-        <form
-          className="flex flex-1 flex-col overflow-hidden"
-          onSubmit={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            void form.handleSubmit();
-          }}
-        >
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+    <form
+      className="flex flex-1 flex-col overflow-hidden"
+      onSubmit={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void form.handleSubmit();
+      }}
+    >
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
             <FieldGroup>
               <form.Field name="label">
                 {(formField) => (
@@ -437,19 +460,19 @@ export function MemberCustomFieldSheet({
                 }
               </form.Subscribe>
             </FieldGroup>
-          </div>
+      </div>
 
-          <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Saving..."
-                : field
-                  ? "Save changes"
-                  : "Create field"}
-            </Button>
-          </SheetFooter>
-        </form>
-      </SheetContent>
-    </Sheet>
+      <SheetFooter>
+        <Button type="submit" disabled={isPending}>
+          {isPending
+            ? "Saving..."
+            : field
+              ? "Save changes"
+              : "Create field"}
+        </Button>
+      </SheetFooter>
+    </form>
   );
 }
+
+

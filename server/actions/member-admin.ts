@@ -21,7 +21,10 @@ import {
   resolveMemberManagementScope,
   validateManagedGroupSelection,
 } from "@/server/lib/member-management-scope";
-import { logMemberAuthEvent, sendMemberActivationInvite } from "@/server/lib/member-invites";
+import {
+  logMemberAuthEvent,
+  sendMemberActivationInvite,
+} from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import {
@@ -60,7 +63,10 @@ function normalizeEmail(email: string) {
 }
 
 function usesEmailPasswordActivation(authStrategy: string | null) {
-  return authStrategy === "email-password" || authStrategy === "email-password-google";
+  return (
+    authStrategy === "email-password" ||
+    authStrategy === "email-password-google"
+  );
 }
 
 function resolveAllowedRole(
@@ -73,7 +79,9 @@ function resolveAllowedRole(
 function validateGroupSelectionOrThrow(args: {
   schema: typeof createMemberSchema | typeof updateMemberSchema;
   scopeAccessLevel: "full" | "scoped";
-  manageableGroupCategories: Awaited<ReturnType<typeof resolveMemberManagementScope>>["manageableGroupCategories"];
+  manageableGroupCategories: Awaited<
+    ReturnType<typeof resolveMemberManagementScope>
+  >["manageableGroupCategories"];
   groupIds: string[];
   requireAtLeastOneGroup: boolean;
 }) {
@@ -117,7 +125,11 @@ async function assertMemberInScopeOrThrow(args: {
     throw new Error("The selected member could not be found.");
   }
 
-  const inScope = await canAccessMemberInScope(args.orgId, args.memberId, args.scope);
+  const inScope = await canAccessMemberInScope(
+    args.orgId,
+    args.memberId,
+    args.scope,
+  );
 
   if (!inScope) {
     throw new Error("You can only manage members in your delegated scope.");
@@ -154,7 +166,9 @@ async function syncManageableGroupMemberships(args: {
       ),
     );
 
-  const existingGroupIds = new Set(existingMemberships.map((membership) => membership.groupId));
+  const existingGroupIds = new Set(
+    existingMemberships.map((membership) => membership.groupId),
+  );
   const nextGroupIdsSet = new Set(uniqueNextGroupIds);
 
   const membershipIdsToDelete = existingMemberships
@@ -172,7 +186,9 @@ async function syncManageableGroupMemberships(args: {
       );
   }
 
-  const groupIdsToInsert = uniqueNextGroupIds.filter((groupId) => !existingGroupIds.has(groupId));
+  const groupIdsToInsert = uniqueNextGroupIds.filter(
+    (groupId) => !existingGroupIds.has(groupId),
+  );
 
   if (groupIdsToInsert.length > 0) {
     await args.tx
@@ -209,7 +225,10 @@ export const createShadowMemberAction = authActionClient
     const matchedUser = email ? await findUserByEmail(email) : null;
 
     if (matchedUser) {
-      const existingMember = await getMemberByUserId(organization.id, matchedUser.id);
+      const existingMember = await getMemberByUserId(
+        organization.id,
+        matchedUser.id,
+      );
 
       if (existingMember) {
         returnValidationErrors(createMemberSchema, {
@@ -230,7 +249,10 @@ export const createShadowMemberAction = authActionClient
         email,
         firstName: parsedInput.firstName.trim(),
         lastName: parsedInput.lastName.trim(),
-        role: resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles),
+        role: resolveAllowedRole(
+          parsedInput.role,
+          scope.canAssignElevatedRoles,
+        ),
         status: parsedInput.status,
         linkedAt: matchedUser ? new Date() : null,
         acceptedTermsAt: matchedUser ? new Date() : null,
@@ -258,11 +280,11 @@ export const approveMemberAction = authActionClient
   .metadata({ actionName: "approveMember" })
   .inputSchema(
     z.object({
-      memberId: z.string().uuid(),
+      memberId: z.uuid(),
       role: z.enum(["member", "leader", "org_admin"]).default("member"),
       workspace: z
         .object({
-          primaryEmail: z.string().email(),
+          primaryEmail: z.email(),
         })
         .optional(),
     }),
@@ -277,12 +299,17 @@ export const approveMemberAction = authActionClient
       memberId: parsedInput.memberId,
       scope,
     });
-    const nextRole = resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles);
+    const nextRole = resolveAllowedRole(
+      parsedInput.role,
+      scope.canAssignElevatedRoles,
+    );
     const workspaceReady = isWorkspaceModuleReady(organization);
 
     if (workspaceReady) {
       if (!parsedInput.workspace?.primaryEmail) {
-        throw new Error("A Workspace email is required to approve this member.");
+        throw new Error(
+          "A Workspace email is required to approve this member.",
+        );
       }
 
       await db
@@ -308,7 +335,10 @@ export const approveMemberAction = authActionClient
       if (!provision.success) {
         return {
           success: false as const,
-          workspace: { error: provision.error, reason: provision.reason ?? null },
+          workspace: {
+            error: provision.error,
+            reason: provision.reason ?? null,
+          },
         };
       }
 
@@ -346,7 +376,9 @@ export const approveMemberAction = authActionClient
       };
     }
 
-    const nextStatus = usesEmailPasswordActivation(organization.setupAuthStrategy)
+    const nextStatus = usesEmailPasswordActivation(
+      organization.setupAuthStrategy,
+    )
       ? "invited"
       : "active";
 
@@ -375,7 +407,9 @@ export const approveMemberAction = authActionClient
       },
     });
 
-    let inviteResult: Awaited<ReturnType<typeof sendMemberActivationInvite>> | null = null;
+    let inviteResult: Awaited<
+      ReturnType<typeof sendMemberActivationInvite>
+    > | null = null;
 
     if (usesEmailPasswordActivation(organization.setupAuthStrategy)) {
       inviteResult = await sendMemberActivationInvite({
@@ -441,7 +475,9 @@ export const checkWorkspaceEmailAvailabilityAction = authActionClient
       return {
         status: "error" as const,
         message:
-          error instanceof Error ? error.message : "Failed to reach Google Workspace.",
+          error instanceof Error
+            ? error.message
+            : "Failed to reach Google Workspace.",
         reason: null,
       };
     }
@@ -449,9 +485,7 @@ export const checkWorkspaceEmailAvailabilityAction = authActionClient
 
 export const suggestWorkspaceEmailAction = authActionClient
   .metadata({ actionName: "suggestWorkspaceEmail" })
-  .inputSchema(
-    z.object({ memberId: z.string().uuid() }),
-  )
+  .inputSchema(z.object({ memberId: z.string().uuid() }))
   .action(async ({ parsedInput }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
@@ -463,12 +497,16 @@ export const suggestWorkspaceEmailAction = authActionClient
       scope,
     });
 
-    if (!isWorkspaceModuleReady(organization) || !organization.workspaceDomain) {
+    if (
+      !isWorkspaceModuleReady(organization) ||
+      !organization.workspaceDomain
+    ) {
       return { suggestion: null as string | null };
     }
 
     const suggestion = buildWorkspaceEmail({
-      template: organization.workspaceEmailTemplate || DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+      template:
+        organization.workspaceEmailTemplate || DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
       firstName: member.firstName ?? "",
       lastName: member.lastName ?? "",
       domain: organization.workspaceDomain,
@@ -493,7 +531,9 @@ export const resendMemberInviteAction = authActionClient
     });
 
     if (!usesEmailPasswordActivation(organization.setupAuthStrategy)) {
-      throw new Error("Member activation emails are only available for email/password sign-in.");
+      throw new Error(
+        "Member activation emails are only available for email/password sign-in.",
+      );
     }
 
     const result = await sendMemberActivationInvite({
@@ -533,7 +573,10 @@ export const updateMemberAction = authActionClient
     const matchedUser = email ? await findUserByEmail(email) : null;
 
     if (matchedUser && matchedUser.id !== member.userId) {
-      const existingLinkedMember = await getMemberByUserId(organization.id, matchedUser.id);
+      const existingLinkedMember = await getMemberByUserId(
+        organization.id,
+        matchedUser.id,
+      );
 
       if (existingLinkedMember && existingLinkedMember.id !== member.id) {
         returnValidationErrors(updateMemberSchema, {
@@ -553,12 +596,18 @@ export const updateMemberAction = authActionClient
           firstName: parsedInput.firstName.trim(),
           lastName: parsedInput.lastName.trim(),
           email,
-          role: resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles),
+          role: resolveAllowedRole(
+            parsedInput.role,
+            scope.canAssignElevatedRoles,
+          ),
           status: parsedInput.status,
           userId: member.userId ?? matchedUser?.id ?? null,
-          linkedAt: member.linkedAt ?? (member.userId == null && matchedUser ? new Date() : null),
+          linkedAt:
+            member.linkedAt ??
+            (member.userId == null && matchedUser ? new Date() : null),
           acceptedTermsAt:
-            member.acceptedTermsAt ?? (member.userId == null && matchedUser ? new Date() : null),
+            member.acceptedTermsAt ??
+            (member.userId == null && matchedUser ? new Date() : null),
           acceptedPrivacyAt:
             member.acceptedPrivacyAt ??
             (member.userId == null && matchedUser ? new Date() : null),

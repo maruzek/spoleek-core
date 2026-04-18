@@ -77,6 +77,7 @@ type MemberRow = {
   firstName: string;
   lastName: string;
   email: string | null;
+  workspaceUserEmail: string | null;
   role: "member" | "leader" | "org_admin";
   status: VisibleMemberStatus;
   userId: string | null;
@@ -479,6 +480,35 @@ export function MemberAdmin({
           },
         }),
       ];
+
+      if (workspaceReady) {
+        baseColumns.push(
+          columnHelper.display({
+            id: "workspace-email",
+            meta: { label: "Workspace Email" },
+            header: "Workspace Email",
+            cell: ({ row }) => {
+              const wsEmail = row.original.workspaceUserEmail;
+
+              if (!wsEmail) {
+                return <span className="text-sm text-muted-foreground">—</span>;
+              }
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => void copyEmail(wsEmail)}
+                  className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+                  aria-label={`Copy workspace email ${wsEmail}`}
+                  title="Copy workspace email"
+                >
+                  {wsEmail}
+                </button>
+              );
+            },
+          }),
+        );
+      }
 
       const categoryColumns = memberCategories.map((category) =>
         columnHelper.display({

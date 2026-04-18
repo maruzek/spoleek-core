@@ -1,0 +1,1 @@
+ALTER TYPE "public"."member_auth_event_type" ADD VALUE 'workspace_user_linked';

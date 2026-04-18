@@ -58,6 +58,7 @@ export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
   "password_reset_sent",
   "workspace_provisioned",
   "workspace_provision_failed",
+  "workspace_user_linked",
 ]);
 
 export const emailDirectionEnum = pgEnum("email_direction", [

@@ -139,7 +139,8 @@ export async function logMemberAuthEvent(params: {
     | "activation_attempt_blocked"
     | "password_reset_sent"
     | "workspace_provisioned"
-    | "workspace_provision_failed";
+    | "workspace_provision_failed"
+    | "workspace_user_linked";
   actorUserId?: string | null;
   inviteId?: string | null;
   message?: string | null;
