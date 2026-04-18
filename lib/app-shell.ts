@@ -2,6 +2,16 @@ import type { TenantRole } from "@/server/db/schema";
 
 export type AppSectionKey = "portal" | "admin";
 export type AdminAccessLevel = "none" | "scoped" | "full";
+export type AppShellAdminGroupPin = {
+  id: string;
+  title: string;
+  href: string;
+  groups: {
+    id: string;
+    title: string;
+    href: string;
+  }[];
+};
 
 export type AppCapabilities = {
   canAccessPortal: boolean;
@@ -31,6 +41,9 @@ export type AppShellContext = {
   adminAccessLevel: AdminAccessLevel;
   capabilities: AppCapabilities;
   visibleSections: AppSectionKey[];
+  navigation: {
+    adminGroupPins: AppShellAdminGroupPin[];
+  };
 };
 
 export function getDefaultSignedInRoute(context: Pick<AppShellContext, "capabilities">) {

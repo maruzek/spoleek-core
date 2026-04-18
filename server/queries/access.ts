@@ -1,7 +1,11 @@
 import { and, eq, ne, or } from "drizzle-orm";
 import { forbidden, redirect } from "next/navigation";
 
-import type { AppCapabilities, AppShellContext } from "@/lib/app-shell";
+import type {
+  AppCapabilities,
+  AppShellAdminGroupPin,
+  AppShellContext,
+} from "@/lib/app-shell";
 import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
@@ -14,6 +18,7 @@ import {
 import { getAppOrganization } from "@/server/queries/app";
 import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
 import { requireViewerSession } from "@/server/queries/auth";
+import { listPinnedGroupCategoriesForSidebar } from "@/server/queries/groups";
 
 export async function requireOrganization() {
   const organization = await getAppOrganization();
@@ -178,6 +183,14 @@ export async function getViewerAppContext(): Promise<
     memberRole: member?.role ?? null,
     systemRole: user?.systemRole ?? "member",
   });
+  const navigation = capabilities.canManageGroups
+    ? await getAdminGroupPins({
+        adminAccessLevel,
+        memberId: member?.id ?? null,
+        memberRole: member?.role ?? null,
+        orgId: organization.id,
+      })
+    : { adminGroupPins: [] };
 
   return {
     session,
@@ -204,6 +217,76 @@ export async function getViewerAppContext(): Promise<
       ...(capabilities.canAccessPortal ? (["portal"] as const) : []),
       ...(capabilities.canAccessAdmin ? (["admin"] as const) : []),
     ],
+    navigation,
+  };
+}
+
+async function getAdminGroupPins({
+  adminAccessLevel,
+  memberId,
+  memberRole,
+  orgId,
+}: {
+  adminAccessLevel: AppShellContext["adminAccessLevel"];
+  memberId: string | null;
+  memberRole: "member" | "leader" | "org_admin" | null;
+  orgId: string;
+}): Promise<AppShellContext["navigation"]> {
+  const hasFullVisibility =
+    adminAccessLevel === "full" || memberRole === "leader" || memberId == null;
+
+  const [rows, scopedCategoryIds, scopedGroupIds] = await Promise.all([
+    listPinnedGroupCategoriesForSidebar(orgId),
+    hasFullVisibility || memberId == null ? null : listAccessibleCategoryIds(orgId, memberId),
+    hasFullVisibility || memberId == null ? null : listScopedGroupIds(orgId, memberId),
+  ]);
+
+  const visibleCategoryIds = scopedCategoryIds == null ? null : new Set(scopedCategoryIds);
+  const visibleGroupIds = scopedGroupIds == null ? null : new Set(scopedGroupIds);
+  const pins = new Map<string, AppShellAdminGroupPin>();
+
+  for (const row of rows) {
+    const canSeeCategory = visibleCategoryIds == null || visibleCategoryIds.has(row.categoryId);
+    const canSeeGroup =
+      row.groupId == null ||
+      canSeeCategory ||
+      (visibleGroupIds != null && visibleGroupIds.has(row.groupId));
+
+    if (!canSeeGroup) {
+      continue;
+    }
+
+    const existingPin = pins.get(row.categoryId);
+
+    if (!existingPin) {
+      pins.set(row.categoryId, {
+        id: row.categoryId,
+        title: row.categoryName,
+        href: `/admin/groups/${row.categoryId}`,
+        groups: row.groupId
+          ? [
+              {
+                id: row.groupId,
+                title: row.groupName ?? "Untitled group",
+                href: `/admin/groups/${row.categoryId}/${row.groupId}`,
+              },
+            ]
+          : [],
+      });
+      continue;
+    }
+
+    if (row.groupId) {
+      existingPin.groups.push({
+        id: row.groupId,
+        title: row.groupName ?? "Untitled group",
+        href: `/admin/groups/${row.categoryId}/${row.groupId}`,
+      });
+    }
+  }
+
+  return {
+    adminGroupPins: [...pins.values()],
   };
 }
 

@@ -81,6 +81,14 @@ function getSidebarData(appContext: AppShellContext) {
       title: "Groups",
       href: "/admin/groups",
       icon: FolderTreeIcon,
+      items: appContext.navigation.adminGroupPins.map((category) => ({
+        title: category.title,
+        href: category.href,
+        items: category.groups.map((group) => ({
+          title: group.title,
+          href: group.href,
+        })),
+      })),
     },
     {
       title: "Events",

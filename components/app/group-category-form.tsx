@@ -473,7 +473,7 @@ export function GroupCategoryForm({
               <SwitchChoiceField
                 id="group-category-pin-to-navigation"
                 title="Pin to navigation"
-                description="Store this now for future specialized management surfaces."
+                description="Show this category in the admin sidebar under Groups, with its active groups nested beneath it."
                 checked={formField.state.value}
                 onCheckedChange={formField.handleChange}
               />

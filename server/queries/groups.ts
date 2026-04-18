@@ -197,6 +197,40 @@ export async function listGroupsByCategory(
     .orderBy(asc(groups.sortOrder), asc(groups.name));
 }
 
+export async function listPinnedGroupCategoriesForSidebar(orgId: string) {
+  return db
+    .select({
+      categoryId: groupCategories.id,
+      categoryName: groupCategories.name,
+      categorySortOrder: groupCategories.sortOrder,
+      groupId: groups.id,
+      groupName: groups.name,
+      groupSortOrder: groups.sortOrder,
+    })
+    .from(groupCategories)
+    .leftJoin(
+      groups,
+      and(
+        eq(groups.orgId, orgId),
+        eq(groups.categoryId, groupCategories.id),
+        eq(groups.isActive, true),
+      ),
+    )
+    .where(
+      and(
+        eq(groupCategories.orgId, orgId),
+        eq(groupCategories.isActive, true),
+        eq(groupCategories.isPinnedToNavigation, true),
+      ),
+    )
+    .orderBy(
+      asc(groupCategories.sortOrder),
+      asc(groupCategories.name),
+      asc(groups.sortOrder),
+      asc(groups.name),
+    );
+}
+
 export async function getGroupById(orgId: string, groupId: string) {
   const [group] = await db
     .select({
