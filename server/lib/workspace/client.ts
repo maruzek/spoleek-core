@@ -111,6 +111,40 @@ async function parseError(response: Response) {
   }
 }
 
+export type WorkspaceUser = {
+  id: string;
+  primaryEmail: string;
+  fullName: string;
+};
+
+export async function getWorkspaceUser(
+  orgId: string,
+  email: string,
+): Promise<WorkspaceUser | null> {
+  const response = await directoryFetch(
+    orgId,
+    `/users/${encodeURIComponent(email)}`,
+    { method: "GET" },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+  const body = (await response.json()) as {
+    id: string;
+    primaryEmail: string;
+    name?: { fullName?: string };
+  };
+  return {
+    id: body.id,
+    primaryEmail: body.primaryEmail,
+    fullName: body.name?.fullName ?? "",
+  };
+}
+
 export type WorkspaceUserLookup = {
   exists: boolean;
   primaryEmail?: string;

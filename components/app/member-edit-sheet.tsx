@@ -1,12 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import {
   AlertTriangleIcon,
   BadgeCheckIcon,
+  EllipsisVerticalIcon,
+  ExternalLinkIcon,
   FingerprintIcon,
   InfoIcon,
+  RefreshCwIcon,
   Trash2Icon,
 } from "lucide-react";
 
@@ -81,14 +85,25 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   type UpdateMemberValues,
   updateMemberSchema,
 } from "@/lib/member-admin";
+import { useAction } from "next-safe-action/hooks";
+import { toast } from "sonner";
+import { syncWorkspaceMemberAction } from "@/server/actions/member-admin";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
 import type { TenantRole } from "@/server/db/schema";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import type { MemberEditorMetadata } from "@/server/queries/members";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 type EditableMemberStatus = Exclude<TenantMember["status"], "deleted">;
 type EditableMember = Omit<TenantMember, "status"> & {
@@ -184,6 +199,23 @@ export function MemberEditSheet({
   onOpenChange,
   onSubmit,
 }: MemberEditSheetProps) {
+  const syncAction = useAction(syncWorkspaceMemberAction, {
+    onExecute: () => {
+      toast.loading("Syncing Workspace identity...", { id: "sync-workspace" });
+    },
+    onSuccess: () => {
+      toast.success("Workspace identity linked successfully.", {
+        id: "sync-workspace",
+      });
+      router.refresh();
+    },
+    onError: ({ error }) => {
+      toast.error(error.serverError || "Failed to sync Workspace identity.", {
+        id: "sync-workspace",
+      });
+    },
+  });
+  const router = useRouter();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const form = useForm({
     defaultValues: toDefaultValues(member, metadata, customFieldAnswers),
@@ -320,7 +352,7 @@ export function MemberEditSheet({
                         {member.workspaceUserEmail}
                       </span>
                       <CopyButton
-                        content={member.workspaceUserEmail}
+                        content={member.workspaceUserEmail ?? ""}
                         className="size-6 text-muted-foreground hover:text-foreground"
                         aria-label="Copy workspace email"
                       />
@@ -332,9 +364,111 @@ export function MemberEditSheet({
                       </p>
                     ) : null}
                   </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline">
+                        <EllipsisVerticalIcon />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={`https://admin.google.com/ac/users/${member.workspaceUserId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLinkIcon className="size-3.5" />
+                          Admin Console
+                        </a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          syncAction.execute({ memberId: member.id })
+                        }
+                        disabled={syncAction.isPending}
+                      >
+                        <RefreshCwIcon
+                          className={cn(
+                            "size-3.5",
+                            syncAction.isPending && "animate-spin",
+                          )}
+                        />
+                        Sync Identity
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </CardHeader>
               </Card>
-            ) : null}
+            ) : (
+              <Card className="mb-6 mt-1 overflow-hidden border-red-500/20 bg-red-500/5">
+                <CardHeader className="flex flex-row items-center gap-4">
+                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red-500/70">
+                      Workspace Identity <BadgeCheckIcon className="size-4" />
+                    </div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      {member.workspaceUserEmail ? (
+                        <>
+                          <span className="truncate">
+                            {member.workspaceUserEmail}
+                          </span>
+                          <CopyButton
+                            content={member.workspaceUserEmail ?? ""}
+                            className="size-6 text-muted-foreground hover:text-foreground"
+                            aria-label="Copy workspace email"
+                          />
+                        </>
+                      ) : (
+                        <span className="truncate">
+                          Workspace identity not linked
+                        </span>
+                      )}
+                    </CardTitle>
+                    {member.workspaceProvisionedAt ? (
+                      <p className="text-xs text-muted-foreground">
+                        Provisioned{" "}
+                        {formatDateTime(member.workspaceProvisionedAt)}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline">
+                        <EllipsisVerticalIcon />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      <DropdownMenuItem asChild>
+                        <a
+                          href={`https://admin.google.com/ac/users/${member.workspaceUserId}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLinkIcon className="size-3.5" />
+                          Admin Console
+                        </a>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          syncAction.execute({ memberId: member.id })
+                        }
+                        disabled={syncAction.isPending}
+                      >
+                        <RefreshCwIcon
+                          className={cn(
+                            "size-3.5",
+                            syncAction.isPending && "animate-spin",
+                          )}
+                        />
+                        Sync Identity
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </CardHeader>
+              </Card>
+            )}
 
             <div className="mb-6 rounded-2xl border bg-muted/20 px-4 py-3">
               <Accordion type="multiple" className="gap-2">

@@ -297,6 +297,7 @@ export const tenantMembers = pgTable(
     acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
     linkedAt: timestamp("linked_at", { withTimezone: true }),
     workspaceUserEmail: text("workspace_user_email"),
+    workspaceUserId: text("workspace_user_id"),
     workspaceProvisionedAt: timestamp("workspace_provisioned_at", {
       withTimezone: true,
     }),

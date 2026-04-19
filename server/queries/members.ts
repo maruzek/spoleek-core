@@ -500,6 +500,7 @@ export async function listTenantMembers(
         status: tenantMembers.status,
         userId: tenantMembers.userId,
         workspaceUserEmail: tenantMembers.workspaceUserEmail,
+        workspaceUserId: tenantMembers.workspaceUserId,
         createdAt: tenantMembers.createdAt,
         linkedUserName: users.name,
         inviteStatus: memberInvites.status,

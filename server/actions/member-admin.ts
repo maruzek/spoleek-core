@@ -31,6 +31,7 @@ import {
   WorkspaceApiError,
   WorkspaceNotConnectedError,
   checkWorkspaceUserExists,
+  getWorkspaceUser,
 } from "@/server/lib/workspace/client";
 import {
   DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
@@ -513,6 +514,93 @@ export const suggestWorkspaceEmailAction = authActionClient
     });
 
     return { suggestion };
+  });
+
+export const syncWorkspaceMemberAction = authActionClient
+  .metadata({ actionName: "syncWorkspaceMember" })
+  .inputSchema(z.object({ memberId: z.uuid() }))
+  .action(async ({ parsedInput, ctx }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    const member = await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+
+    if (!isWorkspaceModuleReady(organization)) {
+      throw new Error("Google Workspace is not properly configured.");
+    }
+
+    let targetEmail = member.workspaceUserEmail;
+    let isImplicitFallback = false;
+
+    if (!targetEmail && member.email && organization.workspaceDomain) {
+      const personalEmail = member.email.trim().toLowerCase();
+      const domain = organization.workspaceDomain.trim().toLowerCase();
+
+      if (personalEmail.endsWith(`@${domain}`)) {
+        targetEmail = member.email;
+        isImplicitFallback = true;
+      }
+    }
+
+    if (!targetEmail) {
+      throw new Error(
+        "This member does not have a Workspace email assigned or a matching personal email.",
+      );
+    }
+
+    try {
+      const workspaceUser = await getWorkspaceUser(
+        organization.id,
+        targetEmail.trim().toLowerCase(),
+      );
+
+      if (!workspaceUser) {
+        throw new Error(`No Google Workspace account found for ${targetEmail}`);
+      }
+
+      const now = new Date();
+      await db
+        .update(tenantMembers)
+        .set({
+          workspaceUserId: workspaceUser.id,
+          ...(isImplicitFallback
+            ? {
+                workspaceUserEmail: workspaceUser.primaryEmail,
+                workspaceProvisionedAt: now,
+              }
+            : {}),
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(tenantMembers.id, parsedInput.memberId),
+            eq(tenantMembers.orgId, organization.id),
+          ),
+        );
+
+      await logMemberAuthEvent({
+        orgId: organization.id,
+        memberId: parsedInput.memberId,
+        actorUserId: ctx.auth.user.id,
+        eventType: "workspace_user_linked",
+        metadata: {
+          workspaceUserId: workspaceUser.id,
+          workspaceUserEmail: workspaceUser.primaryEmail,
+          isImplicitMatch: isImplicitFallback,
+        },
+      });
+
+      return { success: true, workspaceUserId: workspaceUser.id };
+    } catch (error) {
+      if (error instanceof Error) throw error;
+      throw new Error("Failed to sync Workspace identity.");
+    }
   });
 
 export const resendMemberInviteAction = authActionClient

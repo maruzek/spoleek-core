@@ -1,0 +1,1 @@
+ALTER TABLE "tenant_members" ADD COLUMN "workspace_user_id" text;

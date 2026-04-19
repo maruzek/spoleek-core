@@ -89,6 +89,7 @@ export async function provisionWorkspaceAccountForMember(
     .update(tenantMembers)
     .set({
       workspaceUserEmail: primaryEmail,
+      workspaceUserId: workspaceUserId,
       workspaceProvisionedAt: now,
       updatedAt: now,
     })
