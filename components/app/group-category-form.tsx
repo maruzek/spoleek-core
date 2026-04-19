@@ -8,7 +8,7 @@ import {
   groupJoinPolicyOptions,
   type GroupCategoryFormValues,
 } from "@/lib/groups";
-import type { MembershipManagementMode } from "@/server/db/schema";
+import { useAppShell } from "@/components/app/app-shell-provider";
 import { slugify } from "@/lib/slugify";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,6 @@ export function GroupCategoryForm({
   category,
   isPending,
   validationErrors,
-  orgMembershipMode,
   onSubmit,
   onCancel,
   submitLabel,
@@ -75,12 +74,14 @@ export function GroupCategoryForm({
   category?: Partial<GroupCategoryFormValues> | null;
   isPending: boolean;
   validationErrors?: GroupCategoryValidationErrors;
-  orgMembershipMode?: MembershipManagementMode;
   onSubmit: (value: GroupCategoryFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
   cancelLabel?: string;
 }) {
+  const {
+    organization: { membershipManagementMode: orgMembershipMode },
+  } = useAppShell();
   const form = useForm({
     defaultValues: toDefaultValues(category),
     onSubmit: async ({ value }) => {

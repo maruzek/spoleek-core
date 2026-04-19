@@ -1,4 +1,4 @@
-import type { TenantRole } from "@/server/db/schema";
+import type { MembershipManagementMode, TenantRole } from "@/server/db/schema";
 
 export type AppSectionKey = "portal" | "admin";
 export type AdminAccessLevel = "none" | "scoped" | "full";
@@ -33,6 +33,15 @@ export type AppShellContext = {
   organization: {
     name: string;
     slug: string;
+    membershipManagementMode: MembershipManagementMode;
+    fees: {
+      enabled: boolean;
+      renewalMonth: number | null;
+      renewalDay: number | null;
+      feeAmount: number | null;
+      feeCurrency: string;
+      feeBankAccount: string | null;
+    };
   };
   member: {
     role: TenantRole;

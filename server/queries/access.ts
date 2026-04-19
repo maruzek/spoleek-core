@@ -199,6 +199,15 @@ export async function getViewerAppContext(): Promise<
     organization: {
       name: organization.name,
       slug: organization.slug,
+      membershipManagementMode: organization.membershipManagementMode,
+      fees: {
+        enabled: organization.membershipFeeEnabled,
+        renewalMonth: organization.membershipRenewalMonth,
+        renewalDay: organization.membershipRenewalDay,
+        feeAmount: organization.membershipFeeAmount,
+        feeCurrency: organization.membershipFeeCurrency,
+        feeBankAccount: organization.membershipFeeBankAccount,
+      },
     },
     viewer: {
       name: session.user.name,

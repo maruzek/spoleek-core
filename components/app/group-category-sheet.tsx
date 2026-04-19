@@ -16,7 +16,6 @@ export function GroupCategorySheet({
   category,
   isPending,
   validationErrors,
-  orgMembershipMode,
   onOpenChange,
   onSubmit,
 }: {
@@ -24,7 +23,6 @@ export function GroupCategorySheet({
   category?: Partial<GroupCategoryFormValues> | null;
   isPending: boolean;
   validationErrors?: GroupCategoryValidationErrors;
-  orgMembershipMode?: MembershipManagementMode;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: GroupCategoryFormValues) => Promise<void>;
 }) {
@@ -44,7 +42,6 @@ export function GroupCategorySheet({
             category={category}
             isPending={isPending}
             validationErrors={validationErrors}
-            orgMembershipMode={orgMembershipMode}
             onCancel={() => onOpenChange(false)}
             onSubmit={onSubmit}
           />

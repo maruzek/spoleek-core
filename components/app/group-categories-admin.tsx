@@ -45,11 +45,9 @@ const columnHelper = createColumnHelper<GroupCategoryRow>();
 export function GroupCategoriesAdmin({
   categories,
   canManageCategories,
-  orgMembershipMode,
 }: {
   categories: GroupCategoryRow[];
   canManageCategories: boolean;
-  orgMembershipMode?: MembershipManagementMode;
 }) {
   const router = useRouter();
   const [sheetState, setSheetState] = useState<{
@@ -201,7 +199,6 @@ export function GroupCategoriesAdmin({
         category={sheetState.category}
         isPending={saveAction.isPending}
         validationErrors={saveAction.result.validationErrors}
-        orgMembershipMode={orgMembershipMode}
         onOpenChange={(open) => setSheetState((current) => ({ ...current, open }))}
         onSubmit={async (value: GroupCategoryFormValues) => {
           const result = await saveAction.executeAsync(value);

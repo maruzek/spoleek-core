@@ -8,6 +8,7 @@ import {
   type GroupFormValues,
 } from "@/lib/groups";
 import { feeCurrencyOptions } from "@/lib/membership";
+import { useAppShell } from "@/components/app/app-shell-provider";
 import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,13 +38,6 @@ export type GroupValidationErrors = Partial<
   Record<keyof GroupFormValues, { _errors?: string[] }>
 >;
 
-export type OrgFeeDefaults = {
-  renewalMonth: number | null;
-  renewalDay: number | null;
-  feeAmount: number | null;
-  feeCurrency: string;
-  feeBankAccount: string | null;
-};
 
 function toDefaultValues(
   group?: Partial<GroupFormValues> | null,
@@ -85,7 +79,6 @@ export function GroupForm({
   isPending,
   validationErrors,
   categoryManagesFees,
-  orgFeeDefaults,
   onSubmit,
   onCancel,
   submitLabel,
@@ -96,12 +89,14 @@ export function GroupForm({
   isPending: boolean;
   validationErrors?: GroupValidationErrors;
   categoryManagesFees?: boolean;
-  orgFeeDefaults?: OrgFeeDefaults;
   onSubmit: (value: GroupFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
   cancelLabel?: string;
 }) {
+  const {
+    organization: { fees: orgFeeDefaults },
+  } = useAppShell();
   const form = useForm({
     defaultValues: toDefaultValues(group, categoryId),
     onSubmit: async ({ value }) => {

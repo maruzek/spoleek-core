@@ -1,15 +1,11 @@
 import { AppPage } from "@/components/app/app-page";
 import { GroupCategoriesAdmin } from "@/components/app/group-categories-admin";
 import { listAccessibleCategoryIds, requireGroupAdminModuleAccess } from "@/server/queries/access";
-import { getAppOrganization } from "@/server/queries/app";
 import { listGroupCategories } from "@/server/queries/groups";
 
 export default async function AdminGroupsPage() {
   const access = await requireGroupAdminModuleAccess();
-  const [categories, organization] = await Promise.all([
-    listGroupCategories(access.organization.id),
-    getAppOrganization(),
-  ]);
+  const categories = await listGroupCategories(access.organization.id);
   const canManageCategories =
     access.adminAccessLevel === "full" || access.member?.role === "leader";
   const scopedCategoryIds =
@@ -25,7 +21,6 @@ export default async function AdminGroupsPage() {
     >
       <GroupCategoriesAdmin
         canManageCategories={canManageCategories}
-        orgMembershipMode={organization?.membershipManagementMode}
         categories={
           scopedCategoryIds == null
             ? categories
