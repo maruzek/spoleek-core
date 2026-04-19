@@ -58,7 +58,7 @@ export function MembershipSettingsCard({
     state.membershipRenewalDay ?? 1,
   );
   const [feeEnabled, setFeeEnabled] = useState(state.membershipFeeEnabled);
-  const [feeAmount, setFeeAmount] = useState(state.membershipFeeAmount ?? 0);
+  const [feeAmount, setFeeAmount] = useState((state.membershipFeeAmount ?? 0) / 100);
   const [feeCurrency, setFeeCurrency] = useState(state.membershipFeeCurrency);
   const [bankAccount, setBankAccount] = useState(
     state.membershipFeeBankAccount ?? "",
@@ -251,7 +251,7 @@ export function MembershipSettingsCard({
               membershipRenewalDay: isPeriodicRenewal ? renewalDay : null,
               membershipFeeEnabled: isPeriodicRenewal ? feeEnabled : false,
               membershipFeeAmount:
-                isPeriodicRenewal && feeEnabled ? feeAmount : null,
+                isPeriodicRenewal && feeEnabled ? Math.round(feeAmount * 100) : null,
               membershipFeeCurrency: feeCurrency,
               membershipFeeBankAccount:
                 isPeriodicRenewal && feeEnabled && bankAccount.trim()
