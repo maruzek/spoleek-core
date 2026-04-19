@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { AlertTriangleIcon } from "lucide-react";
 
 import { AppPage } from "@/components/app/app-page";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { getPendingPaymentsForMember } from "@/server/queries/payments";
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (
@@ -29,6 +32,9 @@ export default async function PortalOverviewPage() {
     requireProfileComplete: true,
   });
 
+  const pendingPayments = await getPendingPaymentsForMember(organization.id, member.id);
+  const hasOverdue = pendingPayments.some((p) => p.status === "overdue");
+
   return (
     <AppPage
       eyebrow="Member portal"
@@ -40,6 +46,21 @@ export default async function PortalOverviewPage() {
         </Button>
       }
     >
+      {pendingPayments.length > 0 ? (
+        <Alert variant={hasOverdue ? "destructive" : "default"}>
+          <AlertTriangleIcon />
+          <AlertTitle>{hasOverdue ? "Payment overdue" : "Payment due"}</AlertTitle>
+          <AlertDescription>
+            You have {pendingPayments.length} membership fee payment
+            {pendingPayments.length > 1 ? "s" : ""} pending.
+          </AlertDescription>
+          <AlertAction>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/portal/payments">View payments</Link>
+            </Button>
+          </AlertAction>
+        </Alert>
+      ) : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card>
           <CardHeader>

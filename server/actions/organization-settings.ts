@@ -148,6 +148,10 @@ export const saveMembershipSettingsAction = orgAdminActionClient
           isPeriodicRenewal && parsedInput.membershipFeeEnabled
             ? parsedInput.membershipFeeBankAccount
             : null,
+        membershipFeePaymentWindowDays:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipFeePaymentWindowDays
+            : 30,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

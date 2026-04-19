@@ -40,6 +40,7 @@ export type MembershipSettingsState = {
   membershipFeeAmount: number | null;
   membershipFeeCurrency: string;
   membershipFeeBankAccount: string | null;
+  membershipFeePaymentWindowDays: number;
 };
 
 export function MembershipSettingsCard({
@@ -61,6 +62,9 @@ export function MembershipSettingsCard({
   const [feeCurrency, setFeeCurrency] = useState(state.membershipFeeCurrency);
   const [bankAccount, setBankAccount] = useState(
     state.membershipFeeBankAccount ?? "",
+  );
+  const [paymentWindowDays, setPaymentWindowDays] = useState(
+    state.membershipFeePaymentWindowDays ?? 30,
   );
 
   const saveAction = useAction(saveMembershipSettingsAction, {
@@ -166,7 +170,7 @@ export function MembershipSettingsCard({
           />
 
           {feeEnabled ? (
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field>
                 <FieldLabel htmlFor="fee-amount">Fee amount</FieldLabel>
                 <FieldContent>
@@ -213,6 +217,25 @@ export function MembershipSettingsCard({
                   />
                 </FieldContent>
               </Field>
+
+              <Field>
+                <FieldLabel htmlFor="payment-window-days">
+                  Payment window (days)
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="payment-window-days"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={paymentWindowDays}
+                    onChange={(e) => setPaymentWindowDays(Number(e.target.value))}
+                  />
+                  <FieldDescription>
+                    Days from renewal date until payment is due.
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
             </div>
           ) : null}
         </>
@@ -234,6 +257,7 @@ export function MembershipSettingsCard({
                 isPeriodicRenewal && feeEnabled && bankAccount.trim()
                   ? bankAccount.trim()
                   : null,
+              membershipFeePaymentWindowDays: paymentWindowDays,
             })
           }
           disabled={saveAction.isPending}

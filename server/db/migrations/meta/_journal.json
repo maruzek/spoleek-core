@@ -127,6 +127,13 @@
       "when": 1776582096108,
       "tag": "0017_light_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1776601582863,
+      "tag": "0018_special_speedball",
+      "breakpoints": true
     }
   ]
 }

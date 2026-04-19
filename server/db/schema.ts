@@ -135,6 +135,18 @@ export const membershipManagementModeEnum = pgEnum("membership_management_mode",
   "periodic_renewal",
 ]);
 
+export const memberPaymentTypeEnum = pgEnum("member_payment_type", [
+  "membership_fee",
+  "event",
+]);
+
+export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
+  "pending",
+  "paid",
+  "overdue",
+  "cancelled",
+]);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -257,6 +269,9 @@ export const organizations = pgTable(
     membershipFeeAmount: integer("membership_fee_amount"),
     membershipFeeCurrency: text("membership_fee_currency").notNull().default("CZK"),
     membershipFeeBankAccount: text("membership_fee_bank_account"),
+    membershipFeePaymentWindowDays: integer("membership_fee_payment_window_days")
+      .notNull()
+      .default(30),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -389,6 +404,7 @@ export const groups = pgTable(
     feeAmount: integer("fee_amount"),
     feeCurrency: text("fee_currency"),
     feeBankAccount: text("fee_bank_account"),
+    feePaymentWindowDays: integer("fee_payment_window_days"),
     ...timestamps,
   },
   (table) => ({
@@ -708,6 +724,39 @@ export const emailActivityEvents = pgTable(
   }),
 );
 
+export const memberPayments = pgTable(
+  "member_payments",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    type: memberPaymentTypeEnum("type").notNull().default("membership_fee"),
+    status: memberPaymentStatusEnum("status").notNull().default("pending"),
+    amount: integer("amount").notNull(),
+    currency: text("currency").notNull(),
+    bankAccount: text("bank_account"),
+    periodLabel: text("period_label").notNull(),
+    periodKey: text("period_key").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (table) => ({
+    orgMemberIdx: index("member_payments_org_member_idx").on(table.orgId, table.memberId),
+    orgStatusIdx: index("member_payments_org_status_idx").on(table.orgId, table.status),
+    orgPeriodIdx: index("member_payments_org_period_idx").on(table.orgId, table.periodLabel),
+    memberPeriodKeyIdx: uniqueIndex("member_payments_member_period_key_idx").on(
+      table.memberId,
+      table.periodKey,
+    ),
+  }),
+);
+
 export const schema = {
   users,
   sessions,
@@ -727,6 +776,7 @@ export const schema = {
   workspaceConnections,
   emailActivities,
   emailActivityEvents,
+  memberPayments,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
@@ -749,6 +799,9 @@ export type GroupCategorySelectionMode =
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
 export type MembershipManagementMode = typeof membershipManagementModeEnum.enumValues[number];
+export type MemberPaymentType = typeof memberPaymentTypeEnum.enumValues[number];
+export type MemberPaymentStatus = typeof memberPaymentStatusEnum.enumValues[number];
+export type MemberPayment = typeof memberPayments.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;

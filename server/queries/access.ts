@@ -119,7 +119,7 @@ function getCapabilities({
         canManageMembers: false,
         canManageScopedMembers: hasScopedMemberManagement,
         canManageEvents: false,
-        canManagePayments: false,
+        canManagePayments: true,
       },
     };
   }

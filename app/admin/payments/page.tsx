@@ -1,20 +1,31 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
+import { PaymentsAdmin } from "@/components/app/payments-admin";
 import { requireAdminAccess } from "@/server/queries/access";
+import { listMemberIdsInGroups, listPaymentsForOrg } from "@/server/queries/payments";
+import { listScopedGroupIds } from "@/server/queries/access";
 
 export default async function AdminPaymentsPage() {
-  await requireAdminAccess();
+  const access = await requireAdminAccess({ capability: "canManagePayments" });
+
+  const isFullAdmin = access.adminAccessLevel === "full";
+
+  let payments;
+
+  if (isFullAdmin || !access.member) {
+    payments = await listPaymentsForOrg(access.organization.id);
+  } else {
+    const groupIds = await listScopedGroupIds(access.organization.id, access.member.id);
+    const memberIds = await listMemberIdsInGroups(access.organization.id, groupIds);
+    payments = await listPaymentsForOrg(access.organization.id, { memberIds });
+  }
 
   return (
     <AppPage
       eyebrow="Administration"
-      title="Payments will join the admin operations surface."
-      description="Membership fees, event payments, and QR-payment workflows can now live beside members and events in the same admin shell."
+      title="Membership payments."
+      description="Track and manage fee payment records for all active members."
     >
-      <AppPlaceholder
-        title="Payments area reserved"
-        description="This route is ready for the future payment workflows without changing the app structure again."
-      />
+      <PaymentsAdmin payments={payments} isFullAdmin={isFullAdmin} />
     </AppPage>
   );
 }

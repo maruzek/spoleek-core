@@ -49,6 +49,7 @@ export const membershipSettingsSchema = z
       .default(null),
     membershipFeeCurrency: z.string().trim().default("CZK"),
     membershipFeeBankAccount: nullableTrimmedString,
+    membershipFeePaymentWindowDays: z.number().int().min(1).max(365).default(30),
   })
   .superRefine((value, ctx) => {
     if (value.membershipManagementMode === "periodic_renewal") {

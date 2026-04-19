@@ -26,6 +26,7 @@ export default async function AdminMembershipSettingsPage() {
     membershipFeeAmount: organization.membershipFeeAmount,
     membershipFeeCurrency: organization.membershipFeeCurrency,
     membershipFeeBankAccount: organization.membershipFeeBankAccount,
+    membershipFeePaymentWindowDays: organization.membershipFeePaymentWindowDays,
   };
 
   return (
