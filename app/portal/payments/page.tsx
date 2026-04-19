@@ -1,14 +1,6 @@
 import { AppPage } from "@/components/app/app-page";
 import { AppPlaceholder } from "@/components/app/app-placeholder";
 import { PaymentQrCard } from "@/components/app/payment-qr-card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardTitle,
-} from "@/components/ui/card";
-import { formatDateTime } from "@/lib/format";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 import { listPaymentsForMember } from "@/server/queries/payments";
 import { PaymentsTable } from "./payments-table";
@@ -47,7 +39,7 @@ export default async function PortalPaymentsPage() {
               Please settle these payments by scanning the QR code or using the bank details provided.
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {pendingPayments.map((payment) => (
               <PaymentQrCard key={payment.id} payment={payment} />
             ))}

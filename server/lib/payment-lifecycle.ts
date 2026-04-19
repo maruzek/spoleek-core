@@ -14,6 +14,11 @@ import {
 
 const RENEWAL_WINDOW_DAYS = 14;
 
+function generateVariableSymbol(): string {
+  // 6-digit numeric VS — unique enough for typical org sizes, easy to read aloud
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
 type GenerateResult = {
   orgsProcessed: number;
   paymentsCreated: number;
@@ -161,6 +166,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
             bankAccount: groupFee.feeBankAccount,
             periodLabel: groupPeriodLabel,
             periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
+            variableSymbol: generateVariableSymbol(),
             dueAt,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -184,6 +190,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
           bankAccount: org.membershipFeeBankAccount,
           periodLabel,
           periodKey: `${periodLabel}:org:${org.id}`,
+          variableSymbol: generateVariableSymbol(),
           dueAt,
           createdAt: new Date(),
           updatedAt: new Date(),

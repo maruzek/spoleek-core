@@ -5,6 +5,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
+import { getPaymentTitle } from "@/lib/payments";
 import type { MemberPayment } from "@/server/db/schema";
 
 const columns: ColumnDef<MemberPayment>[] = [
@@ -12,7 +13,9 @@ const columns: ColumnDef<MemberPayment>[] = [
     accessorKey: "periodLabel",
     header: "Period",
     cell: ({ row }) => (
-      <span className="font-medium">{row.getValue("periodLabel")}</span>
+      <span className="font-medium">
+        {getPaymentTitle(row.original.type, row.original.periodLabel)}
+      </span>
     ),
   },
   {
@@ -48,6 +51,18 @@ const columns: ColumnDef<MemberPayment>[] = [
         >
           {status}
         </Badge>
+      );
+    },
+  },
+  {
+    accessorKey: "variableSymbol",
+    header: "VS",
+    cell: ({ row }) => {
+      const vs = row.original.variableSymbol;
+      return vs ? (
+        <span className="font-mono text-xs">{vs}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
       );
     },
   },

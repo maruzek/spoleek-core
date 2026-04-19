@@ -216,8 +216,12 @@ export async function getViewerAppContext(): Promise<
     },
     member: member
       ? {
+          id: member.id,
           role: member.role,
           status: member.status,
+          firstName: member.firstName,
+          lastName: member.lastName,
+          email: member.email,
         }
       : null,
     adminAccessLevel,

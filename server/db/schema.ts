@@ -741,6 +741,7 @@ export const memberPayments = pgTable(
     bankAccount: text("bank_account"),
     periodLabel: text("period_label").notNull(),
     periodKey: text("period_key").notNull(),
+    variableSymbol: text("variable_symbol"),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     notes: text("notes"),

@@ -1,0 +1,1 @@
+ALTER TABLE "member_payments" ADD COLUMN "variable_symbol" text;

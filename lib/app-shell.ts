@@ -44,8 +44,12 @@ export type AppShellContext = {
     };
   };
   member: {
+    id: string;
     role: TenantRole;
     status: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
   } | null;
   adminAccessLevel: AdminAccessLevel;
   capabilities: AppCapabilities;

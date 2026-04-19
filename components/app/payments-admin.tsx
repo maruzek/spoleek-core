@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { formatDateTime } from "@/lib/format";
+import { getPaymentTitle } from "@/lib/payments";
 import {
   cancelPaymentAction,
   generatePaymentsAction,
@@ -100,8 +101,9 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       meta: { label: "Member" },
     }),
     columnHelper.accessor("periodLabel", {
-      header: "Period",
-      meta: { label: "Period" },
+      header: "Payment",
+      meta: { label: "Payment" },
+      cell: ({ row }) => getPaymentTitle(row.original.type, row.original.periodLabel),
     }),
     columnHelper.accessor("amount", {
       header: "Amount",
@@ -113,6 +115,16 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       header: "Status",
       meta: { label: "Status" },
       cell: ({ row }) => <PaymentStatusBadge status={row.original.status} />,
+    }),
+    columnHelper.accessor("variableSymbol", {
+      header: "VS",
+      meta: { label: "Variable symbol" },
+      cell: ({ row }) =>
+        row.original.variableSymbol ? (
+          <span className="font-mono text-xs">{row.original.variableSymbol}</span>
+        ) : (
+          "—"
+        ),
     }),
     columnHelper.accessor("dueAt", {
       header: "Due",
