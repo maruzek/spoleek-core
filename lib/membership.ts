@@ -1,13 +1,8 @@
 import { z } from "zod";
 
+import { parseBankAccount } from "@/lib/iban";
 import type { MembershipManagementMode } from "@/server/db/schema";
 
-const nullableTrimmedString = z
-  .union([z.string(), z.null(), z.undefined()])
-  .transform((value) => {
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    return trimmed.length > 0 ? trimmed : null;
-  });
 
 export const membershipManagementModeOptions: Array<{
   value: MembershipManagementMode;
@@ -48,7 +43,17 @@ export const membershipSettingsSchema = z
       .union([z.number().int().min(0), z.null()])
       .default(null),
     membershipFeeCurrency: z.string().trim().default("CZK"),
-    membershipFeeBankAccount: nullableTrimmedString,
+    membershipFeeBankAccount: z
+      .union([z.string(), z.null(), z.undefined()])
+      .transform((value) => {
+        const trimmed = typeof value === "string" ? value.trim() : "";
+        if (!trimmed) return null;
+        try {
+          return parseBankAccount(trimmed);
+        } catch {
+          return trimmed;
+        }
+      }),
     membershipFeePaymentWindowDays: z.number().int().min(1).max(365).default(30),
   })
   .superRefine((value, ctx) => {
@@ -106,12 +111,13 @@ export const membershipSettingsSchema = z
     }
 
     if (value.membershipFeeBankAccount != null) {
-      const iban = value.membershipFeeBankAccount.replace(/\s/g, "").toUpperCase();
-      if (!/^[A-Z]{2}\d{2}[A-Z0-9]{4,30}$/.test(iban)) {
+      try {
+        parseBankAccount(value.membershipFeeBankAccount);
+      } catch (e) {
         ctx.addIssue({
           code: "custom",
           path: ["membershipFeeBankAccount"],
-          message: "Enter a valid IBAN (e.g. CZ6508000000192000145399).",
+          message: e instanceof Error ? e.message : "Invalid bank account.",
         });
       }
     }

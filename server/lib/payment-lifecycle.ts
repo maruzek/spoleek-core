@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 
 import { and, eq, inArray, lt } from "drizzle-orm";
 
+import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -11,12 +12,22 @@ import {
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
+import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
-function generateVariableSymbol(): string {
-  // 6-digit numeric VS — unique enough for typical org sizes, easy to read aloud
-  return String(Math.floor(100000 + Math.random() * 900000));
+async function generateVariableSymbol(orgId: string): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const vs = String(Math.floor(100000 + Math.random() * 900000));
+    const existing = await db
+      .select({ id: memberPayments.id })
+      .from(memberPayments)
+      .where(and(eq(memberPayments.orgId, orgId), eq(memberPayments.variableSymbol, vs)))
+      .limit(1);
+    if (existing.length === 0) return vs;
+  }
+  // Fallback: append timestamp suffix to guarantee uniqueness
+  return String(Date.now()).slice(-6);
 }
 
 type GenerateResult = {
@@ -50,6 +61,173 @@ function isInRenewalWindow(renewalMonth: number, renewalDay: number, today: Date
   );
 }
 
+async function sendOverdueEmails(overdueIds: string[]): Promise<void> {
+  if (overdueIds.length === 0) return;
+
+  try {
+    const rows = await db
+      .select({
+        memberEmail: tenantMembers.email,
+        memberFirstName: tenantMembers.firstName,
+        memberLastName: tenantMembers.lastName,
+        orgName: organizations.name,
+        amount: memberPayments.amount,
+        currency: memberPayments.currency,
+        periodLabel: memberPayments.periodLabel,
+        bankAccount: memberPayments.bankAccount,
+        variableSymbol: memberPayments.variableSymbol,
+        dueAt: memberPayments.dueAt,
+      })
+      .from(memberPayments)
+      .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+      .innerJoin(organizations, eq(memberPayments.orgId, organizations.id))
+      .where(inArray(memberPayments.id, overdueIds));
+
+    const resend = getResendClient();
+    const from = getResendFromEmail();
+
+    for (const row of rows) {
+      if (!row.memberEmail) continue;
+      const memberName =
+        [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || row.memberEmail;
+      try {
+        await resend.emails.send({
+          from,
+          to: [row.memberEmail],
+          subject: `Action required: membership fee overdue — ${row.periodLabel}`,
+          react: PaymentOverdueEmail({
+            organizationName: row.orgName,
+            memberName,
+            periodLabel: row.periodLabel,
+            amount: (row.amount / 100).toFixed(2),
+            currency: row.currency,
+            dueAt: row.dueAt.toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            }),
+            bankAccount: row.bankAccount,
+            variableSymbol: row.variableSymbol,
+          }),
+        });
+      } catch {
+        // Individual email failures must not abort the batch
+      }
+    }
+  } catch {
+    // Email sending is non-critical — lifecycle continues
+  }
+}
+
+export async function generatePaymentForMember(
+  memberId: string,
+  orgId: string,
+): Promise<{ created: boolean }> {
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  if (
+    !org ||
+    org.membershipManagementMode !== "periodic_renewal" ||
+    !org.membershipFeeEnabled ||
+    !org.membershipRenewalMonth ||
+    !org.membershipRenewalDay
+  ) {
+    return { created: false };
+  }
+
+  const today = new Date();
+  const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
+
+  const [groupFee] = await db
+    .select({
+      memberId: groupMemberships.memberId,
+      groupId: groupMemberships.groupId,
+      feeAmount: groups.feeAmount,
+      feeCurrency: groups.feeCurrency,
+      feeBankAccount: groups.feeBankAccount,
+      feePaymentWindowDays: groups.feePaymentWindowDays,
+      feeRenewalMonth: groups.feeRenewalMonth,
+      feeRenewalDay: groups.feeRenewalDay,
+    })
+    .from(groupMemberships)
+    .innerJoin(groups, eq(groupMemberships.groupId, groups.id))
+    .innerJoin(groupCategories, eq(groups.categoryId, groupCategories.id))
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        eq(groupMemberships.memberId, memberId),
+        eq(groupCategories.managesMembershipFees, true),
+        eq(groups.isActive, true),
+      ),
+    )
+    .orderBy(groupMemberships.createdAt)
+    .limit(1);
+
+  let payment: typeof memberPayments.$inferInsert;
+
+  if (groupFee?.feeAmount != null && groupFee.feeCurrency) {
+    const groupPeriodLabel =
+      groupFee.feeRenewalMonth && groupFee.feeRenewalDay
+        ? getPeriodLabel(groupFee.feeRenewalMonth, groupFee.feeRenewalDay, today)
+        : periodLabel;
+    const windowDays = groupFee.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
+    const dueAt = new Date(today);
+    dueAt.setDate(dueAt.getDate() + windowDays);
+
+    payment = {
+      id: randomUUID(),
+      orgId,
+      memberId,
+      type: "membership_fee",
+      status: "pending",
+      amount: groupFee.feeAmount,
+      currency: groupFee.feeCurrency,
+      bankAccount: groupFee.feeBankAccount,
+      periodLabel: groupPeriodLabel,
+      periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
+      variableSymbol: await generateVariableSymbol(orgId),
+      dueAt,
+      createdAt: today,
+      updatedAt: today,
+    };
+  } else {
+    if (!org.membershipFeeAmount || !org.membershipFeeCurrency) {
+      return { created: false };
+    }
+    const dueAt = new Date(today);
+    dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
+
+    payment = {
+      id: randomUUID(),
+      orgId,
+      memberId,
+      type: "membership_fee",
+      status: "pending",
+      amount: org.membershipFeeAmount,
+      currency: org.membershipFeeCurrency,
+      bankAccount: org.membershipFeeBankAccount,
+      periodLabel,
+      periodKey: `${periodLabel}:org:${orgId}`,
+      variableSymbol: await generateVariableSymbol(orgId),
+      dueAt,
+      createdAt: today,
+      updatedAt: today,
+    };
+  }
+
+  const inserted = await db
+    .insert(memberPayments)
+    .values(payment)
+    .onConflictDoNothing()
+    .returning({ id: memberPayments.id });
+
+  return { created: inserted.length > 0 };
+}
+
 export async function generateMembershipPayments(): Promise<GenerateResult> {
   const result: GenerateResult = {
     orgsProcessed: 0,
@@ -60,11 +238,15 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
 
   const today = new Date();
 
-  // First: mark overdue payments unconditionally
-  await db
+  // Mark overdue and collect IDs for notification emails
+  const nowOverdue = await db
     .update(memberPayments)
     .set({ status: "overdue", updatedAt: new Date() })
-    .where(and(eq(memberPayments.status, "pending"), lt(memberPayments.dueAt, today)));
+    .where(and(eq(memberPayments.status, "pending"), lt(memberPayments.dueAt, today)))
+    .returning({ id: memberPayments.id });
+
+  // Fire-and-forget overdue emails — don't block payment generation
+  void sendOverdueEmails(nowOverdue.map((r) => r.id));
 
   // Load orgs eligible for payment generation
   const eligibleOrgs = await db
@@ -143,17 +325,42 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
         }
       }
 
-      // Build payment records to insert
-      const paymentsToInsert = activeMembers.map((member) => {
-        const groupFee = memberGroupMap.get(member.id);
+      // Build payment records to insert — VS uniqueness checked per-org above
+      const paymentsToInsert = await Promise.all(
+        activeMembers.map(async (member) => {
+          const groupFee = memberGroupMap.get(member.id);
 
-        if (groupFee?.feeAmount != null && groupFee.feeCurrency) {
-          const groupPeriodLabel = groupFee.feeRenewalMonth && groupFee.feeRenewalDay
-            ? getPeriodLabel(groupFee.feeRenewalMonth, groupFee.feeRenewalDay, today)
-            : periodLabel;
-          const windowDays = groupFee.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
+          if (groupFee?.feeAmount != null && groupFee.feeCurrency) {
+            const groupPeriodLabel = groupFee.feeRenewalMonth && groupFee.feeRenewalDay
+              ? getPeriodLabel(groupFee.feeRenewalMonth, groupFee.feeRenewalDay, today)
+              : periodLabel;
+            const windowDays = groupFee.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
+            const dueAt = new Date(today);
+            dueAt.setDate(dueAt.getDate() + windowDays);
+
+            return {
+              id: randomUUID(),
+              orgId: org.id,
+              memberId: member.id,
+              type: "membership_fee" as const,
+              status: "pending" as const,
+              amount: groupFee.feeAmount,
+              currency: groupFee.feeCurrency,
+              bankAccount: groupFee.feeBankAccount,
+              periodLabel: groupPeriodLabel,
+              periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
+              variableSymbol: await generateVariableSymbol(org.id),
+              dueAt,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+
+          // Org-level fee
+          if (!org.membershipFeeAmount || !org.membershipFeeCurrency) return null;
+
           const dueAt = new Date(today);
-          dueAt.setDate(dueAt.getDate() + windowDays);
+          dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
 
           return {
             id: randomUUID(),
@@ -161,41 +368,18 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
             memberId: member.id,
             type: "membership_fee" as const,
             status: "pending" as const,
-            amount: groupFee.feeAmount,
-            currency: groupFee.feeCurrency,
-            bankAccount: groupFee.feeBankAccount,
-            periodLabel: groupPeriodLabel,
-            periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
-            variableSymbol: generateVariableSymbol(),
+            amount: org.membershipFeeAmount,
+            currency: org.membershipFeeCurrency,
+            bankAccount: org.membershipFeeBankAccount,
+            periodLabel,
+            periodKey: `${periodLabel}:org:${org.id}`,
+            variableSymbol: await generateVariableSymbol(org.id),
             dueAt,
             createdAt: new Date(),
             updatedAt: new Date(),
           };
-        }
-
-        // Org-level fee
-        if (!org.membershipFeeAmount || !org.membershipFeeCurrency) return null;
-
-        const dueAt = new Date(today);
-        dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
-
-        return {
-          id: randomUUID(),
-          orgId: org.id,
-          memberId: member.id,
-          type: "membership_fee" as const,
-          status: "pending" as const,
-          amount: org.membershipFeeAmount,
-          currency: org.membershipFeeCurrency,
-          bankAccount: org.membershipFeeBankAccount,
-          periodLabel,
-          periodKey: `${periodLabel}:org:${org.id}`,
-          variableSymbol: generateVariableSymbol(),
-          dueAt,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-      });
+        }),
+      );
 
       const validPayments = paymentsToInsert.filter((p) => p !== null);
 

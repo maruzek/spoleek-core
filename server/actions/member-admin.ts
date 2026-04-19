@@ -26,6 +26,7 @@ import {
   sendMemberActivationInvite,
 } from "@/server/lib/member-invites";
 import { softDeleteMembers } from "@/server/lib/member-lifecycle";
+import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import {
   WorkspaceApiError,
@@ -356,6 +357,8 @@ export const approveMemberAction = authActionClient
           ),
         );
 
+      await generatePaymentForMember(parsedInput.memberId, organization.id);
+
       await logMemberAuthEvent({
         orgId: organization.id,
         memberId: parsedInput.memberId,
@@ -396,6 +399,10 @@ export const approveMemberAction = authActionClient
           eq(tenantMembers.orgId, organization.id),
         ),
       );
+
+    if (nextStatus === "active") {
+      await generatePaymentForMember(parsedInput.memberId, organization.id);
+    }
 
     await logMemberAuthEvent({
       orgId: organization.id,

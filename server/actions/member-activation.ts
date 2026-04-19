@@ -20,6 +20,7 @@ import {
   upsertMemberCustomFieldAnswers,
   validateMemberCustomFieldAnswers,
 } from "@/server/lib/member-custom-field-values";
+import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import { getAppOrganization } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberById } from "@/server/queries/members";
@@ -135,6 +136,8 @@ export const completeMemberActivationAction = actionClient
     if (!result.success) {
       return result;
     }
+
+    await generatePaymentForMember(member.id, organization.id);
 
     await markMemberInviteCompleted({
       memberId: member.id,

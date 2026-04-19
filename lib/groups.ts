@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { parseBankAccount } from "@/lib/iban";
 import type {
   GroupCategorySelectionMode,
   GroupJoinPolicy,
@@ -125,7 +126,17 @@ export const groupSchema = z
       .default(null),
     feeAmount: z.union([z.number().int().min(0), z.null()]).default(null),
     feeCurrency: z.union([z.string().trim(), z.null()]).default(null),
-    feeBankAccount: nullableTrimmedString,
+    feeBankAccount: z
+      .union([z.string(), z.null(), z.undefined()])
+      .transform((value) => {
+        const trimmed = typeof value === "string" ? value.trim() : "";
+        if (!trimmed) return null;
+        try {
+          return parseBankAccount(trimmed);
+        } catch {
+          return trimmed;
+        }
+      }),
   })
   .superRefine((value, ctx) => {
     if (
@@ -166,12 +177,13 @@ export const groupSchema = z
     }
 
     if (value.feeBankAccount != null) {
-      const iban = value.feeBankAccount.replace(/\s/g, "").toUpperCase();
-      if (!/^[A-Z]{2}\d{2}[A-Z0-9]{4,30}$/.test(iban)) {
+      try {
+        parseBankAccount(value.feeBankAccount);
+      } catch (e) {
         ctx.addIssue({
           code: "custom",
           path: ["feeBankAccount"],
-          message: "Enter a valid IBAN.",
+          message: e instanceof Error ? e.message : "Invalid bank account.",
         });
       }
     }

@@ -11,9 +11,11 @@ export default async function PortalPaymentsPage() {
   });
 
   const payments = await listPaymentsForMember(organization.id, member.id);
-  const pendingPayments = payments.filter(
-    (p) => p.status === "pending" || p.status === "overdue",
-  );
+
+  // Overdue shown first so urgent items are immediately visible
+  const overduePayments = payments.filter((p) => p.status === "overdue");
+  const pendingPayments = payments.filter((p) => p.status === "pending");
+  const activePendingPayments = [...overduePayments, ...pendingPayments];
   const historicalPayments = payments.filter(
     (p) => p.status === "paid" || p.status === "cancelled",
   );
@@ -24,15 +26,31 @@ export default async function PortalPaymentsPage() {
       title="Your payments."
       description="Membership fee payment details and payment instructions."
     >
-      {pendingPayments.length === 0 && historicalPayments.length === 0 ? (
+      {activePendingPayments.length === 0 && historicalPayments.length === 0 ? (
         <AppPlaceholder
           title="No payments yet"
           description="Payment records will appear here when your membership fee is due."
         />
       ) : null}
 
-      {pendingPayments.length > 0 ? (
+      {overduePayments.length > 0 ? (
         <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-bold tracking-tight text-destructive">Overdue payments</h2>
+            <p className="text-sm text-muted-foreground">
+              These payments are past their due date. Please settle them as soon as possible.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {overduePayments.map((payment) => (
+              <PaymentQrCard key={payment.id} payment={payment} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {pendingPayments.length > 0 ? (
+        <div className={overduePayments.length > 0 ? "mt-8 flex flex-col gap-6" : "flex flex-col gap-6"}>
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-bold tracking-tight">Pending payments</h2>
             <p className="text-sm text-muted-foreground">

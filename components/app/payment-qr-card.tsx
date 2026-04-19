@@ -1,28 +1,42 @@
 "use client";
 
+import { useState } from "react";
 import QRCode from "react-qr-code";
+import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
+import { formatIban } from "@/lib/iban";
 import { buildSpdString, getPaymentTitle } from "@/lib/payments";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { cn } from "@/lib/utils";
 import type { MemberPayment } from "@/server/db/schema";
 
-function formatIban(iban: string) {
-  return iban.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
-}
-
 export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
   const { member } = useAppShell();
-  const memberName =
-    member
-      ? [member.firstName, member.lastName].filter(Boolean).join(" ") || undefined
-      : undefined;
+  const [copied, setCopied] = useState(false);
+
+  const memberName = member
+    ? [member.firstName, member.lastName].filter(Boolean).join(" ") || undefined
+    : undefined;
 
   const spdString = buildSpdString(payment, memberName);
   const isOverdue = payment.status === "overdue";
   const isPending = payment.status === "pending";
+
+  // todo: remove handleCopy, implement the general copy button, use DropdownMenu for multiple data fields
+  function handleCopy() {
+    const parts = [
+      payment.bankAccount ? `IBAN: ${payment.bankAccount}` : null,
+      payment.variableSymbol ? `VS: ${payment.variableSymbol}` : null,
+      `Amount: ${(payment.amount / 100).toFixed(2)} ${payment.currency}`,
+    ].filter(Boolean);
+    navigator.clipboard.writeText(parts.join(" | ")).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   return (
     <div
@@ -43,14 +57,17 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
       <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-3">
         <div className="flex flex-col gap-0.5">
           <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            {payment.type === "membership_fee" ? "Membership fee" : "Event fee"} · {payment.periodLabel}
+            {payment.type === "membership_fee" ? "Membership fee" : "Event fee"}{" "}
+            · {payment.periodLabel}
           </p>
           <h2 className="font-heading text-lg font-medium leading-tight text-foreground">
             {getPaymentTitle(payment.type, payment.periodLabel)}
           </h2>
         </div>
         <Badge
-          variant={isOverdue ? "destructive" : isPending ? "secondary" : "outline"}
+          variant={
+            isOverdue ? "destructive" : isPending ? "secondary" : "outline"
+          }
           className="mt-0.5 shrink-0 capitalize"
         >
           {payment.status}
@@ -58,18 +75,22 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
       </div>
 
       {/* Amount */}
-      <div className={cn(
-        "mx-5 rounded-xl px-4 py-3",
-        isOverdue ? "bg-destructive/5" : "bg-primary/5",
-      )}>
+      <div
+        className={cn(
+          "mx-5 rounded-xl px-4 py-3",
+          isOverdue ? "bg-destructive/5" : "bg-primary/5",
+        )}
+      >
         <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
           Amount due
         </p>
         <div className="flex items-baseline gap-2">
-          <span className={cn(
-            "font-heading text-3xl font-medium tabular-nums tracking-tight",
-            isOverdue ? "text-destructive" : "text-foreground",
-          )}>
+          <span
+            className={cn(
+              "font-heading text-3xl font-medium tabular-nums tracking-tight",
+              isOverdue ? "text-destructive" : "text-foreground",
+            )}
+          >
             {(payment.amount / 100).toLocaleString("cs-CZ", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
@@ -80,7 +101,7 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
           </span>
         </div>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-          {isOverdue ? "⚠ Overdue since" : "Due by"}{" "}
+          {isOverdue ? `${(<TriangleAlertIcon />)} Overdue since` : "Due by"}{" "}
           <span className={cn("font-medium", isOverdue && "text-destructive")}>
             {formatDateTime(payment.dueAt)}
           </span>
@@ -134,17 +155,33 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
             <div className="w-full border-t border-dashed border-foreground/15" />
           </div>
 
-          <div className="flex items-center gap-4 px-5 pb-5">
+          <div className="flex items-center gap-4 px-5 pb-4">
             <div className="rounded-xl border border-foreground/8 bg-white p-3 shadow-sm">
               <QRCode value={spdString} size={112} />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
                 Scan to pay
               </p>
               <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
                 Open your banking app and scan this code to complete the payment
               </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1 w-fit"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <CheckIcon
+                    data-icon="inline-start"
+                    className="text-green-600"
+                  />
+                ) : (
+                  <CopyIcon data-icon="inline-start" />
+                )}
+                {copied ? "Copied!" : "Copy details"}
+              </Button>
             </div>
           </div>
         </>

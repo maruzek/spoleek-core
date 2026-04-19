@@ -744,6 +744,11 @@ export const memberPayments = pgTable(
     variableSymbol: text("variable_symbol"),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
+    confirmedByUserId: text("confirmed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    adminNote: text("admin_note"),
+    cancellationReason: text("cancellation_reason"),
     notes: text("notes"),
     ...timestamps,
   },
@@ -755,6 +760,8 @@ export const memberPayments = pgTable(
       table.memberId,
       table.periodKey,
     ),
+    orgVsIdx: index("member_payments_org_vs_idx").on(table.orgId, table.variableSymbol),
+    memberStatusIdx: index("member_payments_member_status_idx").on(table.memberId, table.status),
   }),
 );
 
