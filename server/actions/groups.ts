@@ -123,6 +123,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
             showInRegistration: parsedInput.showInRegistration,
             showInMembersTable: parsedInput.showInMembersTable,
             groupAdminsManageMembers: parsedInput.groupAdminsManageMembers,
+            managesMembershipFees: parsedInput.managesMembershipFees,
             selectionMode: parsedInput.selectionMode,
             selectionRequired: parsedInput.selectionRequired,
             maxSelections: parsedInput.maxSelections,
@@ -169,6 +170,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
           showInRegistration: parsedInput.showInRegistration,
           showInMembersTable: parsedInput.showInMembersTable,
           groupAdminsManageMembers: parsedInput.groupAdminsManageMembers,
+          managesMembershipFees: parsedInput.managesMembershipFees,
           selectionMode: parsedInput.selectionMode,
           selectionRequired: parsedInput.selectionRequired,
           maxSelections: parsedInput.maxSelections,
@@ -215,10 +217,30 @@ export const saveGroupAction = authActionClient
       });
     }
 
-    if (parsedInput.id) {
-      const existing = await getGroupById(organization.id, parsedInput.id);
+    const categoryId = parsedInput.id
+      ? (await getGroupById(organization.id, parsedInput.id))?.categoryId ?? parsedInput.categoryId
+      : parsedInput.categoryId;
+    const category = await getGroupCategoryById(organization.id, categoryId);
+    const categoryManagesFees = category?.managesMembershipFees === true;
 
-      if (!existing) {
+    const feeFields = categoryManagesFees
+      ? {
+          feeRenewalMonth: parsedInput.feeRenewalMonth,
+          feeRenewalDay: parsedInput.feeRenewalDay,
+          feeAmount: parsedInput.feeAmount,
+          feeCurrency: parsedInput.feeCurrency,
+          feeBankAccount: parsedInput.feeBankAccount,
+        }
+      : {
+          feeRenewalMonth: null,
+          feeRenewalDay: null,
+          feeAmount: null,
+          feeCurrency: null,
+          feeBankAccount: null,
+        };
+
+    if (parsedInput.id) {
+      if (!category) {
         throw new Error("The selected group could not be found.");
       }
 
@@ -233,13 +255,12 @@ export const saveGroupAction = authActionClient
           joinPolicy: parsedInput.joinPolicy,
           isActive: parsedInput.isActive,
           sortOrder: parsedInput.sortOrder,
+          ...feeFields,
           updatedAt: new Date(),
         })
         .where(and(eq(groups.id, parsedInput.id), eq(groups.orgId, organization.id)));
     } else {
       await requireCategoryManagementAccess(parsedInput.categoryId);
-
-      const category = await getGroupCategoryById(organization.id, parsedInput.categoryId);
 
       if (!category) {
         throw new Error("The selected category could not be found.");
@@ -255,6 +276,7 @@ export const saveGroupAction = authActionClient
         joinPolicy: parsedInput.joinPolicy,
         isActive: parsedInput.isActive,
         sortOrder: parsedInput.sortOrder,
+        ...feeFields,
       });
     }
 

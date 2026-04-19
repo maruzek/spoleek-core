@@ -120,6 +120,13 @@
       "when": 1776548191921,
       "tag": "0016_robust_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1776582096108,
+      "tag": "0017_light_maverick",
+      "breakpoints": true
     }
   ]
 }

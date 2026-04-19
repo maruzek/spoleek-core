@@ -35,6 +35,11 @@ export default async function AdminSettingsPage() {
                 <Link href="/admin/settings/join">Manage join page</Link>
               </Button>
               <Button asChild variant="outline">
+                <Link href="/admin/settings/membership">
+                  Manage membership
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href="/admin/settings/workspace">
                   Manage Google Workspace
                 </Link>

@@ -44,8 +44,16 @@ type CategoryDetailProps = {
     selectionRequired: boolean;
     maxSelections: number | null;
     defaultJoinPolicy: "admin_only" | "free_join_leave" | "request_to_join";
+    managesMembershipFees: boolean;
     sortOrder: number;
     updatedAt: Date;
+  };
+  orgFeeDefaults?: {
+    renewalMonth: number | null;
+    renewalDay: number | null;
+    feeAmount: number | null;
+    feeCurrency: string;
+    feeBankAccount: string | null;
   };
   groups: Array<{
     id: string;
@@ -97,6 +105,7 @@ export function GroupCategoryDetail({
   assignableMembers,
   canManageCategoryAdmins,
   canCreateGroups,
+  orgFeeDefaults,
 }: CategoryDetailProps) {
   const router = useRouter();
   const [groupSheetState, setGroupSheetState] = useState<{
@@ -343,6 +352,8 @@ export function GroupCategoryDetail({
         group={groupSheetState.group}
         isPending={saveGroup.isPending}
         validationErrors={saveGroup.result.validationErrors}
+        categoryManagesFees={category.managesMembershipFees}
+        orgFeeDefaults={orgFeeDefaults}
         onOpenChange={(open) => setGroupSheetState((current) => ({ ...current, open }))}
         onSubmit={async (value: GroupFormValues) => {
           const result = await saveGroup.executeAsync(value);

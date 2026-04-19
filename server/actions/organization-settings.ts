@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { joinPageSettingsSchema } from "@/lib/join";
+import { membershipSettingsSchema } from "@/lib/membership";
 import { decryptSecret } from "@/lib/crypto";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
@@ -109,6 +110,44 @@ export const saveWorkspaceSettingsAction = orgAdminActionClient
           parsedInput.emailTemplate?.trim() ||
           organization.workspaceEmailTemplate ||
           DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, organization.id));
+
+    return { success: true };
+  });
+
+export const saveMembershipSettingsAction = orgAdminActionClient
+  .metadata({ actionName: "saveMembershipSettings" })
+  .inputSchema(membershipSettingsSchema)
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    const isPeriodicRenewal =
+      parsedInput.membershipManagementMode === "periodic_renewal";
+
+    await db
+      .update(organizations)
+      .set({
+        membershipManagementMode: parsedInput.membershipManagementMode,
+        membershipRenewalMonth: isPeriodicRenewal
+          ? parsedInput.membershipRenewalMonth
+          : null,
+        membershipRenewalDay: isPeriodicRenewal
+          ? parsedInput.membershipRenewalDay
+          : null,
+        membershipFeeEnabled: isPeriodicRenewal
+          ? parsedInput.membershipFeeEnabled
+          : false,
+        membershipFeeAmount:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipFeeAmount
+            : null,
+        membershipFeeCurrency: parsedInput.membershipFeeCurrency,
+        membershipFeeBankAccount:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipFeeBankAccount
+            : null,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

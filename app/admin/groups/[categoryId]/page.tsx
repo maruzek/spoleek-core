@@ -7,6 +7,7 @@ import {
   listScopedGroupIds,
   requireCategoryOverviewAccess,
 } from "@/server/queries/access";
+import { getAppOrganization } from "@/server/queries/app";
 import { getCategoryDetailData } from "@/server/queries/groups";
 
 export default async function AdminGroupCategoryPage({
@@ -32,17 +33,26 @@ export default async function AdminGroupCategoryPage({
     hasFullCategoryVisibility ||
     scopedCategoryIds?.includes(categoryId) === true;
 
-  const detail = await getCategoryDetailData(
-    access.organization.id,
-    categoryId,
-    {
+  const [detail, organization] = await Promise.all([
+    getCategoryDetailData(access.organization.id, categoryId, {
       visibleGroupIds: canManageEntireCategory ? null : scopedGroupIds,
-    },
-  );
+    }),
+    getAppOrganization(),
+  ]);
 
   if (!detail) {
     notFound();
   }
+
+  const orgFeeDefaults = organization
+    ? {
+        renewalMonth: organization.membershipRenewalMonth,
+        renewalDay: organization.membershipRenewalDay,
+        feeAmount: organization.membershipFeeAmount,
+        feeCurrency: organization.membershipFeeCurrency,
+        feeBankAccount: organization.membershipFeeBankAccount,
+      }
+    : undefined;
 
   return (
     <AppPage eyebrow="Groups" title={detail.category.name}>
@@ -53,6 +63,7 @@ export default async function AdminGroupCategoryPage({
         assignableMembers={detail.assignableMembers}
         canCreateGroups={canManageEntireCategory}
         canManageCategoryAdmins={access.adminAccessLevel === "full"}
+        orgFeeDefaults={orgFeeDefaults}
       />
     </AppPage>
   );

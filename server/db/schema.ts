@@ -130,6 +130,11 @@ export const groupMembershipRoleEnum = pgEnum("group_membership_role", [
   "group_admin",
 ]);
 
+export const membershipManagementModeEnum = pgEnum("membership_management_mode", [
+  "none",
+  "periodic_renewal",
+]);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -243,6 +248,15 @@ export const organizations = pgTable(
       withTimezone: true,
     }),
     workspaceAdminEmail: text("workspace_admin_email"),
+    membershipManagementMode: membershipManagementModeEnum("membership_management_mode")
+      .notNull()
+      .default("none"),
+    membershipRenewalMonth: integer("membership_renewal_month"),
+    membershipRenewalDay: integer("membership_renewal_day"),
+    membershipFeeEnabled: boolean("membership_fee_enabled").notNull().default(false),
+    membershipFeeAmount: integer("membership_fee_amount"),
+    membershipFeeCurrency: text("membership_fee_currency").notNull().default("CZK"),
+    membershipFeeBankAccount: text("membership_fee_bank_account"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -332,6 +346,9 @@ export const groupCategories = pgTable(
     groupAdminsManageMembers: boolean("group_admins_manage_members")
       .notNull()
       .default(false),
+    managesMembershipFees: boolean("manages_membership_fees")
+      .notNull()
+      .default(false),
     selectionMode: groupCategorySelectionModeEnum("selection_mode")
       .notNull()
       .default("multiple"),
@@ -367,6 +384,11 @@ export const groups = pgTable(
     joinPolicy: groupJoinPolicyEnum("join_policy").notNull().default("admin_only"),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
+    feeRenewalMonth: integer("fee_renewal_month"),
+    feeRenewalDay: integer("fee_renewal_day"),
+    feeAmount: integer("fee_amount"),
+    feeCurrency: text("fee_currency"),
+    feeBankAccount: text("fee_bank_account"),
     ...timestamps,
   },
   (table) => ({
@@ -726,6 +748,7 @@ export type GroupCategorySelectionMode =
   typeof groupCategorySelectionModeEnum.enumValues[number];
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
+export type MembershipManagementMode = typeof membershipManagementModeEnum.enumValues[number];
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;

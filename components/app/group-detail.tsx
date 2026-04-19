@@ -8,7 +8,7 @@ import { useAction } from "next-safe-action/hooks";
 import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import { GroupForm } from "@/components/app/group-form";
+import { GroupForm, type OrgFeeDefaults } from "@/components/app/group-form";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { formatDateTime } from "@/lib/format";
@@ -55,11 +55,18 @@ type GroupDetailProps = {
     joinPolicy: "admin_only" | "free_join_leave" | "request_to_join";
     isActive: boolean;
     sortOrder: number;
+    feeRenewalMonth: number | null;
+    feeRenewalDay: number | null;
+    feeAmount: number | null;
+    feeCurrency: string | null;
+    feeBankAccount: string | null;
     createdAt: Date;
     updatedAt: Date;
     categoryName: string;
     categorySlug: string;
+    categoryManagesFees: boolean;
   };
+  orgFeeDefaults?: OrgFeeDefaults;
   members: Array<{
     membershipId: string;
     memberId: string;
@@ -120,6 +127,7 @@ export function GroupDetail({
   members,
   admins,
   assignableMembers,
+  orgFeeDefaults,
 }: GroupDetailProps) {
   const router = useRouter();
   const [memberSheetOpen, setMemberSheetOpen] = useState(false);
@@ -430,6 +438,8 @@ export function GroupDetail({
                 group={group}
                 isPending={saveGroup.isPending}
                 validationErrors={saveGroup.result.validationErrors}
+                categoryManagesFees={group.categoryManagesFees}
+                orgFeeDefaults={orgFeeDefaults}
                 submitLabel="Save group"
                 onSubmit={async (value: GroupFormValues) => {
                   const result = await saveGroup.executeAsync(value);

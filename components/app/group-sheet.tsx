@@ -1,6 +1,7 @@
 "use client";
 
 import type { GroupFormValues } from "@/lib/groups";
+import type { OrgFeeDefaults } from "@/components/app/group-form";
 import {
   Sheet,
   SheetContent,
@@ -16,6 +17,8 @@ export function GroupSheet({
   group,
   isPending,
   validationErrors,
+  categoryManagesFees,
+  orgFeeDefaults,
   onOpenChange,
   onSubmit,
 }: {
@@ -24,6 +27,8 @@ export function GroupSheet({
   group?: Partial<GroupFormValues> | null;
   isPending: boolean;
   validationErrors?: GroupValidationErrors;
+  categoryManagesFees?: boolean;
+  orgFeeDefaults?: OrgFeeDefaults;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: GroupFormValues) => Promise<void>;
 }) {
@@ -44,6 +49,8 @@ export function GroupSheet({
             group={group}
             isPending={isPending}
             validationErrors={validationErrors}
+            categoryManagesFees={categoryManagesFees}
+            orgFeeDefaults={orgFeeDefaults}
             onCancel={() => onOpenChange(false)}
             onSubmit={onSubmit}
           />

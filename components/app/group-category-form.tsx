@@ -8,6 +8,7 @@ import {
   groupJoinPolicyOptions,
   type GroupCategoryFormValues,
 } from "@/lib/groups";
+import type { MembershipManagementMode } from "@/server/db/schema";
 import { slugify } from "@/lib/slugify";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ function toDefaultValues(
     showInRegistration: category?.showInRegistration ?? false,
     showInMembersTable: category?.showInMembersTable ?? false,
     groupAdminsManageMembers: category?.groupAdminsManageMembers ?? false,
+    managesMembershipFees: category?.managesMembershipFees ?? false,
     selectionMode: category?.selectionMode ?? "multiple",
     selectionRequired: category?.selectionRequired ?? false,
     maxSelections: category?.maxSelections ?? null,
@@ -64,6 +66,7 @@ export function GroupCategoryForm({
   category,
   isPending,
   validationErrors,
+  orgMembershipMode,
   onSubmit,
   onCancel,
   submitLabel,
@@ -72,6 +75,7 @@ export function GroupCategoryForm({
   category?: Partial<GroupCategoryFormValues> | null;
   isPending: boolean;
   validationErrors?: GroupCategoryValidationErrors;
+  orgMembershipMode?: MembershipManagementMode;
   onSubmit: (value: GroupCategoryFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -467,6 +471,20 @@ export function GroupCategoryForm({
               />
             )}
           </form.Field>
+
+          {orgMembershipMode === "periodic_renewal" ? (
+            <form.Field name="managesMembershipFees">
+              {(formField) => (
+                <SwitchChoiceField
+                  id="group-category-manages-membership-fees"
+                  title="Manages membership fees"
+                  description="Groups in this category can override the org-wide fee defaults (renewal date, amount, bank account)."
+                  checked={formField.state.value}
+                  onCheckedChange={formField.handleChange}
+                />
+              )}
+            </form.Field>
+          ) : null}
 
           <form.Field name="isPinnedToNavigation">
             {(formField) => (

@@ -39,7 +39,8 @@ export const groupJoinPolicyOptions: Array<{
   {
     value: "request_to_join",
     label: "Request to join",
-    description: "Request workflows will come later, but the policy can be stored now.",
+    description:
+      "Request workflows will come later, but the policy can be stored now.",
   },
 ];
 
@@ -72,6 +73,7 @@ export const groupCategorySchema = z
     showInRegistration: z.boolean().default(false),
     showInMembersTable: z.boolean().default(false),
     groupAdminsManageMembers: z.boolean().default(false),
+    managesMembershipFees: z.boolean().default(false),
     selectionMode: z.enum(["single", "multiple"]).default("multiple"),
     selectionRequired: z.boolean().default(false),
     maxSelections: z.union([z.number().int().min(1), z.null()]).default(null),
@@ -81,7 +83,11 @@ export const groupCategorySchema = z
     sortOrder: z.number().int().min(0).default(0),
   })
   .superRefine((value, ctx) => {
-    if (value.selectionMode === "single" && value.maxSelections !== null && value.maxSelections !== 1) {
+    if (
+      value.selectionMode === "single" &&
+      value.maxSelections !== null &&
+      value.maxSelections !== 1
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["maxSelections"],
@@ -93,39 +99,99 @@ export const groupCategorySchema = z
       ctx.addIssue({
         code: "custom",
         path: ["registrationFieldLabel"],
-        message: "Add the singular label applicants should see on the join form.",
+        message:
+          "Add the singular label applicants should see on the join form.",
       });
     }
   });
 
-export const groupSchema = z.object({
-  id: z.string().uuid().optional(),
-  categoryId: z.string().uuid(),
-  name: z.string().trim().min(2, "Name is required."),
-  slug: slugSchema,
-  description: nullableTrimmedString,
-  joinPolicy: z
-    .enum(["admin_only", "free_join_leave", "request_to_join"])
-    .default("admin_only"),
-  isActive: z.boolean().default(true),
-  sortOrder: z.number().int().min(0).default(0),
-});
+export const groupSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    categoryId: z.string().uuid(),
+    name: z.string().trim().min(2, "Name is required."),
+    slug: slugSchema,
+    description: nullableTrimmedString,
+    joinPolicy: z
+      .enum(["admin_only", "free_join_leave", "request_to_join"])
+      .default("admin_only"),
+    isActive: z.boolean().default(true),
+    sortOrder: z.number().int().min(0).default(0),
+    feeRenewalMonth: z
+      .union([z.number().int().min(1).max(12), z.null()])
+      .default(null),
+    feeRenewalDay: z
+      .union([z.number().int().min(1).max(31), z.null()])
+      .default(null),
+    feeAmount: z.union([z.number().int().min(0), z.null()]).default(null),
+    feeCurrency: z.union([z.string().trim(), z.null()]).default(null),
+    feeBankAccount: nullableTrimmedString,
+  })
+  .superRefine((value, ctx) => {
+    if (
+      (value.feeRenewalMonth != null && value.feeRenewalDay == null) ||
+      (value.feeRenewalMonth == null && value.feeRenewalDay != null)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: [
+          value.feeRenewalMonth == null ? "feeRenewalMonth" : "feeRenewalDay",
+        ],
+        message: "Both renewal month and day must be set together.",
+      });
+    }
+
+    if (value.feeRenewalMonth != null && value.feeRenewalDay != null) {
+      const maxDays: Record<number, number> = {
+        1: 31,
+        2: 29,
+        3: 31,
+        4: 30,
+        5: 31,
+        6: 30,
+        7: 31,
+        8: 31,
+        9: 30,
+        10: 31,
+        11: 30,
+        12: 31,
+      };
+      if (value.feeRenewalDay > (maxDays[value.feeRenewalMonth] ?? 31)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["feeRenewalDay"],
+          message: `Day ${value.feeRenewalDay} is not valid for month ${value.feeRenewalMonth}.`,
+        });
+      }
+    }
+
+    if (value.feeBankAccount != null) {
+      const iban = value.feeBankAccount.replace(/\s/g, "").toUpperCase();
+      if (!/^[A-Z]{2}\d{2}[A-Z0-9]{4,30}$/.test(iban)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["feeBankAccount"],
+          message: "Enter a valid IBAN.",
+        });
+      }
+    }
+  });
 
 export const assignCategoryAdminSchema = z.object({
-  categoryId: z.string().uuid(),
-  memberId: z.string().uuid(),
+  categoryId: z.uuid(),
+  memberId: z.uuid(),
 });
 
 export const removeCategoryAdminSchema = assignCategoryAdminSchema;
 
 export const assignGroupMemberSchema = z.object({
-  groupId: z.string().uuid(),
-  memberId: z.string().uuid(),
+  groupId: z.uuid(),
+  memberId: z.uuid(),
 });
 
 export const assignGroupMembersSchema = z.object({
-  groupId: z.string().uuid(),
-  memberIds: z.array(z.string().uuid()).min(1, "Select at least one member."),
+  groupId: z.uuid(),
+  memberIds: z.array(z.uuid()).min(1, "Select at least one member."),
 });
 
 export const removeGroupMemberSchema = assignGroupMemberSchema;
