@@ -6,7 +6,9 @@ import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 import {
+  Building2Icon,
   CheckIcon,
+  ChevronDownIcon,
   CircleAlertIcon,
   CloudCogIcon,
   DatabaseZapIcon,
@@ -26,9 +28,13 @@ import {
 import {
   emailAdminSchema,
   type EmailAdminValues,
-  organizationBootstrapSchema,
-  type OrganizationBootstrapValues,
+  organizationBootstrapWithMembershipSchema,
+  type OrganizationBootstrapWithMembershipValues,
 } from "@/lib/bootstrap/setup-schemas";
+import {
+  feeCurrencyOptions,
+  membershipManagementModeOptions,
+} from "@/lib/membership";
 import { authClient } from "@/lib/auth/client";
 import { slugify } from "@/lib/slugify";
 import {
@@ -69,7 +75,20 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CopyButton } from "../ui/code-block/copy-button";
 
@@ -78,6 +97,7 @@ type SetupWizardProps = {
   state: {
     deploymentTrack?: SetupDeploymentTrack;
     authStrategy?: SetupAuthStrategy;
+    workspaceModuleEnabled?: boolean;
     adminEmail?: string;
   };
   envReadiness: {
@@ -107,7 +127,7 @@ type SetupWizardProps = {
 
 type SetupIntentValues = {
   deploymentTrack: SetupDeploymentTrack | "";
-  authStrategy: SetupAuthStrategy | "";
+  authStrategy: SetupAuthStrategy | "google-workspace" | "";
 };
 
 type SafeFieldErrors<T extends Record<string, unknown>> = Partial<
@@ -139,7 +159,7 @@ const deploymentOptions: Array<{
 ];
 
 const authOptions: Array<{
-  value: SetupAuthStrategy;
+  value: SetupAuthStrategy | "google-workspace";
   title: string;
   description: string;
 }> = [
@@ -160,6 +180,12 @@ const authOptions: Array<{
     title: "Google-first",
     description:
       "Use Google during bootstrap and make it the primary setup flow.",
+  },
+  {
+    value: "google-workspace",
+    title: "Google Workspace",
+    description:
+      "Use Google as the only sign-in method and enable the Workspace module for domain-based member provisioning. Full OAuth connection happens after setup.",
   },
 ];
 
@@ -238,7 +264,7 @@ export function SetupWizard({
     SafeFieldErrors<EmailAdminValues>
   >({});
   const [organizationServerFieldErrors, setOrganizationServerFieldErrors] =
-    useState<SafeFieldErrors<OrganizationBootstrapValues>>({});
+    useState<SafeFieldErrors<OrganizationBootstrapWithMembershipValues>>({});
 
   const saveIntent = useAction(saveSetupIntentAction, {
     onSuccess() {
@@ -279,8 +305,16 @@ export function SetupWizard({
 
   const intentForm = useForm({
     defaultValues: {
-      deploymentTrack: state.deploymentTrack ?? "",
-      authStrategy: state.authStrategy ?? "",
+      deploymentTrack: (state.deploymentTrack ?? "") as
+        | SetupDeploymentTrack
+        | "",
+      authStrategy: (state.workspaceModuleEnabled &&
+      state.authStrategy === "google-first"
+        ? "google-workspace"
+        : (state.authStrategy ?? "")) as
+        | SetupAuthStrategy
+        | "google-workspace"
+        | "",
     } satisfies SetupIntentValues,
     onSubmitInvalid() {
       toast.error("Choose both a deployment track and auth strategy.");
@@ -290,7 +324,9 @@ export function SetupWizard({
 
       const result = await saveIntent.executeAsync({
         deploymentTrack: value.deploymentTrack as SetupDeploymentTrack,
-        authStrategy: value.authStrategy as SetupAuthStrategy,
+        authStrategy: value.authStrategy as
+          | SetupAuthStrategy
+          | "google-workspace",
       });
 
       if (result?.serverError) {
@@ -342,7 +378,15 @@ export function SetupWizard({
       legalName: "",
       primaryEmail: state.adminEmail ?? viewer?.email ?? "",
       website: "",
-    } satisfies OrganizationBootstrapValues,
+      membershipManagementMode: "none" as "none" | "periodic_renewal",
+      membershipRenewalMonth: null as number | null,
+      membershipRenewalDay: null as number | null,
+      membershipFeeEnabled: false as boolean,
+      membershipFeeAmount: null as number | null,
+      membershipFeeCurrency: "CZK" as string,
+      membershipFeeBankAccount: null as string | null,
+      membershipFeePaymentWindowDays: 30 as number,
+    } as OrganizationBootstrapWithMembershipValues,
     onSubmitInvalid() {
       toast.error("Fix the highlighted organization fields.");
     },
@@ -359,6 +403,16 @@ export function SetupWizard({
           legalName: result.validationErrors.legalName?._errors,
           primaryEmail: result.validationErrors.primaryEmail?._errors,
           website: result.validationErrors.website?._errors,
+          membershipManagementMode:
+            result.validationErrors.membershipManagementMode?._errors,
+          membershipRenewalMonth:
+            result.validationErrors.membershipRenewalMonth?._errors,
+          membershipRenewalDay:
+            result.validationErrors.membershipRenewalDay?._errors,
+          membershipFeeAmount:
+            result.validationErrors.membershipFeeAmount?._errors,
+          membershipFeeBankAccount:
+            result.validationErrors.membershipFeeBankAccount?._errors,
         });
         toast.error("Organization form still has validation issues.");
         return;
@@ -392,16 +446,17 @@ export function SetupWizard({
   }
 
   function clearOrganizationFieldError(
-    field: keyof OrganizationBootstrapValues,
+    field: keyof OrganizationBootstrapWithMembershipValues | string,
   ) {
     setOrganizationFormError(null);
     setOrganizationServerFieldErrors((current) => {
-      if (!current[field]) {
+      const key = field as keyof OrganizationBootstrapWithMembershipValues;
+      if (!current[key]) {
         return current;
       }
 
       const next = { ...current };
-      delete next[field];
+      delete next[key];
       return next;
     });
   }
@@ -494,10 +549,15 @@ export function SetupWizard({
                       {step === "intent" &&
                       state.deploymentTrack &&
                       state.authStrategy ? (
-                        <p className="mt-2 text-sm text-muted-foreground">
-                          {deploymentTrackLabels[state.deploymentTrack]} +{" "}
-                          {authStrategyLabels[state.authStrategy]}
-                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-sm text-muted-foreground">
+                            {deploymentTrackLabels[state.deploymentTrack]} +{" "}
+                            {authStrategyLabels[state.authStrategy]}
+                          </p>
+                          {state.workspaceModuleEnabled ? (
+                            <Badge variant="secondary">+ Workspace</Badge>
+                          ) : null}
+                        </div>
                       ) : null}
                       {step === "admin" && state.adminEmail ? (
                         <p className="mt-2 text-sm text-muted-foreground">
@@ -586,7 +646,7 @@ export function SetupWizard({
                                       key={option.value}
                                       value={option.value}
                                       variant="outline"
-                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left"
+                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
                                     >
                                       <div className="flex flex-col gap-1">
                                         <span className="font-medium">
@@ -643,7 +703,10 @@ export function SetupWizard({
                                   onValueChange={(value) => {
                                     setIntentError(null);
                                     field.handleChange(
-                                      (value as SetupAuthStrategy | "") || "",
+                                      (value as
+                                        | SetupAuthStrategy
+                                        | "google-workspace"
+                                        | "") || "",
                                     );
                                   }}
                                   aria-invalid={showErrors && errors.length > 0}
@@ -653,7 +716,7 @@ export function SetupWizard({
                                       key={option.value}
                                       value={option.value}
                                       variant="outline"
-                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left"
+                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
                                     >
                                       <div className="flex flex-col gap-1">
                                         <span className="font-medium">
@@ -694,7 +757,7 @@ export function SetupWizard({
                     onClick={() => void intentForm.handleSubmit()}
                     disabled={saveIntent.isPending}
                   >
-                    Continue to env guidance
+                    Save and continue
                   </Button>
                 </CardFooter>
               </Card>
@@ -1191,6 +1254,21 @@ export function SetupWizard({
                     </AlertDescription>
                   </Alert>
 
+                  {state.workspaceModuleEnabled ? (
+                    <Alert>
+                      <Building2Icon />
+                      <AlertTitle>
+                        Google Workspace module will be enabled
+                      </AlertTitle>
+                      <AlertDescription>
+                        Your auth strategy is set to Google-first. The Workspace
+                        module will be activated on this organization. Configure
+                        your workspace domain and connect your Google admin
+                        account in administration after setup.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+
                   <form
                     className="flex flex-col gap-4"
                     onSubmit={(event) => {
@@ -1206,13 +1284,13 @@ export function SetupWizard({
                           validators={{
                             onBlur: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape
+                                organizationBootstrapWithMembershipSchema.shape
                                   .organizationName,
                                 value,
                               ),
                             onSubmit: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape
+                                organizationBootstrapWithMembershipSchema.shape
                                   .organizationName,
                                 value,
                               ),
@@ -1270,13 +1348,13 @@ export function SetupWizard({
                           validators={{
                             onBlur: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape
+                                organizationBootstrapWithMembershipSchema.shape
                                   .organizationSlug,
                                 value,
                               ),
                             onSubmit: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape
+                                organizationBootstrapWithMembershipSchema.shape
                                   .organizationSlug,
                                 value,
                               ),
@@ -1331,12 +1409,14 @@ export function SetupWizard({
                           validators={{
                             onBlur: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape.legalName,
+                                organizationBootstrapWithMembershipSchema.shape
+                                  .legalName,
                                 value,
                               ),
                             onSubmit: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape.legalName,
+                                organizationBootstrapWithMembershipSchema.shape
+                                  .legalName,
                                 value,
                               ),
                           }}
@@ -1384,12 +1464,14 @@ export function SetupWizard({
                           validators={{
                             onBlur: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape.primaryEmail,
+                                organizationBootstrapWithMembershipSchema.shape
+                                  .primaryEmail,
                                 value,
                               ),
                             onSubmit: ({ value }) =>
                               readZodFieldError(
-                                organizationBootstrapSchema.shape.primaryEmail,
+                                organizationBootstrapWithMembershipSchema.shape
+                                  .primaryEmail,
                                 value,
                               ),
                           }}
@@ -1441,12 +1523,14 @@ export function SetupWizard({
                         validators={{
                           onBlur: ({ value }) =>
                             readZodFieldError(
-                              organizationBootstrapSchema.shape.website,
+                              organizationBootstrapWithMembershipSchema.shape
+                                .website,
                               value,
                             ),
                           onSubmit: ({ value }) =>
                             readZodFieldError(
-                              organizationBootstrapSchema.shape.website,
+                              organizationBootstrapWithMembershipSchema.shape
+                                .website,
                               value,
                             ),
                         }}
@@ -1486,6 +1570,424 @@ export function SetupWizard({
                         }}
                       </organizationForm.Field>
                     </FieldGroup>
+
+                    <Separator />
+
+                    <Collapsible>
+                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg px-1 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
+                        <span>Membership settings</span>
+                        <ChevronDownIcon className="size-4 transition-transform duration-200 in-data-[state=open]:rotate-180" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="flex flex-col gap-6 pt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Configure how memberships work. Defaults to no
+                          management — you can change these anytime in
+                          administration.
+                        </p>
+
+                        <FieldSet>
+                          <FieldLegend>Management mode</FieldLegend>
+                          <organizationForm.Field name="membershipManagementMode">
+                            {(field) => (
+                              <ToggleGroup
+                                type="single"
+                                orientation="vertical"
+                                className="grid w-full"
+                                value={field.state.value}
+                                onValueChange={(value) => {
+                                  if (value) {
+                                    field.handleChange(
+                                      value as "none" | "periodic_renewal",
+                                    );
+                                  }
+                                }}
+                              >
+                                {membershipManagementModeOptions.map(
+                                  (option) => (
+                                    <ToggleGroupItem
+                                      key={option.value}
+                                      value={option.value}
+                                      variant="outline"
+                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
+                                    >
+                                      <div className="flex flex-col gap-1">
+                                        <span className="font-medium">
+                                          {option.label}
+                                        </span>
+                                        <span className="text-sm text-muted-foreground">
+                                          {option.description}
+                                        </span>
+                                      </div>
+                                    </ToggleGroupItem>
+                                  ),
+                                )}
+                              </ToggleGroup>
+                            )}
+                          </organizationForm.Field>
+                        </FieldSet>
+
+                        <organizationForm.Subscribe
+                          selector={(s) =>
+                            s.values.membershipManagementMode ===
+                            "periodic_renewal"
+                          }
+                        >
+                          {(isPeriodicRenewal) =>
+                            isPeriodicRenewal ? (
+                              <div className="flex flex-col gap-4">
+                                <div className="grid gap-4 md:grid-cols-2">
+                                  <organizationForm.Field
+                                    name="membershipRenewalMonth"
+                                    validators={{
+                                      onChange: ({ value }) =>
+                                        value == null
+                                          ? "Renewal month is required for periodic renewal."
+                                          : undefined,
+                                    }}
+                                  >
+                                    {(field) => {
+                                      const errors = toFieldErrors(
+                                        field.state.meta.errors,
+                                        organizationServerFieldErrors.membershipRenewalMonth,
+                                      );
+                                      const showErrors =
+                                        field.state.meta.isTouched ||
+                                        field.form.state.submissionAttempts > 0;
+
+                                      return (
+                                        <Field
+                                          data-invalid={
+                                            showErrors && errors.length > 0
+                                          }
+                                        >
+                                          <FieldLabel>Renewal month</FieldLabel>
+                                          <FieldContent>
+                                            <Select
+                                              value={
+                                                field.state.value?.toString() ??
+                                                ""
+                                              }
+                                              onValueChange={(v) => {
+                                                clearOrganizationFieldError(
+                                                  "membershipRenewalMonth",
+                                                );
+                                                field.handleChange(
+                                                  v ? Number(v) : null,
+                                                );
+                                              }}
+                                            >
+                                              <SelectTrigger>
+                                                <SelectValue placeholder="Select month" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {MONTH_LABELS.map(
+                                                  (label, i) => (
+                                                    <SelectItem
+                                                      key={i + 1}
+                                                      value={(i + 1).toString()}
+                                                    >
+                                                      {label}
+                                                    </SelectItem>
+                                                  ),
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                            {showErrors ? (
+                                              <FieldError errors={errors} />
+                                            ) : null}
+                                          </FieldContent>
+                                        </Field>
+                                      );
+                                    }}
+                                  </organizationForm.Field>
+
+                                  <organizationForm.Field
+                                    name="membershipRenewalDay"
+                                    validators={{
+                                      onChange: ({ value }) =>
+                                        value == null
+                                          ? "Renewal day is required for periodic renewal."
+                                          : undefined,
+                                    }}
+                                  >
+                                    {(field) => {
+                                      const errors = toFieldErrors(
+                                        field.state.meta.errors,
+                                        organizationServerFieldErrors.membershipRenewalDay,
+                                      );
+                                      const showErrors =
+                                        field.state.meta.isTouched ||
+                                        field.form.state.submissionAttempts > 0;
+
+                                      return (
+                                        <Field
+                                          data-invalid={
+                                            showErrors && errors.length > 0
+                                          }
+                                        >
+                                          <FieldLabel>Renewal day</FieldLabel>
+                                          <FieldContent>
+                                            <Input
+                                              type="number"
+                                              min={1}
+                                              max={31}
+                                              placeholder="1–31"
+                                              value={field.state.value ?? ""}
+                                              onBlur={field.handleBlur}
+                                              onChange={(e) => {
+                                                clearOrganizationFieldError(
+                                                  "membershipRenewalDay",
+                                                );
+                                                const n = parseInt(
+                                                  e.target.value,
+                                                  10,
+                                                );
+                                                field.handleChange(
+                                                  isNaN(n) ? null : n,
+                                                );
+                                              }}
+                                            />
+                                            {showErrors ? (
+                                              <FieldError errors={errors} />
+                                            ) : null}
+                                          </FieldContent>
+                                        </Field>
+                                      );
+                                    }}
+                                  </organizationForm.Field>
+                                </div>
+
+                                <div className="flex items-center justify-between rounded-xl border border-border/80 bg-background/70 px-4 py-3">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-sm font-medium">
+                                      Require fee payment
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      Members will receive a payment request
+                                      during the renewal period.
+                                    </span>
+                                  </div>
+                                  <organizationForm.Field name="membershipFeeEnabled">
+                                    {(field) => (
+                                      <Switch
+                                        checked={field.state.value}
+                                        onCheckedChange={(checked) => {
+                                          field.handleChange(checked);
+                                        }}
+                                      />
+                                    )}
+                                  </organizationForm.Field>
+                                </div>
+
+                                <organizationForm.Subscribe
+                                  selector={(s) =>
+                                    s.values.membershipFeeEnabled
+                                  }
+                                >
+                                  {(feeEnabled) =>
+                                    feeEnabled ? (
+                                      <div className="grid gap-4 md:grid-cols-2">
+                                        <organizationForm.Field
+                                          name="membershipFeeAmount"
+                                          validators={{
+                                            onBlur: ({ value }) =>
+                                              value == null
+                                                ? "Fee amount is required when fee payment is enabled."
+                                                : undefined,
+                                          }}
+                                        >
+                                          {(field) => {
+                                            const errors = toFieldErrors(
+                                              field.state.meta.errors,
+                                              organizationServerFieldErrors.membershipFeeAmount,
+                                            );
+                                            const showErrors =
+                                              field.state.meta.isTouched ||
+                                              field.form.state
+                                                .submissionAttempts > 0;
+
+                                            return (
+                                              <Field
+                                                data-invalid={
+                                                  showErrors &&
+                                                  errors.length > 0
+                                                }
+                                              >
+                                                <FieldLabel>
+                                                  Fee amount
+                                                </FieldLabel>
+                                                <FieldContent>
+                                                  <Input
+                                                    type="number"
+                                                    min={0}
+                                                    step="0.01"
+                                                    placeholder="e.g. 500"
+                                                    value={
+                                                      field.state.value ?? ""
+                                                    }
+                                                    onBlur={field.handleBlur}
+                                                    onChange={(e) => {
+                                                      clearOrganizationFieldError(
+                                                        "membershipFeeAmount",
+                                                      );
+                                                      const n = parseFloat(
+                                                        e.target.value,
+                                                      );
+                                                      field.handleChange(
+                                                        isNaN(n) ? null : n,
+                                                      );
+                                                    }}
+                                                  />
+                                                  <FieldDescription>
+                                                    Whole units (e.g. 500 for
+                                                    500 CZK).
+                                                  </FieldDescription>
+                                                  {showErrors ? (
+                                                    <FieldError
+                                                      errors={errors}
+                                                    />
+                                                  ) : null}
+                                                </FieldContent>
+                                              </Field>
+                                            );
+                                          }}
+                                        </organizationForm.Field>
+
+                                        <organizationForm.Field name="membershipFeeCurrency">
+                                          {(field) => (
+                                            <Field>
+                                              <FieldLabel>Currency</FieldLabel>
+                                              <FieldContent>
+                                                <Select
+                                                  value={field.state.value}
+                                                  onValueChange={(v) =>
+                                                    field.handleChange(v)
+                                                  }
+                                                >
+                                                  <SelectTrigger>
+                                                    <SelectValue />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {feeCurrencyOptions.map(
+                                                      (opt) => (
+                                                        <SelectItem
+                                                          key={opt.value}
+                                                          value={opt.value}
+                                                        >
+                                                          {opt.label}
+                                                        </SelectItem>
+                                                      ),
+                                                    )}
+                                                  </SelectContent>
+                                                </Select>
+                                              </FieldContent>
+                                            </Field>
+                                          )}
+                                        </organizationForm.Field>
+
+                                        <organizationForm.Field
+                                          name="membershipFeeBankAccount"
+                                          validators={{
+                                            onBlur: ({ value }) =>
+                                              value != null &&
+                                              typeof value === "string" &&
+                                              value.trim().length > 0 &&
+                                              value.trim().length < 5
+                                                ? "Enter a valid bank account or IBAN."
+                                                : undefined,
+                                          }}
+                                        >
+                                          {(field) => {
+                                            const errors = toFieldErrors(
+                                              field.state.meta.errors,
+                                              organizationServerFieldErrors.membershipFeeBankAccount,
+                                            );
+                                            const showErrors =
+                                              field.state.meta.isTouched ||
+                                              field.form.state
+                                                .submissionAttempts > 0;
+
+                                            return (
+                                              <Field
+                                                className="md:col-span-2"
+                                                data-invalid={
+                                                  showErrors &&
+                                                  errors.length > 0
+                                                }
+                                              >
+                                                <FieldLabel>
+                                                  Bank account (IBAN)
+                                                </FieldLabel>
+                                                <FieldContent>
+                                                  <Input
+                                                    placeholder="CZ65 0800 0000 1920 0014 5399"
+                                                    value={
+                                                      (field.state
+                                                        .value as string) ?? ""
+                                                    }
+                                                    onBlur={field.handleBlur}
+                                                    onChange={(e) => {
+                                                      clearOrganizationFieldError(
+                                                        "membershipFeeBankAccount",
+                                                      );
+                                                      field.handleChange(
+                                                        e.target.value || null,
+                                                      );
+                                                    }}
+                                                  />
+                                                  {showErrors ? (
+                                                    <FieldError
+                                                      errors={errors}
+                                                    />
+                                                  ) : null}
+                                                </FieldContent>
+                                              </Field>
+                                            );
+                                          }}
+                                        </organizationForm.Field>
+
+                                        <organizationForm.Field name="membershipFeePaymentWindowDays">
+                                          {(field) => (
+                                            <Field>
+                                              <FieldLabel>
+                                                Payment window (days)
+                                              </FieldLabel>
+                                              <FieldContent>
+                                                <Input
+                                                  type="number"
+                                                  min={1}
+                                                  max={365}
+                                                  value={field.state.value}
+                                                  onBlur={field.handleBlur}
+                                                  onChange={(e) => {
+                                                    const n = parseInt(
+                                                      e.target.value,
+                                                      10,
+                                                    );
+                                                    field.handleChange(
+                                                      isNaN(n) ? 30 : n,
+                                                    );
+                                                  }}
+                                                />
+                                                <FieldDescription>
+                                                  Days after the renewal date
+                                                  before payment is considered
+                                                  overdue.
+                                                </FieldDescription>
+                                              </FieldContent>
+                                            </Field>
+                                          )}
+                                        </organizationForm.Field>
+                                      </div>
+                                    ) : null
+                                  }
+                                </organizationForm.Subscribe>
+                              </div>
+                            ) : null
+                          }
+                        </organizationForm.Subscribe>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </form>
 
                   {organizationFormError ? (
@@ -1500,8 +2002,8 @@ export function SetupWizard({
                 </CardContent>
                 <CardFooter className="justify-between gap-4">
                   <p className="text-sm text-muted-foreground">
-                    After this step, `/setup` closes and `/` becomes the login
-                    page.
+                    Once your organization is created, setup is complete and
+                    you&apos;ll be redirected to login.
                   </p>
                   <Button
                     type="submit"
@@ -1547,3 +2049,18 @@ export function SetupWizard({
     </div>
   );
 }
+
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];

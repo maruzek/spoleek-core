@@ -18,6 +18,7 @@ export const setupCookieName = "spoleek_first_run_setup";
 export type SetupWizardCookieState = {
   deploymentTrack?: SetupDeploymentTrack;
   authStrategy?: SetupAuthStrategy;
+  workspaceModuleEnabled?: boolean;
   envGuidanceAccepted?: boolean;
   envValidated?: boolean;
   adminUserId?: string;

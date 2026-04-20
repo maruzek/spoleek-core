@@ -9,11 +9,12 @@ import { z } from "zod";
 import {
   setupAuthStrategies,
   setupDeploymentTracks,
+  type SetupAuthStrategy,
   type SetupWizardCookieState,
 } from "@/lib/bootstrap";
 import {
   emailAdminSchema,
-  organizationBootstrapSchema,
+  organizationBootstrapWithMembershipSchema,
 } from "@/lib/bootstrap/setup-schemas";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { splitMemberName } from "@/lib/member-custom-fields";
@@ -30,7 +31,7 @@ import {
 
 const setupIntentSchema = z.object({
   deploymentTrack: z.enum(setupDeploymentTracks),
-  authStrategy: z.enum(setupAuthStrategies),
+  authStrategy: z.enum([...setupAuthStrategies, "google-workspace"] as const),
 });
 
 export const saveSetupIntentAction = actionClient
@@ -43,9 +44,14 @@ export const saveSetupIntentAction = actionClient
       throw new Error("Setup is already complete for this deployment.");
     }
 
+    const isWorkspace = parsedInput.authStrategy === "google-workspace";
+    const resolvedAuthStrategy: SetupAuthStrategy = isWorkspace
+      ? "google-first"
+      : (parsedInput.authStrategy as SetupAuthStrategy);
     const nextState: SetupWizardCookieState = {
       deploymentTrack: parsedInput.deploymentTrack,
-      authStrategy: parsedInput.authStrategy,
+      authStrategy: resolvedAuthStrategy,
+      workspaceModuleEnabled: isWorkspace,
       envGuidanceAccepted: false,
       envValidated: false,
     };
@@ -231,7 +237,7 @@ export const claimSetupSessionAdminAction = actionClient
 
 export const createBootstrapOrganizationAction = actionClient
   .metadata({ actionName: "createBootstrapOrganization" })
-  .inputSchema(organizationBootstrapSchema)
+  .inputSchema(organizationBootstrapWithMembershipSchema)
   .action(async ({ parsedInput }) => {
     const [bootstrapState, state, session] = await Promise.all([
       getBootstrapState(),
@@ -263,7 +269,7 @@ export const createBootstrapOrganizationAction = actionClient
       .limit(1);
 
     if (duplicateSlug.length > 0) {
-      returnValidationErrors(organizationBootstrapSchema, {
+      returnValidationErrors(organizationBootstrapWithMembershipSchema, {
         organizationSlug: {
           _errors: ["That organization slug is already in use."],
         },
@@ -278,6 +284,8 @@ export const createBootstrapOrganizationAction = actionClient
 
     const orgId = randomUUID();
     const adminName = splitMemberName(session.user.name);
+    const isPeriodicRenewal =
+      parsedInput.membershipManagementMode === "periodic_renewal";
 
     await db.transaction(async (tx) => {
       await tx.insert(organizations).values({
@@ -290,6 +298,30 @@ export const createBootstrapOrganizationAction = actionClient
         setupDeploymentTrack: state.deploymentTrack,
         setupAuthStrategy: state.authStrategy,
         onboardingCompletedAt: new Date(),
+        workspaceModuleEnabled: state.workspaceModuleEnabled ?? false,
+        membershipManagementMode: parsedInput.membershipManagementMode,
+        membershipRenewalMonth: isPeriodicRenewal
+          ? parsedInput.membershipRenewalMonth
+          : null,
+        membershipRenewalDay: isPeriodicRenewal
+          ? parsedInput.membershipRenewalDay
+          : null,
+        membershipFeeEnabled: isPeriodicRenewal
+          ? parsedInput.membershipFeeEnabled
+          : false,
+        membershipFeeAmount:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? Math.round((parsedInput.membershipFeeAmount ?? 0) * 100)
+            : null,
+        membershipFeeCurrency: parsedInput.membershipFeeCurrency,
+        membershipFeeBankAccount:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipFeeBankAccount
+            : null,
+        membershipFeePaymentWindowDays:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipFeePaymentWindowDays
+            : 30,
       });
 
       await tx.insert(organizationPolicies).values({
@@ -310,12 +342,15 @@ export const createBootstrapOrganizationAction = actionClient
         })
         .where(eq(users.id, session.user.id));
 
+      const isWorkspace = state.workspaceModuleEnabled ?? false;
+
       if (!existingMembership) {
         await tx.insert(tenantMembers).values({
           id: randomUUID(),
           orgId,
           userId: session.user.id,
-          email: session.user.email,
+          email: isWorkspace ? null : session.user.email,
+          workspaceUserEmail: isWorkspace ? session.user.email : null,
           firstName: adminName.firstName,
           lastName: adminName.lastName,
           role: "org_admin",
@@ -329,6 +364,8 @@ export const createBootstrapOrganizationAction = actionClient
           .update(tenantMembers)
           .set({
             orgId,
+            email: isWorkspace ? null : (existingMembership.email ?? session.user.email),
+            workspaceUserEmail: isWorkspace ? session.user.email : null,
             firstName: existingMembership.firstName || adminName.firstName,
             lastName: existingMembership.lastName || adminName.lastName,
             role: "org_admin",

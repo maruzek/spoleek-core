@@ -19,6 +19,7 @@ import { getRawServerEnv } from "@/lib/env";
 const setupCookieSchema = z.object({
   deploymentTrack: z.enum(setupDeploymentTracks).optional(),
   authStrategy: z.enum(setupAuthStrategies).optional(),
+  workspaceModuleEnabled: z.boolean().optional(),
   envGuidanceAccepted: z.boolean().optional(),
   envValidated: z.boolean().optional(),
   adminUserId: z.string().optional(),
