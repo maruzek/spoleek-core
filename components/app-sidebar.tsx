@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
+import { NavMain } from "@/components/nav-main";
+import { NavSecondary } from "@/components/nav-secondary";
+import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -11,17 +11,19 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-import type { AppShellContext } from "@/lib/app-shell"
+import type { AppShellContext } from "@/lib/app-shell";
 import {
   BookOpenIcon,
   CalendarDaysIcon,
   CreditCardIcon,
   FolderTreeIcon,
+  FormIcon,
+  FormInputIcon,
   LayoutDashboardIcon,
   LifeBuoyIcon,
   MailIcon,
@@ -30,7 +32,7 @@ import {
   TerminalIcon,
   UserCircle2Icon,
   UsersIcon,
-} from "lucide-react"
+} from "lucide-react";
 
 function getSidebarData(appContext: AppShellContext) {
   const portalItems = [
@@ -64,7 +66,7 @@ function getSidebarData(appContext: AppShellContext) {
       href: "/portal/payments",
       icon: CreditCardIcon,
     },
-  ]
+  ];
 
   const adminItems = [
     {
@@ -117,32 +119,32 @@ function getSidebarData(appContext: AppShellContext) {
       icon: Settings2Icon,
     },
     {
-      title: "Custom Fields",
+      title: "Member fields",
       href: "/admin/settings/custom-fields",
-      icon: Settings2Icon,
+      icon: FormIcon,
     },
   ].filter((item) => {
     if (item.href === "/admin/members") {
       return (
         appContext.capabilities.canManageMembers ||
         appContext.capabilities.canManageScopedMembers
-      )
+      );
     }
 
     if (item.href === "/admin/groups") {
-      return appContext.capabilities.canManageGroups
+      return appContext.capabilities.canManageGroups;
     }
 
-    if (item.href === "/admin/settings" || item.href === "/admin/settings/custom-fields") {
-      return appContext.capabilities.canManageOrganization
+    if (item.href === "/admin/settings") {
+      return appContext.capabilities.canManageOrganization;
     }
 
     if (item.href === "/admin/email") {
-      return appContext.capabilities.canManageOrganization
+      return appContext.capabilities.canManageOrganization;
     }
 
-    return appContext.capabilities.canAccessAdmin
-  })
+    return appContext.capabilities.canAccessAdmin;
+  });
 
   const secondaryItems = [
     {
@@ -155,24 +157,28 @@ function getSidebarData(appContext: AppShellContext) {
       href: "/",
       icon: LifeBuoyIcon,
     },
-  ].filter((item) => item.href !== "/portal" || appContext.capabilities.canAccessPortal)
+  ].filter(
+    (item) =>
+      item.href !== "/portal" || appContext.capabilities.canAccessPortal,
+  );
 
   return {
     portalItems,
     adminItems,
     secondaryItems,
-  }
+  };
 }
 
 export function AppSidebar({
   appContext,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  appContext: AppShellContext
+  appContext: AppShellContext;
 }) {
-  const pathname = usePathname()
-  const { adminItems, portalItems, secondaryItems } = getSidebarData(appContext)
-  const isAdminSection = pathname.startsWith("/admin")
+  const pathname = usePathname();
+  const { adminItems, portalItems, secondaryItems } =
+    getSidebarData(appContext);
+  const isAdminSection = pathname.startsWith("/admin");
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -185,7 +191,9 @@ export function AppSidebar({
                   <TerminalIcon />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{appContext.organization.name}</span>
+                  <span className="truncate font-medium">
+                    {appContext.organization.name}
+                  </span>
                   <span className="truncate text-xs">
                     {isAdminSection ? "Administration" : "Member portal"}
                   </span>
@@ -210,11 +218,13 @@ export function AppSidebar({
             name: appContext.viewer.name,
             email: appContext.viewer.email,
             avatar: appContext.viewer.avatar,
-            portalHref: appContext.capabilities.canAccessPortal ? "/portal" : null,
+            portalHref: appContext.capabilities.canAccessPortal
+              ? "/portal"
+              : null,
             adminHref: appContext.capabilities.canAccessAdmin ? "/admin" : null,
           }}
         />
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

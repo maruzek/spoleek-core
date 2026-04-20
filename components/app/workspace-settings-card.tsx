@@ -78,16 +78,7 @@ export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState
   const canEnable = domain.trim().length > 0;
 
   return (
-    <div className="flex flex-col gap-6 rounded-3xl border bg-card p-6 shadow-sm">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-foreground">Google Workspace</h2>
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          When enabled, approving a pending member provisions a Google
-          Workspace account for them on your organization domain and emails
-          them sign-in instructions automatically.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-6">
       {workspaceStatus === "ok" ? (
         <Alert>
           <CheckCircle2Icon />
@@ -113,8 +104,7 @@ export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState
             Workspace module
           </span>
           <span className="text-xs text-muted-foreground">
-            Turn this on to replace the email/password activation with
-            Workspace account creation.
+            Replace email/password activation with Workspace account creation.
           </span>
         </div>
         <Switch

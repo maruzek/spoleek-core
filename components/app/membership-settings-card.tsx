@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
 import {
   feeCurrencyOptions,
   membershipManagementModeOptions,
@@ -17,9 +18,6 @@ import {
   FieldContent,
   FieldDescription,
   FieldLabel,
-  FieldSet,
-  FieldLegend,
-  FieldTitle,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -80,41 +78,40 @@ export function MembershipSettingsCard({
   const isPeriodicRenewal = mode === "periodic_renewal";
 
   return (
-    <div className="flex flex-col gap-6 rounded-3xl border bg-card p-6 shadow-sm">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-xl font-semibold text-foreground">
-          Membership management
-        </h2>
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          Choose how memberships are managed across your organization. When
-          periodic renewal is active, members must confirm their membership each
-          year. You can optionally require a fee payment.
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Membership mode
         </p>
-      </div>
-
-      <FieldSet>
-        <FieldLegend>Membership mode</FieldLegend>
         <RadioGroup
           value={mode}
           onValueChange={(value) => setMode(value as MembershipManagementMode)}
-          className="max-w-2xl"
+          className="flex flex-col gap-3"
         >
           {membershipManagementModeOptions.map((option) => {
             const id = `membership-mode-${option.value}`;
+            const isSelected = mode === option.value;
             return (
-              <FieldLabel key={option.value} htmlFor={id}>
-                <Field orientation="horizontal">
-                  <FieldContent>
-                    <FieldTitle>{option.label}</FieldTitle>
-                    <FieldDescription>{option.description}</FieldDescription>
-                  </FieldContent>
-                  <RadioGroupItem value={option.value} id={id} />
-                </Field>
-              </FieldLabel>
+              <label
+                key={option.value}
+                htmlFor={id}
+                className={cn(
+                  "flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition-colors",
+                  isSelected
+                    ? "border-primary bg-primary/5 ring-1 ring-primary"
+                    : "hover:bg-muted/50",
+                )}
+              >
+                <RadioGroupItem value={option.value} id={id} className="mt-0.5 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm font-medium leading-none">{option.label}</p>
+                  <p className="text-sm text-muted-foreground">{option.description}</p>
+                </div>
+              </label>
             );
           })}
         </RadioGroup>
-      </FieldSet>
+      </div>
 
       {isPeriodicRenewal ? (
         <>
@@ -170,7 +167,7 @@ export function MembershipSettingsCard({
           />
 
           {feeEnabled ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="fee-amount">Fee amount</FieldLabel>
                 <FieldContent>
@@ -241,7 +238,7 @@ export function MembershipSettingsCard({
         </>
       ) : null}
 
-      <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+      <div>
         <Button
           type="button"
           onClick={() =>
