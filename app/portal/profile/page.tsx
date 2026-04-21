@@ -14,6 +14,10 @@ export default async function PortalProfilePage({
 }) {
   const { member, organization } = await requireCurrentMemberAccess();
   const params = searchParams ? await searchParams : {};
+  const workspaceReady =
+    organization.workspaceModuleEnabled &&
+    organization.workspaceConnectedAt !== null &&
+    Boolean(organization.workspaceDomain);
   const [customFields, answerMap, completeness] = await Promise.all([
     listActiveMemberCustomFields(organization.id, [
       "registration",
@@ -41,6 +45,10 @@ export default async function PortalProfilePage({
         missingRequiredFieldLabels={completeness.missingRequiredFields.map(
           (field) => field.label,
         )}
+        preferredEmail={member.preferredEmail}
+        workspaceEmail={member.workspaceUserEmail ?? null}
+        workspaceReady={workspaceReady}
+        personalEmail={member.email ?? null}
       />
     </AppPage>
   );

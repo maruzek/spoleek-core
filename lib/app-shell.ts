@@ -1,4 +1,4 @@
-import type { MembershipManagementMode, TenantRole } from "@/server/db/schema";
+import type { MemberPreferredEmail, MembershipManagementMode, TenantRole } from "@/server/db/schema";
 
 export type AppSectionKey = "portal" | "admin";
 export type AdminAccessLevel = "none" | "scoped" | "full";
@@ -34,6 +34,7 @@ export type AppShellContext = {
     name: string;
     slug: string;
     membershipManagementMode: MembershipManagementMode;
+    defaultEmailPreference: MemberPreferredEmail;
     fees: {
       enabled: boolean;
       renewalMonth: number | null;

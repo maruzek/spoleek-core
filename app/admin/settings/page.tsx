@@ -72,6 +72,7 @@ export default async function AdminSettingsPage({
       organization.workspaceConnectedAt?.toISOString() ??
       connection?.grantedAt?.toISOString() ??
       null,
+    defaultEmailPreference: organization.defaultEmailPreference,
   };
 
   return (

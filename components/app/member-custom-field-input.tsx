@@ -37,11 +37,22 @@ export function MemberCustomFieldInput({
     <FieldDescription>{field.description}</FieldDescription>
   ) : null;
 
+  const requiredMarker = field.required ? (
+    <span className="text-destructive">*</span>
+  ) : null;
+
+  const labelContent = (
+    <>
+      {field.label}
+      {requiredMarker}
+    </>
+  );
+
   if (field.type === "textarea") {
     return (
       <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor={`custom-field-${field.key}`}>
-          {field.label}
+          {labelContent}
         </FieldLabel>
         <FieldContent>
           <Textarea
@@ -61,7 +72,7 @@ export function MemberCustomFieldInput({
     return (
       <Field orientation="horizontal" data-invalid={Boolean(error)}>
         <FieldLabel htmlFor={`custom-field-${field.key}`}>
-          {field.label}
+          {labelContent}
         </FieldLabel>
         <FieldContent className="items-end">
           <Checkbox
@@ -80,7 +91,7 @@ export function MemberCustomFieldInput({
   if (field.type === "select") {
     return (
       <Field data-invalid={Boolean(error)}>
-        <FieldLabel>{field.label}</FieldLabel>
+        <FieldLabel>{labelContent}</FieldLabel>
         <FieldContent>
           <Select
             value={typeof value === "string" ? value : ""}
@@ -116,7 +127,7 @@ export function MemberCustomFieldInput({
       <Field data-invalid={Boolean(error)}>
         <FieldContent>
           <FieldSet>
-            <FieldLegend>{field.label}</FieldLegend>
+            <FieldLegend>{labelContent}</FieldLegend>
             {sharedDescription}
             {field.options.map((option) => {
               const checked = selectedValues.includes(option);
@@ -163,7 +174,7 @@ export function MemberCustomFieldInput({
   return (
     <Field data-invalid={Boolean(error)}>
       <FieldLabel htmlFor={`custom-field-${field.key}`}>
-        {field.label}
+        {labelContent}
       </FieldLabel>
       <FieldContent>
         <Input

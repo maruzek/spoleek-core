@@ -243,3 +243,40 @@ export const updateProfileAction = authActionClient
 
     return result;
   });
+
+export const updateEmailPreferenceAction = authActionClient
+  .metadata({ actionName: "updateEmailPreference" })
+  .inputSchema(
+    z.object({
+      preference: z.enum(["personal", "workspace"]).nullable(),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    const organization = await getAppOrganization();
+
+    if (!organization) {
+      throw new Error("The application is not set up yet.");
+    }
+
+    const member = await getTenantMemberByUserId(organization.id, ctx.auth.user.id);
+
+    if (!member) {
+      throw new Error("Member not found.");
+    }
+
+    if (parsedInput.preference === "workspace" && !member.workspaceUserEmail) {
+      throw new Error("No workspace email assigned to your account.");
+    }
+
+    await db
+      .update(tenantMembers)
+      .set({ preferredEmail: parsedInput.preference, updatedAt: new Date() })
+      .where(
+        and(
+          eq(tenantMembers.orgId, organization.id),
+          eq(tenantMembers.userId, ctx.auth.user.id),
+        ),
+      );
+
+    return { success: true as const };
+  });

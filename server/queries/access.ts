@@ -200,6 +200,7 @@ export async function getViewerAppContext(): Promise<
       name: organization.name,
       slug: organization.slug,
       membershipManagementMode: organization.membershipManagementMode,
+      defaultEmailPreference: organization.defaultEmailPreference,
       fees: {
         enabled: organization.membershipFeeEnabled,
         renewalMonth: organization.membershipRenewalMonth,

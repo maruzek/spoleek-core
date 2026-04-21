@@ -3,11 +3,17 @@
 import { useCallback } from "react";
 import { useAction } from "next-safe-action/hooks";
 import type { Table as TanStackTable } from "@tanstack/react-table";
-import { MailIcon } from "lucide-react";
+import { ChevronDownIcon, MailIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { MailingListEmailType, MailingListScope } from "@/lib/mailing-list";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { resolveMailingListAction } from "@/server/actions/mailing-list";
 import { copyToClipboard } from "@/utils/copy";
 
@@ -15,8 +21,13 @@ type MailingListActionProps<TRow> = {
   scope: MailingListScope;
   table: TanStackTable<TRow>;
   getMemberId: (row: TRow) => string;
-  label?: string;
-  emailTypeOptions?: readonly MailingListEmailType[];
+  showWorkspaceOptions?: boolean;
+};
+
+const EMAIL_TYPE_LABELS: Record<MailingListEmailType, string> = {
+  personal: "Copy personal emails",
+  workspace: "Copy workspace emails",
+  preferred: "Copy preferred emails",
 };
 
 function buildSuccessMessage(args: {
@@ -32,15 +43,11 @@ function buildSuccessMessage(args: {
   }
 
   if (args.skippedNoEmailCount > 0) {
-    parts.push(
-      `${args.skippedNoEmailCount} without personal email skipped`,
-    );
+    parts.push(`${args.skippedNoEmailCount} without email skipped`);
   }
 
   if (args.dedupedCount > 0) {
-    parts.push(
-      `${args.dedupedCount} duplicate${args.dedupedCount === 1 ? "" : "s"} collapsed`,
-    );
+    parts.push(`${args.dedupedCount} duplicate${args.dedupedCount === 1 ? "" : "s"} collapsed`);
   }
 
   return `${parts.join(", ")}.`;
@@ -50,63 +57,94 @@ export function MailingListAction<TRow>({
   scope,
   table,
   getMemberId,
-  label = "Copy emails",
-  emailTypeOptions = ["personal"],
+  showWorkspaceOptions = false,
 }: MailingListActionProps<TRow>) {
   const mailingListAction = useAction(resolveMailingListAction);
 
-  const handleCopy = useCallback(async () => {
-    const selectedMemberIds = table
-      .getSelectedRowModel()
-      .rows.map((row) => getMemberId(row.original));
+  const handleCopy = useCallback(
+    async (emailType: MailingListEmailType) => {
+      const selectedMemberIds = table
+        .getSelectedRowModel()
+        .rows.map((row) => getMemberId(row.original));
 
-    const result = await mailingListAction.executeAsync({
-      scope,
-      selectedMemberIds,
-      emailType: emailTypeOptions[0] ?? "personal",
-    });
+      const result = await mailingListAction.executeAsync({
+        scope,
+        selectedMemberIds,
+        emailType,
+      });
 
-    if (result?.serverError) {
-      toast.error(result.serverError);
-      return;
-    }
+      if (result?.serverError) {
+        toast.error(result.serverError);
+        return;
+      }
 
-    if (!result?.data) {
-      toast.error("Could not prepare the mailing list.");
-      return;
-    }
+      if (!result?.data) {
+        toast.error("Could not prepare the mailing list.");
+        return;
+      }
 
-    if (result.data.copiedCount === 0 || result.data.copiedText.length === 0) {
-      toast.error("No personal emails were available to copy.");
-      return;
-    }
+      if (result.data.copiedCount === 0 || result.data.copiedText.length === 0) {
+        toast.error("No emails were available to copy.");
+        return;
+      }
 
-    const copied = await copyToClipboard(result.data.copiedText);
+      const copied = await copyToClipboard(result.data.copiedText);
 
-    if (!copied) {
-      toast.error("Could not copy the mailing list.");
-      return;
-    }
+      if (!copied) {
+        toast.error("Could not copy the mailing list.");
+        return;
+      }
 
-    toast.success(
-      buildSuccessMessage({
-        copiedCount: result.data.copiedCount,
-        resolvedCount: result.data.resolvedCount,
-        skippedNoEmailCount: result.data.skippedNoEmailCount,
-        dedupedCount: result.data.dedupedCount,
-      }),
+      toast.success(
+        buildSuccessMessage({
+          copiedCount: result.data.copiedCount,
+          resolvedCount: result.data.resolvedCount,
+          skippedNoEmailCount: result.data.skippedNoEmailCount,
+          dedupedCount: result.data.dedupedCount,
+        }),
+      );
+    },
+    [getMemberId, mailingListAction, scope, table],
+  );
+
+  if (!showWorkspaceOptions) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => void handleCopy("personal")}
+        disabled={mailingListAction.isPending}
+      >
+        <MailIcon data-icon="inline-start" />
+        {mailingListAction.isPending ? "Preparing..." : "Copy emails"}
+      </Button>
     );
-  }, [emailTypeOptions, getMemberId, mailingListAction, scope, table]);
+  }
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() => void handleCopy()}
-      disabled={mailingListAction.isPending}
-    >
-      <MailIcon data-icon="inline-start" />
-      {mailingListAction.isPending ? "Preparing..." : label}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={mailingListAction.isPending}
+        >
+          <MailIcon data-icon="inline-start" />
+          {mailingListAction.isPending ? "Preparing..." : "Copy emails"}
+          <ChevronDownIcon data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {(["personal", "workspace", "preferred"] as const).map((type) => (
+          <DropdownMenuItem
+            key={type}
+            onClick={() => void handleCopy(type)}
+            disabled={mailingListAction.isPending}
+          >
+            {EMAIL_TYPE_LABELS[type]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

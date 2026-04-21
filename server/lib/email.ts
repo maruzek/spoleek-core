@@ -28,15 +28,17 @@ export function getResendFromEmail() {
       "RESEND_FROM_EMAIL or SMTP_FROM is required to send member invite emails.",
     );
   }
-
-  return from;
+  //todo: import name from .env
+  return `Karel Botenberg<${from}>`;
 }
 
 export function getResendWebhookSecret() {
   const env = getServerEnv();
 
   if (!env.RESEND_WEBHOOK_SECRET) {
-    throw new Error("RESEND_WEBHOOK_SECRET is required to verify Resend webhook events.");
+    throw new Error(
+      "RESEND_WEBHOOK_SECRET is required to verify Resend webhook events.",
+    );
   }
 
   return env.RESEND_WEBHOOK_SECRET;

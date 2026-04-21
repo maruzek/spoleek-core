@@ -33,9 +33,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
+import { useAppShell } from "@/components/app/app-shell-provider";
 import { formatDateTime } from "@/lib/format";
-import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { copyToClipboard } from "@/utils/copy";
+import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
   approveMemberAction,
   bulkDeleteMembersAction,
@@ -75,6 +76,7 @@ type MemberRow = {
   lastName: string;
   email: string | null;
   workspaceUserEmail: string | null;
+  preferredEmail: "personal" | "workspace" | null;
   role: "member" | "leader" | "org_admin";
   status: VisibleMemberStatus;
   userId: string | null;
@@ -90,6 +92,18 @@ type MemberEditorData = {
   customFieldAnswers: Record<string, unknown>;
   metadata: MemberEditorMetadata;
 };
+
+function resolvePreferredEmailForRow(
+  row: Pick<MemberRow, "email" | "workspaceUserEmail" | "preferredEmail">,
+  orgDefault: "personal" | "workspace",
+  workspaceReady: boolean,
+): string | null {
+  const effective = row.preferredEmail ?? orgDefault;
+  if (effective === "workspace" && workspaceReady && row.workspaceUserEmail) {
+    return row.workspaceUserEmail;
+  }
+  return row.email;
+}
 
 const columnHelper = createColumnHelper<MemberRow>();
 
@@ -201,17 +215,8 @@ export function MemberAdmin({
   >(null);
   const workspaceReady =
     workspace.enabled && workspace.connected && Boolean(workspace.domain);
-
-  const copyEmail = useCallback(async (email: string) => {
-    const copied = await copyToClipboard(email);
-
-    if (copied) {
-      toast.success("Personal email copied.");
-      return;
-    }
-
-    toast.error("Could not copy personal email.");
-  }, []);
+  const { organization } = useAppShell();
+  const { defaultEmailPreference } = organization;
 
   const updateSearchParam = useCallback(
     (memberId: string | null) => {
@@ -468,18 +473,21 @@ export function MemberAdmin({
         header: "Personal Email",
         cell: ({ row }) => {
           const email = row.original.email;
-
           if (!email) {
             return <span className="text-sm text-muted-foreground">—</span>;
           }
-
           return (
             <button
               type="button"
-              onClick={() => void copyEmail(email)}
-              className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+              onClick={() => {
+                void copyToClipboard(email).then((ok) => {
+                  if (ok) toast.success("Personal email copied.");
+                  else toast.error("Could not copy email.");
+                });
+              }}
+              className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
               aria-label={`Copy personal email ${email}`}
-              title="Copy personal email"
+              title="Click to copy"
             >
               {email}
             </button>
@@ -496,21 +504,46 @@ export function MemberAdmin({
           header: "Workspace Email",
           cell: ({ row }) => {
             const wsEmail = row.original.workspaceUserEmail;
-
             if (!wsEmail) {
               return <span className="text-sm text-muted-foreground">—</span>;
             }
-
             return (
               <button
                 type="button"
-                onClick={() => void copyEmail(wsEmail)}
-                className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
+                onClick={() => {
+                  void copyToClipboard(wsEmail).then((ok) => {
+                    if (ok) toast.success("Workspace email copied.");
+                    else toast.error("Could not copy email.");
+                  });
+                }}
+                className="block max-w-[16rem] truncate rounded-md text-left text-sm text-foreground underline-offset-4 outline-none transition-colors hover:underline focus-visible:ring-2 focus-visible:ring-ring/60"
                 aria-label={`Copy workspace email ${wsEmail}`}
-                title="Copy workspace email"
+                title="Click to copy"
               >
                 {wsEmail}
               </button>
+            );
+          },
+        }),
+      );
+
+      baseColumns.push(
+        columnHelper.display({
+          id: "preferred-email",
+          meta: { label: "Preferred Email" },
+          header: "Preferred Email",
+          cell: ({ row }) => {
+            const resolved = resolvePreferredEmailForRow(
+              row.original,
+              defaultEmailPreference,
+              workspaceReady,
+            );
+            return resolved ? (
+              <span className="block max-w-[16rem] truncate text-sm text-foreground">
+                {resolved}
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
             );
           },
         }),
@@ -657,7 +690,7 @@ export function MemberAdmin({
     ];
   }, [
     approveAction,
-    copyEmail,
+    defaultEmailPreference,
     customFields,
     memberCategories,
     resendInviteAction,
@@ -666,7 +699,10 @@ export function MemberAdmin({
   ]);
 
   const initialColumnVisibility = useMemo(() => {
-    const visibility: Record<string, boolean> = {};
+    const visibility: Record<string, boolean> = {
+      "personal-email": false,
+      "workspace-email": false,
+    };
     for (const field of customFields) {
       if (field.discoveryMode === "available") {
         visibility[`field-${field.key}`] = false;
@@ -685,6 +721,7 @@ export function MemberAdmin({
           scope={{ kind: "members-admin" }}
           table={table}
           getMemberId={(member) => member.id}
+          showWorkspaceOptions={workspaceReady}
         />
         <Button onClick={() => setSheetOpen(true)}>
           <PlusIcon data-icon="inline-start" />

@@ -501,6 +501,7 @@ export async function listTenantMembers(
         userId: tenantMembers.userId,
         workspaceUserEmail: tenantMembers.workspaceUserEmail,
         workspaceUserId: tenantMembers.workspaceUserId,
+        preferredEmail: tenantMembers.preferredEmail,
         createdAt: tenantMembers.createdAt,
         linkedUserName: users.name,
         inviteStatus: memberInvites.status,

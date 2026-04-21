@@ -135,6 +135,11 @@ export const membershipManagementModeEnum = pgEnum("membership_management_mode",
   "periodic_renewal",
 ]);
 
+export const memberPreferredEmailEnum = pgEnum("member_preferred_email", [
+  "personal",
+  "workspace",
+]);
+
 export const memberPaymentTypeEnum = pgEnum("member_payment_type", [
   "membership_fee",
   "event",
@@ -260,6 +265,9 @@ export const organizations = pgTable(
       withTimezone: true,
     }),
     workspaceAdminEmail: text("workspace_admin_email"),
+    defaultEmailPreference: memberPreferredEmailEnum("default_email_preference")
+      .notNull()
+      .default("personal"),
     membershipManagementMode: membershipManagementModeEnum("membership_management_mode")
       .notNull()
       .default("none"),
@@ -330,6 +338,7 @@ export const tenantMembers = pgTable(
     workspaceProvisionedAt: timestamp("workspace_provisioned_at", {
       withTimezone: true,
     }),
+    preferredEmail: memberPreferredEmailEnum("preferred_email"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedByUserId: text("deleted_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -807,6 +816,7 @@ export type GroupCategorySelectionMode =
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
 export type MembershipManagementMode = typeof membershipManagementModeEnum.enumValues[number];
+export type MemberPreferredEmail = typeof memberPreferredEmailEnum.enumValues[number];
 export type MemberPaymentType = typeof memberPaymentTypeEnum.enumValues[number];
 export type MemberPaymentStatus = typeof memberPaymentStatusEnum.enumValues[number];
 export type MemberPayment = typeof memberPayments.$inferSelect;

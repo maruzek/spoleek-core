@@ -14,7 +14,7 @@ export const mailingListScopeSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-export const mailingListEmailTypeSchema = z.enum(["personal", "organization"]);
+export const mailingListEmailTypeSchema = z.enum(["personal", "workspace", "preferred"]);
 
 export const resolveMailingListSchema = z.object({
   scope: mailingListScopeSchema,

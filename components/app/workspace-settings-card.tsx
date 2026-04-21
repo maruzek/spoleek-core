@@ -17,12 +17,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import {
   disconnectWorkspaceAction,
   saveWorkspaceSettingsAction,
 } from "@/server/actions/organization-settings";
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
+import type { MemberPreferredEmail } from "@/server/db/schema";
 
 export type WorkspaceSettingsState = {
   moduleEnabled: boolean;
@@ -31,6 +33,7 @@ export type WorkspaceSettingsState = {
   emailTemplate: string;
   adminEmail: string | null;
   connectedAt: string | null;
+  defaultEmailPreference: MemberPreferredEmail;
 };
 
 export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState }) {
@@ -43,6 +46,9 @@ export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState
   const [domain, setDomain] = useState(state.domain ?? "");
   const [template, setTemplate] = useState(
     state.emailTemplate || "{first}.{last}",
+  );
+  const [defaultEmailPreference, setDefaultEmailPreference] = useState<MemberPreferredEmail>(
+    state.defaultEmailPreference,
   );
   const [isConnecting, startConnecting] = useTransition();
 
@@ -150,6 +156,43 @@ export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState
         </div>
       </div>
 
+      {moduleEnabled ? (
+        <div className="flex flex-col gap-2">
+          <Label>Default preferred email</Label>
+          <RadioGroup
+            value={defaultEmailPreference}
+            onValueChange={(v) => setDefaultEmailPreference(v as MemberPreferredEmail)}
+            className="flex gap-4"
+          >
+            <div className="flex items-center gap-2">
+              <RadioGroupItem value="personal" id="pref-personal" />
+              <Label htmlFor="pref-personal" className="cursor-pointer font-normal">
+                Personal email
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <RadioGroupItem
+                value="workspace"
+                id="pref-workspace"
+                disabled={!state.connected}
+              />
+              <Label
+                htmlFor="pref-workspace"
+                className="cursor-pointer font-normal"
+              >
+                Workspace email
+                {!state.connected ? (
+                  <span className="ml-1 text-xs text-muted-foreground">(connect first)</span>
+                ) : null}
+              </Label>
+            </div>
+          </RadioGroup>
+          <p className="text-xs text-muted-foreground">
+            Members who have not set a personal preference will use this default.
+          </p>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
@@ -158,6 +201,7 @@ export function WorkspaceSettingsCard({ state }: { state: WorkspaceSettingsState
               moduleEnabled,
               workspaceDomain: domain.trim() || null,
               emailTemplate: template.trim() || null,
+              defaultEmailPreference,
             })
           }
           disabled={

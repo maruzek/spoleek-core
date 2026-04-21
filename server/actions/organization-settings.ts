@@ -90,6 +90,7 @@ export const saveWorkspaceSettingsAction = orgAdminActionClient
       moduleEnabled: z.boolean(),
       workspaceDomain: workspaceDomainSchema.optional().nullable(),
       emailTemplate: workspaceTemplateSchema.optional().nullable(),
+      defaultEmailPreference: z.enum(["personal", "workspace"]),
     }),
   )
   .action(async ({ parsedInput }) => {
@@ -110,6 +111,7 @@ export const saveWorkspaceSettingsAction = orgAdminActionClient
           parsedInput.emailTemplate?.trim() ||
           organization.workspaceEmailTemplate ||
           DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+        defaultEmailPreference: parsedInput.defaultEmailPreference,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

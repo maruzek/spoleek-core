@@ -16,6 +16,8 @@ export type ResolvedMemberDatasetRow = {
   firstName: string;
   lastName: string;
   personalEmail: string | null;
+  workspaceEmail: string | null;
+  preferredEmailSetting: "personal" | "workspace" | null;
   userId: string | null;
 };
 
@@ -30,6 +32,8 @@ function toResolvedDatasetRow(row: {
   firstName: string;
   lastName: string;
   email: string | null;
+  workspaceUserEmail?: string | null;
+  preferredEmail?: "personal" | "workspace" | null;
   userId: string | null;
 }): ResolvedMemberDatasetRow {
   return {
@@ -37,6 +41,8 @@ function toResolvedDatasetRow(row: {
     firstName: row.firstName,
     lastName: row.lastName,
     personalEmail: normalizeEmail(row.email),
+    workspaceEmail: normalizeEmail(row.workspaceUserEmail ?? null),
+    preferredEmailSetting: row.preferredEmail ?? null,
     userId: row.userId,
   };
 }
@@ -52,6 +58,8 @@ async function listScopedMembersAdminDataset(orgId: string, scopedGroupIds: stri
       firstName: tenantMembers.firstName,
       lastName: tenantMembers.lastName,
       email: tenantMembers.email,
+      workspaceUserEmail: tenantMembers.workspaceUserEmail,
+      preferredEmail: tenantMembers.preferredEmail,
       userId: tenantMembers.userId,
     })
     .from(groupMemberships)
