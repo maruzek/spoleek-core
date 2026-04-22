@@ -257,11 +257,14 @@ export async function getGroupById(orgId: string, groupId: string) {
       feeAmount: groups.feeAmount,
       feeCurrency: groups.feeCurrency,
       feeBankAccount: groups.feeBankAccount,
+      workspaceGroupEmail: groups.workspaceGroupEmail,
+      workspaceOrgUnitPath: groups.workspaceOrgUnitPath,
       createdAt: groups.createdAt,
       updatedAt: groups.updatedAt,
       categoryName: groupCategories.name,
       categorySlug: groupCategories.slug,
       categoryManagesFees: groupCategories.managesMembershipFees,
+      categorySpecialCapability: groupCategories.specialCapability,
     })
     .from(groups)
     .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))

@@ -31,6 +31,11 @@ import {
 import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
 import { getGroupCategoryById, getGroupById } from "@/server/queries/groups";
 import { getMemberById } from "@/server/queries/members";
+import {
+  addWorkspaceGroupMember,
+  removeWorkspaceGroupMember,
+  updateWorkspaceUserOrgUnit,
+} from "@/server/lib/workspace/client";
 
 async function ensureUniqueCategorySlug(orgId: string, slug: string, categoryId?: string) {
   const conditions = [eq(groupCategories.orgId, orgId), eq(groupCategories.slug, slug)];
@@ -254,6 +259,8 @@ export const saveGroupAction = authActionClient
           isActive: parsedInput.isActive,
           sortOrder: parsedInput.sortOrder,
           ...feeFields,
+          workspaceGroupEmail: parsedInput.workspaceGroupEmail,
+          workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
           updatedAt: new Date(),
         })
         .where(and(eq(groups.id, parsedInput.id), eq(groups.orgId, organization.id)));
@@ -275,6 +282,8 @@ export const saveGroupAction = authActionClient
         isActive: parsedInput.isActive,
         sortOrder: parsedInput.sortOrder,
         ...feeFields,
+        workspaceGroupEmail: parsedInput.workspaceGroupEmail,
+        workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
       });
     }
 
@@ -338,7 +347,7 @@ export const assignGroupMemberAction = authActionClient
     }
 
     await requireGroupManagementAccess(parsedInput.groupId);
-    await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
+    const member = await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
     await db
       .insert(groupMemberships)
@@ -350,6 +359,15 @@ export const assignGroupMemberAction = authActionClient
         role: "member",
       })
       .onConflictDoNothing();
+
+    if (member.workspaceUserEmail) {
+      if (group.workspaceGroupEmail) {
+        await addWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
+      }
+      if (group.categorySpecialCapability === "workspace_org_unit" && group.workspaceOrgUnitPath) {
+        await updateWorkspaceUserOrgUnit(organization.id, member.workspaceUserEmail, group.workspaceOrgUnitPath);
+      }
+    }
 
     return { success: true };
   });
@@ -369,8 +387,9 @@ export const assignGroupMembersAction = authActionClient
 
     const uniqueMemberIds = [...new Set(parsedInput.memberIds)];
 
+    const members = [];
     for (const memberId of uniqueMemberIds) {
-      await requireOrgMemberInOrganization(organization.id, memberId);
+      members.push(await requireOrgMemberInOrganization(organization.id, memberId));
     }
 
     await db
@@ -386,6 +405,17 @@ export const assignGroupMembersAction = authActionClient
       )
       .onConflictDoNothing();
 
+    for (const member of members) {
+      if (member.workspaceUserEmail) {
+        if (group.workspaceGroupEmail) {
+          await addWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
+        }
+        if (group.categorySpecialCapability === "workspace_org_unit" && group.workspaceOrgUnitPath) {
+          await updateWorkspaceUserOrgUnit(organization.id, member.workspaceUserEmail, group.workspaceOrgUnitPath);
+        }
+      }
+    }
+
     return {
       success: true,
       requestedCount: uniqueMemberIds.length,
@@ -397,8 +427,14 @@ export const removeGroupMemberAction = authActionClient
   .inputSchema(removeGroupMemberSchema)
   .action(async ({ parsedInput }) => {
     const organization = await requireOrganization();
+    const group = await getGroupById(organization.id, parsedInput.groupId);
+
+    if (!group) {
+      throw new Error("The selected group could not be found.");
+    }
 
     await requireGroupManagementAccess(parsedInput.groupId);
+    const member = await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
     await db
       .delete(groupMemberships)
@@ -409,6 +445,10 @@ export const removeGroupMemberAction = authActionClient
           eq(groupMemberships.memberId, parsedInput.memberId),
         ),
       );
+
+    if (member.workspaceUserEmail && group.workspaceGroupEmail) {
+      await removeWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
+    }
 
     return { success: true };
   });

@@ -459,6 +459,8 @@ export const groups = pgTable(
     feeCurrency: text("fee_currency"),
     feeBankAccount: text("fee_bank_account"),
     feePaymentWindowDays: integer("fee_payment_window_days"),
+    workspaceGroupEmail: text("workspace_group_email"),
+    workspaceOrgUnitPath: text("workspace_org_unit_path"),
     ...timestamps,
   },
   (table) => [

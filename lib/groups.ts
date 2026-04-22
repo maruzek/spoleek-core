@@ -137,6 +137,8 @@ export const groupSchema = z
           return trimmed;
         }
       }),
+    workspaceGroupEmail: nullableTrimmedString,
+    workspaceOrgUnitPath: nullableTrimmedString,
   })
   .superRefine((value, ctx) => {
     if (

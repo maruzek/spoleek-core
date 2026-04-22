@@ -169,6 +169,13 @@
       "when": 1776857070268,
       "tag": "0023_schema_performance_improvements",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1776873094471,
+      "tag": "0024_workspace_groups",
+      "breakpoints": true
     }
   ]
 }

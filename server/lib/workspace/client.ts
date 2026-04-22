@@ -245,3 +245,119 @@ export async function searchWorkspaceUsers(
     fullName: u.name?.fullName ?? "",
   }));
 }
+
+export type WorkspaceGroup = {
+  id: string;
+  email: string;
+  name: string;
+};
+
+export async function searchWorkspaceGroups(
+  orgId: string,
+  query: string,
+  maxResults = 50,
+): Promise<WorkspaceGroup[]> {
+  const params = new URLSearchParams({
+    customer: "my_customer",
+    query,
+    maxResults: String(maxResults),
+  });
+  const response = await directoryFetch(orgId, `/groups?${params.toString()}`);
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  const body = (await response.json()) as {
+    groups?: { id: string; email: string; name?: string }[];
+  };
+
+  return (body.groups ?? []).map((g) => ({
+    id: g.id,
+    email: g.email,
+    name: g.name ?? g.email,
+  }));
+}
+
+export type WorkspaceOrgUnit = {
+  name: string;
+  orgUnitPath: string;
+  parentOrgUnitPath: string;
+};
+
+export async function searchWorkspaceOrgUnits(
+  orgId: string,
+): Promise<WorkspaceOrgUnit[]> {
+  const params = new URLSearchParams({
+    type: "all",
+  });
+  const response = await directoryFetch(orgId, `/customer/my_customer/orgunits?${params.toString()}`);
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  const body = (await response.json()) as {
+    organizationUnits?: WorkspaceOrgUnit[];
+  };
+
+  return body.organizationUnits ?? [];
+}
+
+export async function addWorkspaceGroupMember(
+  orgId: string,
+  groupEmail: string,
+  userEmail: string,
+): Promise<void> {
+  const response = await directoryFetch(orgId, `/groups/${encodeURIComponent(groupEmail)}/members`, {
+    method: "POST",
+    body: JSON.stringify({ email: userEmail, role: "MEMBER" }),
+  });
+
+  // Ignore if already a member
+  if (response.status === 409) {
+    return;
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function removeWorkspaceGroupMember(
+  orgId: string,
+  groupEmail: string,
+  userEmail: string,
+): Promise<void> {
+  const response = await directoryFetch(orgId, `/groups/${encodeURIComponent(groupEmail)}/members/${encodeURIComponent(userEmail)}`, {
+    method: "DELETE",
+  });
+
+  // Ignore if not a member or group doesn't exist
+  if (response.status === 404 || response.status === 400) {
+    return;
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function updateWorkspaceUserOrgUnit(
+  orgId: string,
+  userEmail: string,
+  orgUnitPath: string,
+): Promise<void> {
+  const response = await directoryFetch(orgId, `/users/${encodeURIComponent(userEmail)}`, {
+    method: "PUT",
+    body: JSON.stringify({ orgUnitPath }),
+  });
+
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
