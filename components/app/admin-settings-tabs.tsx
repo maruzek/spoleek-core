@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileTextIcon, GlobeIcon, UsersIcon } from "lucide-react";
+import { BellIcon, FileTextIcon, GlobeIcon, UsersIcon } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { JoinPageSettingsForm } from "@/components/app/join-page-settings-form";
+import {
+  EmailNotificationSettingsCard,
+  type EmailNotificationSettingsState,
+} from "@/components/app/email-notification-settings-card";
 import {
   MembershipSettingsCard,
   type MembershipSettingsState,
@@ -28,11 +32,12 @@ type AdminSettingsTabsProps = {
     | "privacyPolicyText"
   >;
   membershipState: MembershipSettingsState;
+  emailNotificationState: EmailNotificationSettingsState;
   workspaceState: WorkspaceSettingsState;
   defaultTab?: string;
 };
 
-const VALID_TABS = ["join", "membership", "workspace"] as const;
+const VALID_TABS = ["join", "membership", "notifications", "workspace"] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 function toValidTab(tab: string | undefined): TabValue {
@@ -43,6 +48,7 @@ export function AdminSettingsTabs({
   organization,
   policy,
   membershipState,
+  emailNotificationState,
   workspaceState,
   defaultTab,
 }: AdminSettingsTabsProps) {
@@ -66,6 +72,10 @@ export function AdminSettingsTabs({
           <UsersIcon data-icon="inline-start" />
           Membership
         </TabsTrigger>
+        <TabsTrigger value="notifications">
+          <BellIcon data-icon="inline-start" />
+          Notifications
+        </TabsTrigger>
         <TabsTrigger value="workspace">
           <GlobeIcon data-icon="inline-start" />
           Workspace
@@ -81,6 +91,12 @@ export function AdminSettingsTabs({
       <TabsContent value="membership">
         <div className="max-w-2xl pt-6">
           <MembershipSettingsCard state={membershipState} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="notifications">
+        <div className="max-w-2xl pt-6">
+          <EmailNotificationSettingsCard state={emailNotificationState} />
         </div>
       </TabsContent>
 

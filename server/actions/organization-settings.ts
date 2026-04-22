@@ -161,6 +161,33 @@ export const saveMembershipSettingsAction = orgAdminActionClient
     return { success: true };
   });
 
+const emailNotificationSettingsSchema = z.object({
+  emailNotifyRenewalHeadsup: z.boolean(),
+  emailNotifyRenewalHeadsupDaysBefore: z.number().int().min(1).max(30),
+  emailNotifyOverdue: z.boolean(),
+  emailNotifyPaymentConfirmed: z.boolean(),
+});
+
+export const saveEmailNotificationSettingsAction = orgAdminActionClient
+  .metadata({ actionName: "saveEmailNotificationSettings" })
+  .inputSchema(emailNotificationSettingsSchema)
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    await db
+      .update(organizations)
+      .set({
+        emailNotifyRenewalHeadsup: parsedInput.emailNotifyRenewalHeadsup,
+        emailNotifyRenewalHeadsupDaysBefore: parsedInput.emailNotifyRenewalHeadsupDaysBefore,
+        emailNotifyOverdue: parsedInput.emailNotifyOverdue,
+        emailNotifyPaymentConfirmed: parsedInput.emailNotifyPaymentConfirmed,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, organization.id));
+
+    return { success: true };
+  });
+
 export const disconnectWorkspaceAction = orgAdminActionClient
   .metadata({ actionName: "disconnectWorkspace" })
   .inputSchema(z.object({}).optional())

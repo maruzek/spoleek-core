@@ -3,7 +3,7 @@ import { z } from "zod";
 import { memberCustomFieldAnswersSchema } from "@/lib/member-custom-fields";
 
 const tenantRoleSchema = z.enum(["member", "leader", "org_admin"]);
-const membershipStatusSchema = z.enum(["invited", "pending", "active", "archived"]);
+const membershipStatusSchema = z.enum(["invited", "pending", "active", "suspended", "archived"]);
 
 const emailSchema = z.union([z.literal(""), z.email("Enter a valid email.")]).default("");
 

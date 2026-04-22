@@ -25,6 +25,7 @@ export const membershipStatusEnum = pgEnum("membership_status", [
   "invited",
   "pending",
   "active",
+  "suspended",
   "archived",
   "deleted",
 ]);
@@ -280,6 +281,12 @@ export const organizations = pgTable(
     membershipFeePaymentWindowDays: integer("membership_fee_payment_window_days")
       .notNull()
       .default(30),
+    emailNotifyRenewalHeadsup: boolean("email_notify_renewal_headsup").notNull().default(true),
+    emailNotifyRenewalHeadsupDaysBefore: integer("email_notify_renewal_headsup_days_before")
+      .notNull()
+      .default(7),
+    emailNotifyOverdue: boolean("email_notify_overdue").notNull().default(true),
+    emailNotifyPaymentConfirmed: boolean("email_notify_payment_confirmed").notNull().default(true),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),

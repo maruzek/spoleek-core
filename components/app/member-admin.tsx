@@ -112,6 +112,10 @@ function getStatusVariant(status: VisibleMemberStatus) {
     return "success";
   }
 
+  if (status === "suspended") {
+    return "error";
+  }
+
   if (status === "pending") {
     return "warning";
   }

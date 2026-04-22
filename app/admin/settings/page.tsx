@@ -9,6 +9,7 @@ import { requireAdminAccess } from "@/server/queries/access";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { db } from "@/server/db";
 import { workspaceConnections } from "@/server/db/schema";
+import type { EmailNotificationSettingsState } from "@/components/app/email-notification-settings-card";
 import type { MembershipSettingsState } from "@/components/app/membership-settings-card";
 import type { WorkspaceSettingsState } from "@/components/app/workspace-settings-card";
 
@@ -61,6 +62,13 @@ export default async function AdminSettingsPage({
     membershipFeePaymentWindowDays: organization.membershipFeePaymentWindowDays,
   };
 
+  const emailNotificationState: EmailNotificationSettingsState = {
+    emailNotifyRenewalHeadsup: organization.emailNotifyRenewalHeadsup,
+    emailNotifyRenewalHeadsupDaysBefore: organization.emailNotifyRenewalHeadsupDaysBefore,
+    emailNotifyOverdue: organization.emailNotifyOverdue,
+    emailNotifyPaymentConfirmed: organization.emailNotifyPaymentConfirmed,
+  };
+
   const workspaceState: WorkspaceSettingsState = {
     moduleEnabled: Boolean(organization.workspaceModuleEnabled),
     connected: Boolean(organization.workspaceConnectedAt),
@@ -93,6 +101,7 @@ export default async function AdminSettingsPage({
         organization={organization}
         policy={policy}
         membershipState={membershipState}
+        emailNotificationState={emailNotificationState}
         workspaceState={workspaceState}
         defaultTab={tab}
       />

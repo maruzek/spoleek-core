@@ -14,6 +14,35 @@ import { listMemberIdsInGroups } from "@/server/queries/payments";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 
+async function reactivateMemberIfNoMoreOverdue(orgId: string, memberId: string): Promise<void> {
+  const [member] = await db
+    .select({ status: tenantMembers.status })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.id, memberId), eq(tenantMembers.orgId, orgId)))
+    .limit(1);
+
+  if (member?.status !== "suspended") return;
+
+  const remainingOverdue = await db
+    .select({ id: memberPayments.id })
+    .from(memberPayments)
+    .where(
+      and(
+        eq(memberPayments.orgId, orgId),
+        eq(memberPayments.memberId, memberId),
+        eq(memberPayments.status, "overdue"),
+      ),
+    )
+    .limit(1);
+
+  if (remainingOverdue.length === 0) {
+    await db
+      .update(tenantMembers)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(and(eq(tenantMembers.id, memberId), eq(tenantMembers.orgId, orgId)));
+  }
+}
+
 const CANCELLATION_REASONS = [
   "duplicate",
   "waived",
@@ -70,6 +99,7 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
         memberFirstName: tenantMembers.firstName,
         memberLastName: tenantMembers.lastName,
         orgName: organizations.name,
+        emailNotifyPaymentConfirmed: organizations.emailNotifyPaymentConfirmed,
         amount: memberPayments.amount,
         currency: memberPayments.currency,
         periodLabel: memberPayments.periodLabel,
@@ -81,7 +111,7 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
       .where(eq(memberPayments.id, paymentId))
       .limit(1);
 
-    if (!row?.memberEmail) return;
+    if (!row?.memberEmail || !row.emailNotifyPaymentConfirmed) return;
 
     const memberName = [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || row.memberEmail;
     const resend = getResendClient();
@@ -128,7 +158,7 @@ export const markPaymentPaidAction = authActionClient
 
     const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
 
-    await db
+    const [updated] = await db
       .update(memberPayments)
       .set({
         status: "paid",
@@ -143,7 +173,12 @@ export const markPaymentPaidAction = authActionClient
           eq(memberPayments.orgId, orgId),
           inArray(memberPayments.status, ["pending", "overdue"]),
         ),
-      );
+      )
+      .returning({ memberId: memberPayments.memberId });
+
+    if (updated) {
+      await reactivateMemberIfNoMoreOverdue(orgId, updated.memberId);
+    }
 
     after(() => sendPaymentConfirmedEmail(parsedInput.paymentId, paidAt));
 
@@ -215,7 +250,12 @@ export const bulkMarkPaymentsPaidAction = authActionClient
           inArray(memberPayments.status, ["pending", "overdue"]),
         ),
       )
-      .returning({ id: memberPayments.id });
+      .returning({ id: memberPayments.id, memberId: memberPayments.memberId });
+
+    const uniqueMemberIds = [...new Set(result.map((r) => r.memberId))];
+    for (const memberId of uniqueMemberIds) {
+      await reactivateMemberIfNoMoreOverdue(orgId, memberId);
+    }
 
     after(async () => {
       for (const { id } of result) {

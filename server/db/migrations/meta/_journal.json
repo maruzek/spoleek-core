@@ -155,6 +155,13 @@
       "when": 1776784367536,
       "tag": "0021_typical_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1776803550014,
+      "tag": "0022_greedy_the_hunter",
+      "breakpoints": true
     }
   ]
 }

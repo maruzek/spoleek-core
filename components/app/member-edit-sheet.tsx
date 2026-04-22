@@ -750,6 +750,7 @@ export function MemberEditSheet({
                               <SelectItem value="invited">Invited</SelectItem>
                               <SelectItem value="pending">Pending</SelectItem>
                               <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="suspended">Suspended</SelectItem>
                               <SelectItem value="archived">Archived</SelectItem>
                             </SelectGroup>
                           </SelectContent>

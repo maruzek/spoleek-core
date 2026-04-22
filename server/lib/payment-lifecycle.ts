@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { and, eq, inArray, lt } from "drizzle-orm";
 
 import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
+import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -61,8 +62,8 @@ function isInRenewalWindow(renewalMonth: number, renewalDay: number, today: Date
   );
 }
 
-async function sendOverdueEmails(overdueIds: string[]): Promise<void> {
-  if (overdueIds.length === 0) return;
+async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean): Promise<void> {
+  if (overdueIds.length === 0 || !orgEmailEnabled) return;
 
   try {
     const rows = await db
@@ -117,6 +118,102 @@ async function sendOverdueEmails(overdueIds: string[]): Promise<void> {
   } catch {
     // Email sending is non-critical — lifecycle continues
   }
+}
+
+async function sendRenewalHeadsupEmails(
+  org: typeof organizations.$inferSelect,
+  periodLabel: string,
+): Promise<void> {
+  try {
+    const feeAmount = org.membershipFeeAmount;
+    const feeCurrency = org.membershipFeeCurrency;
+    if (!feeAmount || !feeCurrency) return;
+
+    // Find active members who don't yet have a payment for this period
+    const membersWithPayment = await db
+      .select({ memberId: memberPayments.memberId })
+      .from(memberPayments)
+      .where(
+        and(
+          eq(memberPayments.orgId, org.id),
+          eq(memberPayments.periodLabel, periodLabel),
+        ),
+      );
+
+    const alreadyHasPayment = new Set(membersWithPayment.map((r) => r.memberId));
+
+    const activeMembers = await db
+      .select({
+        id: tenantMembers.id,
+        email: tenantMembers.email,
+        firstName: tenantMembers.firstName,
+        lastName: tenantMembers.lastName,
+      })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.orgId, org.id),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+
+    const renewalDate = new Date(
+      new Date().getFullYear(),
+      org.membershipRenewalMonth! - 1,
+      org.membershipRenewalDay!,
+    ).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+    const resend = getResendClient();
+    const from = getResendFromEmail();
+
+    for (const member of activeMembers) {
+      if (!member.email || alreadyHasPayment.has(member.id)) continue;
+      const memberName =
+        [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email;
+      try {
+        await resend.emails.send({
+          from,
+          to: [member.email],
+          subject: `Membership renewal coming up — ${periodLabel}`,
+          react: PaymentRenewalHeadsupEmail({
+            organizationName: org.name,
+            memberName,
+            periodLabel,
+            renewalDate,
+            amount: (feeAmount / 100).toFixed(2),
+            currency: feeCurrency,
+            bankAccount: org.membershipFeeBankAccount,
+          }),
+        });
+      } catch {
+        // Individual email failures must not abort the batch
+      }
+    }
+  } catch {
+    // Email sending is non-critical — lifecycle continues
+  }
+}
+
+function isXDaysBeforeRenewal(
+  renewalMonth: number,
+  renewalDay: number,
+  today: Date,
+  daysBefore: number,
+): boolean {
+  const currentYear = today.getFullYear();
+  const candidates = [
+    new Date(currentYear, renewalMonth - 1, renewalDay),
+    new Date(currentYear + 1, renewalMonth - 1, renewalDay),
+  ];
+  return candidates.some((renewalDate) => {
+    const headsupDate = new Date(renewalDate);
+    headsupDate.setDate(headsupDate.getDate() - daysBefore);
+    return (
+      headsupDate.getFullYear() === today.getFullYear() &&
+      headsupDate.getMonth() === today.getMonth() &&
+      headsupDate.getDate() === today.getDate()
+    );
+  });
 }
 
 export async function generatePaymentForMember(
@@ -238,15 +335,26 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
 
   const today = new Date();
 
-  // Mark overdue and collect IDs for notification emails
+  // Mark overdue and collect IDs + memberIds for suspension + notification emails
   const nowOverdue = await db
     .update(memberPayments)
     .set({ status: "overdue", updatedAt: new Date() })
     .where(and(eq(memberPayments.status, "pending"), lt(memberPayments.dueAt, today)))
-    .returning({ id: memberPayments.id });
+    .returning({ id: memberPayments.id, memberId: memberPayments.memberId, orgId: memberPayments.orgId });
 
-  // Fire-and-forget overdue emails — don't block payment generation
-  void sendOverdueEmails(nowOverdue.map((r) => r.id));
+  // Suspend active members whose payment just became overdue
+  if (nowOverdue.length > 0) {
+    const overdueMemberIds = [...new Set(nowOverdue.map((r) => r.memberId))];
+    await db
+      .update(tenantMembers)
+      .set({ status: "suspended", updatedAt: new Date() })
+      .where(
+        and(
+          inArray(tenantMembers.id, overdueMemberIds),
+          eq(tenantMembers.status, "active"),
+        ),
+      );
+  }
 
   // Load orgs eligible for payment generation
   const eligibleOrgs = await db
@@ -259,9 +367,37 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
       ),
     );
 
+  // Fire-and-forget overdue emails grouped by org toggle — don't block payment generation
+  if (nowOverdue.length > 0) {
+    const overdueByOrg = new Map<string, string[]>();
+    for (const r of nowOverdue) {
+      const ids = overdueByOrg.get(r.orgId) ?? [];
+      ids.push(r.id);
+      overdueByOrg.set(r.orgId, ids);
+    }
+    const orgToggles = new Map(eligibleOrgs.map((o) => [o.id, o.emailNotifyOverdue]));
+    for (const [orgId, ids] of overdueByOrg) {
+      void sendOverdueEmails(ids, orgToggles.get(orgId) ?? true);
+    }
+  }
+
   for (const org of eligibleOrgs) {
     if (!org.membershipRenewalMonth || !org.membershipRenewalDay) {
       continue;
+    }
+
+    // Send renewal head-up emails if today is the configured number of days before renewal
+    if (
+      org.emailNotifyRenewalHeadsup &&
+      isXDaysBeforeRenewal(
+        org.membershipRenewalMonth,
+        org.membershipRenewalDay,
+        today,
+        org.emailNotifyRenewalHeadsupDaysBefore,
+      )
+    ) {
+      const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
+      void sendRenewalHeadsupEmails(org, periodLabel);
     }
 
     if (!isInRenewalWindow(org.membershipRenewalMonth, org.membershipRenewalDay, today)) {
@@ -273,7 +409,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
     try {
       const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
 
-      // Load active members
+      // Load active members (suspended members are excluded — they must pay first)
       const activeMembers = await db
         .select({ id: tenantMembers.id })
         .from(tenantMembers)

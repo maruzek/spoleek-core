@@ -1,7 +1,8 @@
 import { AppPage } from "@/components/app/app-page";
 import { PaymentsAdmin } from "@/components/app/payments-admin";
+import { PaymentsFinancialHealth } from "@/components/app/payments-financial-health";
 import { requireAdminAccess } from "@/server/queries/access";
-import { listMemberIdsInGroups, listPaymentsForOrg } from "@/server/queries/payments";
+import { getPaymentStats, listMemberIdsInGroups, listPaymentsForOrg } from "@/server/queries/payments";
 import { listScopedGroupIds } from "@/server/queries/access";
 
 export default async function AdminPaymentsPage() {
@@ -19,12 +20,16 @@ export default async function AdminPaymentsPage() {
     payments = await listPaymentsForOrg(access.organization.id, { memberIds });
   }
 
+  const stats = isFullAdmin ? await getPaymentStats(access.organization.id) : null;
+  const currency = payments.find((p) => p.currency)?.currency ?? "CZK";
+
   return (
     <AppPage
       eyebrow="Administration"
       title="Membership payments."
       description="Track and manage fee payment records for all active members."
     >
+      {stats && <PaymentsFinancialHealth stats={stats} currency={currency} />}
       <PaymentsAdmin payments={payments} isFullAdmin={isFullAdmin} />
     </AppPage>
   );
