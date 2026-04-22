@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { and, eq, inArray } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
@@ -197,7 +195,6 @@ async function syncManageableGroupMemberships(args: {
       .insert(groupMemberships)
       .values(
         groupIdsToInsert.map((groupId) => ({
-          id: randomUUID(),
           orgId: args.orgId,
           groupId,
           memberId: args.memberId,
@@ -241,11 +238,8 @@ export const createShadowMemberAction = authActionClient
       }
     }
 
-    const memberId = randomUUID();
-
     await db.transaction(async (tx) => {
-      await tx.insert(tenantMembers).values({
-        id: memberId,
+      const [{ id: memberId }] = await tx.insert(tenantMembers).values({
         orgId: organization.id,
         userId: matchedUser?.id ?? null,
         email,
@@ -259,7 +253,7 @@ export const createShadowMemberAction = authActionClient
         linkedAt: matchedUser ? new Date() : null,
         acceptedTermsAt: matchedUser ? new Date() : null,
         acceptedPrivacyAt: matchedUser ? new Date() : null,
-      });
+      }).returning({ id: tenantMembers.id });
 
       await syncManageableGroupMemberships({
         tx,

@@ -4,6 +4,7 @@ import {
   buildMemberCustomFieldDisplayItems,
   extractAnswerValue,
 } from "@/lib/member-custom-fields";
+import type { CustomFieldValue } from "@/server/db/schema";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -312,11 +313,7 @@ async function listMemberCustomFieldDisplayMap(orgId: string, memberIds?: string
       .select({
         memberId: memberCustomFieldValues.memberId,
         fieldId: memberCustomFieldValues.fieldId,
-        valueText: memberCustomFieldValues.valueText,
-        valueNumber: memberCustomFieldValues.valueNumber,
-        valueBoolean: memberCustomFieldValues.valueBoolean,
-        valueDate: memberCustomFieldValues.valueDate,
-        valueJson: memberCustomFieldValues.valueJson,
+        value: memberCustomFieldValues.value,
       })
       .from(memberCustomFieldValues)
       .where(and(...valueFilters)),
@@ -325,15 +322,7 @@ async function listMemberCustomFieldDisplayMap(orgId: string, memberIds?: string
   const answersByMember = valueRows.reduce<Map<string, Record<string, unknown>>>(
     (map, row) => {
       const answers = map.get(row.memberId) ?? {};
-      answers[row.fieldId] = extractAnswerValue({
-        valueText: row.valueText,
-        valueNumber: row.valueNumber,
-        valueBoolean: row.valueBoolean,
-        valueDate: row.valueDate,
-        valueJson: Array.isArray(row.valueJson)
-          ? row.valueJson.map(String)
-          : null,
-      });
+      answers[row.fieldId] = extractAnswerValue(row.value as CustomFieldValue);
       map.set(row.memberId, answers);
       return map;
     },

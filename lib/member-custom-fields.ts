@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { formatDateTime } from "@/lib/format";
 import type {
+  CustomFieldValue,
   MemberCustomField,
   MemberCustomFieldStage,
   MemberCustomFieldType,
@@ -105,14 +106,6 @@ export type MemberCustomFieldAnswersInput = z.infer<
   typeof memberCustomFieldAnswersSchema
 >;
 
-export type CustomFieldValueRecord = {
-  valueText: string | null;
-  valueNumber: number | null;
-  valueBoolean: boolean | null;
-  valueDate: Date | null;
-  valueJson: string[] | null;
-};
-
 export type MemberCustomFieldDisplayItem = {
   key: string;
   label: string;
@@ -166,7 +159,7 @@ export function normalizeFieldInputValue(
   field: Pick<MemberCustomField, "type" | "required" | "label" | "key">,
   rawValue: unknown,
 ): {
-  normalized: CustomFieldValueRecord;
+  normalized: CustomFieldValue;
   publicValue: string | boolean | number | string[] | null;
   error: string | null;
 } {
@@ -177,17 +170,14 @@ export function normalizeFieldInputValue(
 
     if (field.required && !boolValue) {
       return {
-        normalized: emptyNormalizedValue(),
+        normalized: null,
         publicValue: null,
         error: `${label} is required.`,
       };
     }
 
     return {
-      normalized: {
-        ...emptyNormalizedValue(),
-        valueBoolean: boolValue,
-      },
+      normalized: boolValue,
       publicValue: boolValue,
       error: null,
     };
@@ -202,17 +192,14 @@ export function normalizeFieldInputValue(
 
     if (field.required && values.length === 0) {
       return {
-        normalized: emptyNormalizedValue(),
+        normalized: null,
         publicValue: null,
         error: `${label} is required.`,
       };
     }
 
     return {
-      normalized: {
-        ...emptyNormalizedValue(),
-        valueJson: values,
-      },
+      normalized: values.length > 0 ? values : null,
       publicValue: values,
       error: null,
     };
@@ -223,7 +210,7 @@ export function normalizeFieldInputValue(
 
   if (field.required && textValue.length === 0) {
     return {
-      normalized: emptyNormalizedValue(),
+      normalized: null,
       publicValue: null,
       error: `${label} is required.`,
     };
@@ -231,7 +218,7 @@ export function normalizeFieldInputValue(
 
   if (textValue.length === 0) {
     return {
-      normalized: emptyNormalizedValue(),
+      normalized: null,
       publicValue: null,
       error: null,
     };
@@ -242,17 +229,14 @@ export function normalizeFieldInputValue(
 
     if (!Number.isFinite(numberValue)) {
       return {
-        normalized: emptyNormalizedValue(),
+        normalized: null,
         publicValue: null,
         error: `${label} must be a valid number.`,
       };
     }
 
     return {
-      normalized: {
-        ...emptyNormalizedValue(),
-        valueNumber: numberValue,
-      },
+      normalized: numberValue,
       publicValue: numberValue,
       error: null,
     };
@@ -263,7 +247,7 @@ export function normalizeFieldInputValue(
 
     if (!result.success) {
       return {
-        normalized: emptyNormalizedValue(),
+        normalized: null,
         publicValue: null,
         error: `${label} must be a valid email address.`,
       };
@@ -275,56 +259,40 @@ export function normalizeFieldInputValue(
 
     if (Number.isNaN(dateValue.getTime())) {
       return {
-        normalized: emptyNormalizedValue(),
+        normalized: null,
         publicValue: null,
         error: `${label} must be a valid date.`,
       };
     }
 
     return {
-      normalized: {
-        ...emptyNormalizedValue(),
-        valueDate: dateValue,
-      },
+      normalized: dateValue.toISOString(),
       publicValue: textValue,
       error: null,
     };
   }
 
   return {
-    normalized: {
-      ...emptyNormalizedValue(),
-      valueText: textValue,
-    },
+    normalized: textValue,
     publicValue: textValue,
     error: null,
   };
 }
 
-export function extractAnswerValue(answer: {
-  valueText: string | null;
-  valueNumber: number | null;
-  valueBoolean: boolean | null;
-  valueDate: Date | null;
-  valueJson: string[] | null;
-}) {
-  if (answer.valueBoolean !== null) {
-    return answer.valueBoolean;
+export function extractAnswerValue(value: CustomFieldValue): string | number | boolean | string[] | null {
+  if (value == null) {
+    return null;
   }
 
-  if (answer.valueNumber !== null) {
-    return answer.valueNumber;
+  if (typeof value === "boolean" || typeof value === "number" || typeof value === "string") {
+    return value;
   }
 
-  if (answer.valueDate !== null) {
-    return answer.valueDate.toISOString().slice(0, 10);
+  if (Array.isArray(value)) {
+    return value.map(String);
   }
 
-  if (answer.valueJson !== null) {
-    return answer.valueJson;
-  }
-
-  return answer.valueText;
+  return null;
 }
 
 export function formatMemberCustomFieldValue(
@@ -389,14 +357,4 @@ export function buildMemberCustomFieldDisplayItems(
 
     return items;
   }, []);
-}
-
-function emptyNormalizedValue(): CustomFieldValueRecord {
-  return {
-    valueText: null,
-    valueNumber: null,
-    valueBoolean: null,
-    valueDate: null,
-    valueJson: null,
-  };
 }

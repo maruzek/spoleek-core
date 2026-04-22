@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { and, eq, ne } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
@@ -157,7 +155,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
     } else {
       if (hasMembersTableColumn) {
         await db.insert(groupCategories).values({
-          id: randomUUID(),
+
           orgId: organization.id,
           name: parsedInput.name.trim(),
           slug: parsedInput.slug.trim(),
@@ -179,7 +177,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
         });
       } else {
         await db.insert(groupCategories).values({
-          id: randomUUID(),
+
           orgId: organization.id,
           name: parsedInput.name.trim(),
           slug: parsedInput.slug.trim(),
@@ -267,7 +265,7 @@ export const saveGroupAction = authActionClient
       }
 
       await db.insert(groups).values({
-        id: randomUUID(),
+
         orgId: organization.id,
         categoryId: parsedInput.categoryId,
         name: parsedInput.name.trim(),
@@ -299,7 +297,7 @@ export const assignCategoryAdminAction = orgAdminActionClient
     await db
       .insert(categoryAdminAssignments)
       .values({
-        id: randomUUID(),
+
         orgId: organization.id,
         categoryId: parsedInput.categoryId,
         memberId: parsedInput.memberId,
@@ -345,7 +343,7 @@ export const assignGroupMemberAction = authActionClient
     await db
       .insert(groupMemberships)
       .values({
-        id: randomUUID(),
+
         orgId: organization.id,
         groupId: parsedInput.groupId,
         memberId: parsedInput.memberId,
@@ -379,7 +377,7 @@ export const assignGroupMembersAction = authActionClient
       .insert(groupMemberships)
       .values(
         uniqueMemberIds.map((memberId) => ({
-          id: randomUUID(),
+
           orgId: organization.id,
           groupId: parsedInput.groupId,
           memberId,
@@ -446,7 +444,7 @@ export const assignGroupAdminAction = authActionClient
         .where(eq(groupMemberships.id, existing.id));
     } else {
       await db.insert(groupMemberships).values({
-        id: randomUUID(),
+
         orgId: organization.id,
         groupId: parsedInput.groupId,
         memberId: parsedInput.memberId,

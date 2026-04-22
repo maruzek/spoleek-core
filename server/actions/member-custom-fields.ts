@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
@@ -88,16 +86,12 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       };
     }
 
-    const fieldId = randomUUID();
-
-    await db.insert(memberCustomFields).values({
-      id: fieldId,
-      ...payload,
-    });
+    const [inserted] = await db.insert(memberCustomFields).values(payload)
+      .returning({ id: memberCustomFields.id });
 
     return {
       success: true,
-      fieldId,
+      fieldId: inserted!.id,
     };
   });
 

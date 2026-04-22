@@ -147,7 +147,7 @@ export async function logMemberAuthEvent(params: {
   metadata?: Record<string, unknown> | null;
 }) {
   await db.insert(memberAuthEvents).values({
-    id: randomUUID(),
+
     orgId: params.orgId,
     memberId: params.memberId,
     actorUserId: params.actorUserId ?? null,
@@ -210,7 +210,7 @@ export async function markMemberInviteSent(params: {
   const [createdInvite] = await db
     .insert(memberInvites)
     .values({
-      id: randomUUID(),
+  
       orgId: member.orgId,
       memberId: member.id,
       provisionedUserId: null,
@@ -283,7 +283,7 @@ export async function markMemberInviteFailed(params: {
   const [createdInvite] = await db
     .insert(memberInvites)
     .values({
-      id: randomUUID(),
+  
       orgId: member.orgId,
       memberId: member.id,
       provisionedUserId: null,
@@ -704,7 +704,7 @@ async function upsertProvisionedUser(member: InviteMemberRecord, provisionedUser
   const [createdInvite] = await db
     .insert(memberInvites)
     .values({
-      id: randomUUID(),
+  
       orgId: member.orgId,
       memberId: member.id,
       provisionedUserId,

@@ -1,5 +1,3 @@
-import { randomUUID } from "crypto";
-
 import { and, eq, inArray, lt } from "drizzle-orm";
 
 import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
@@ -276,7 +274,7 @@ export async function generatePaymentForMember(
     dueAt.setDate(dueAt.getDate() + windowDays);
 
     payment = {
-      id: randomUUID(),
+
       orgId,
       memberId,
       type: "membership_fee",
@@ -299,7 +297,7 @@ export async function generatePaymentForMember(
     dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
 
     payment = {
-      id: randomUUID(),
+
       orgId,
       memberId,
       type: "membership_fee",
@@ -475,7 +473,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
             dueAt.setDate(dueAt.getDate() + windowDays);
 
             return {
-              id: randomUUID(),
+        
               orgId: org.id,
               memberId: member.id,
               type: "membership_fee" as const,
@@ -499,7 +497,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
           dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
 
           return {
-            id: randomUUID(),
+      
             orgId: org.id,
             memberId: member.id,
             type: "membership_fee" as const,

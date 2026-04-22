@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   integer,
   index,
   jsonb,
@@ -8,6 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 export const systemRoleEnum = pgEnum("system_role", [
@@ -155,8 +158,13 @@ export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 };
+
+// ─── Better Auth-managed tables (text IDs, do not change to uuid) ────────────
 
 export const users = pgTable(
   "users",
@@ -169,9 +177,9 @@ export const users = pgTable(
     systemRole: systemRoleEnum("system_role").notNull().default("member"),
     ...timestamps,
   },
-  (table) => ({
-    emailIdx: uniqueIndex("users_email_idx").on(table.email),
-  }),
+  (table) => [
+    uniqueIndex("users_email_idx").on(table.email),
+  ],
 );
 
 export const sessions = pgTable(
@@ -187,10 +195,10 @@ export const sessions = pgTable(
     userAgent: text("user_agent"),
     ...timestamps,
   },
-  (table) => ({
-    tokenIdx: uniqueIndex("sessions_token_idx").on(table.token),
-    userIdx: index("sessions_user_idx").on(table.userId),
-  }),
+  (table) => [
+    uniqueIndex("sessions_token_idx").on(table.token),
+    index("sessions_user_idx").on(table.userId),
+  ],
 );
 
 export const accounts = pgTable(
@@ -215,13 +223,13 @@ export const accounts = pgTable(
     password: text("password"),
     ...timestamps,
   },
-  (table) => ({
-    providerAccountIdx: uniqueIndex("accounts_provider_account_idx").on(
+  (table) => [
+    uniqueIndex("accounts_provider_account_idx").on(
       table.providerId,
       table.accountId,
     ),
-    userIdx: index("accounts_user_idx").on(table.userId),
-  }),
+    index("accounts_user_idx").on(table.userId),
+  ],
 );
 
 export const verifications = pgTable(
@@ -233,15 +241,17 @@ export const verifications = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     ...timestamps,
   },
-  (table) => ({
-    identifierIdx: index("verifications_identifier_idx").on(table.identifier),
-  }),
+  (table) => [
+    index("verifications_identifier_idx").on(table.identifier),
+  ],
 );
+
+// ─── Application-owned tables (uuid IDs) ─────────────────────────────────────
 
 export const organizations = pgTable(
   "organizations",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").defaultRandom().primaryKey(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     legalName: text("legal_name"),
@@ -292,16 +302,32 @@ export const organizations = pgTable(
     }),
     ...timestamps,
   },
-  (table) => ({
-    slugIdx: uniqueIndex("organizations_slug_idx").on(table.slug),
-  }),
+  (table) => [
+    uniqueIndex("organizations_slug_idx").on(table.slug),
+    check(
+      "organizations_renewal_month_check",
+      sql`${table.membershipRenewalMonth} IS NULL OR (${table.membershipRenewalMonth} >= 1 AND ${table.membershipRenewalMonth} <= 12)`,
+    ),
+    check(
+      "organizations_renewal_day_check",
+      sql`${table.membershipRenewalDay} IS NULL OR (${table.membershipRenewalDay} >= 1 AND ${table.membershipRenewalDay} <= 31)`,
+    ),
+    check(
+      "organizations_fee_amount_check",
+      sql`${table.membershipFeeAmount} IS NULL OR ${table.membershipFeeAmount} > 0`,
+    ),
+    check(
+      "organizations_payment_window_check",
+      sql`${table.membershipFeePaymentWindowDays} >= 1`,
+    ),
+  ],
 );
 
 export const organizationPolicies = pgTable(
   "organization_policies",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     termsOfServiceLabel: text("terms_of_service_label").notNull(),
@@ -319,16 +345,16 @@ export const organizationPolicies = pgTable(
     version: text("version").notNull().default("v1"),
     ...timestamps,
   },
-  (table) => ({
-    orgIdx: uniqueIndex("organization_policies_org_idx").on(table.orgId),
-  }),
+  (table) => [
+    uniqueIndex("organization_policies_org_idx").on(table.orgId),
+  ],
 );
 
 export const tenantMembers = pgTable(
   "tenant_members",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
@@ -352,18 +378,22 @@ export const tenantMembers = pgTable(
     }),
     ...timestamps,
   },
-  (table) => ({
-    orgUserIdx: uniqueIndex("tenant_members_org_user_idx").on(table.orgId, table.userId),
-    orgEmailIdx: index("tenant_members_org_email_idx").on(table.orgId, table.email),
-    orgStatusIdx: index("tenant_members_org_status_idx").on(table.orgId, table.status),
-  }),
+  (table) => [
+    uniqueIndex("tenant_members_org_user_idx").on(table.orgId, table.userId),
+    index("tenant_members_org_email_idx").on(table.orgId, table.email),
+    index("tenant_members_org_status_idx").on(table.orgId, table.status),
+    index("tenant_members_user_idx").on(table.userId),
+    index("tenant_members_active_idx")
+      .on(table.orgId, table.status)
+      .where(sql`status != 'deleted'`),
+  ],
 );
 
 export const groupCategories = pgTable(
   "group_categories",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
@@ -392,21 +422,29 @@ export const groupCategories = pgTable(
     specialCapability: text("special_capability"),
     ...timestamps,
   },
-  (table) => ({
-    orgSlugIdx: uniqueIndex("group_categories_org_slug_idx").on(table.orgId, table.slug),
-    orgSortIdx: index("group_categories_org_sort_idx").on(table.orgId, table.sortOrder),
-    orgActiveIdx: index("group_categories_org_active_idx").on(table.orgId, table.isActive),
-  }),
+  (table) => [
+    uniqueIndex("group_categories_org_slug_idx").on(table.orgId, table.slug),
+    index("group_categories_org_sort_idx").on(table.orgId, table.sortOrder),
+    index("group_categories_org_active_idx").on(table.orgId, table.isActive),
+    check(
+      "group_categories_max_selections_check",
+      sql`${table.maxSelections} IS NULL OR ${table.maxSelections} >= 1`,
+    ),
+    check(
+      "group_categories_sort_order_check",
+      sql`${table.sortOrder} >= 0`,
+    ),
+  ],
 );
 
 export const groups = pgTable(
   "groups",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    categoryId: text("category_id")
+    categoryId: uuid("category_id")
       .notNull()
       .references(() => groupCategories.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
@@ -423,80 +461,96 @@ export const groups = pgTable(
     feePaymentWindowDays: integer("fee_payment_window_days"),
     ...timestamps,
   },
-  (table) => ({
-    orgSlugIdx: uniqueIndex("groups_org_slug_idx").on(table.orgId, table.slug),
-    categorySortIdx: index("groups_category_sort_idx").on(table.categoryId, table.sortOrder),
-    orgCategoryIdx: index("groups_org_category_idx").on(table.orgId, table.categoryId),
-    orgActiveIdx: index("groups_org_active_idx").on(table.orgId, table.isActive),
-  }),
+  (table) => [
+    uniqueIndex("groups_org_slug_idx").on(table.orgId, table.slug),
+    index("groups_category_sort_idx").on(table.categoryId, table.sortOrder),
+    index("groups_org_category_idx").on(table.orgId, table.categoryId),
+    index("groups_org_active_idx").on(table.orgId, table.isActive),
+    check(
+      "groups_fee_renewal_month_check",
+      sql`${table.feeRenewalMonth} IS NULL OR (${table.feeRenewalMonth} >= 1 AND ${table.feeRenewalMonth} <= 12)`,
+    ),
+    check(
+      "groups_fee_renewal_day_check",
+      sql`${table.feeRenewalDay} IS NULL OR (${table.feeRenewalDay} >= 1 AND ${table.feeRenewalDay} <= 31)`,
+    ),
+    check(
+      "groups_fee_amount_check",
+      sql`${table.feeAmount} IS NULL OR ${table.feeAmount} > 0`,
+    ),
+    check(
+      "groups_sort_order_check",
+      sql`${table.sortOrder} >= 0`,
+    ),
+  ],
 );
 
 export const groupMemberships = pgTable(
   "group_memberships",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    groupId: text("group_id")
+    groupId: uuid("group_id")
       .notNull()
       .references(() => groups.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     role: groupMembershipRoleEnum("role").notNull().default("member"),
     ...timestamps,
   },
-  (table) => ({
-    groupMemberIdx: uniqueIndex("group_memberships_group_member_idx").on(
+  (table) => [
+    uniqueIndex("group_memberships_group_member_idx").on(
       table.groupId,
       table.memberId,
     ),
-    orgMemberIdx: index("group_memberships_org_member_idx").on(table.orgId, table.memberId),
-    orgGroupRoleIdx: index("group_memberships_org_group_role_idx").on(
+    index("group_memberships_org_member_idx").on(table.orgId, table.memberId),
+    index("group_memberships_org_group_role_idx").on(
       table.orgId,
       table.groupId,
       table.role,
     ),
-  }),
+  ],
 );
 
 export const categoryAdminAssignments = pgTable(
   "category_admin_assignments",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    categoryId: text("category_id")
+    categoryId: uuid("category_id")
       .notNull()
       .references(() => groupCategories.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     ...timestamps,
   },
-  (table) => ({
-    categoryMemberIdx: uniqueIndex("category_admin_assignments_category_member_idx").on(
+  (table) => [
+    uniqueIndex("category_admin_assignments_category_member_idx").on(
       table.categoryId,
       table.memberId,
     ),
-    orgCategoryIdx: index("category_admin_assignments_org_category_idx").on(
+    index("category_admin_assignments_org_category_idx").on(
       table.orgId,
       table.categoryId,
     ),
-    orgMemberIdx: index("category_admin_assignments_org_member_idx").on(
+    index("category_admin_assignments_org_member_idx").on(
       table.orgId,
       table.memberId,
     ),
-  }),
+  ],
 );
 
 export const memberCustomFields = pgTable(
   "member_custom_fields",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     key: text("key").notNull(),
@@ -511,57 +565,59 @@ export const memberCustomFields = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,
   },
-  (table) => ({
-    orgKeyIdx: uniqueIndex("member_custom_fields_org_key_idx").on(table.orgId, table.key),
-    orgSortIdx: index("member_custom_fields_org_sort_idx").on(table.orgId, table.sortOrder),
-    orgStageIdx: index("member_custom_fields_org_stage_idx").on(table.orgId, table.stage),
-  }),
+  (table) => [
+    uniqueIndex("member_custom_fields_org_key_idx").on(table.orgId, table.key),
+    index("member_custom_fields_org_sort_idx").on(table.orgId, table.sortOrder),
+    index("member_custom_fields_org_stage_idx").on(table.orgId, table.stage),
+    check(
+      "member_custom_fields_sort_order_check",
+      sql`${table.sortOrder} >= 0`,
+    ),
+  ],
 );
+
+export type CustomFieldValue = string | number | boolean | string[] | null;
 
 export const memberCustomFieldValues = pgTable(
   "member_custom_field_values",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
-    fieldId: text("field_id")
+    fieldId: uuid("field_id")
       .notNull()
       .references(() => memberCustomFields.id, { onDelete: "cascade" }),
-    valueText: text("value_text"),
-    valueNumber: integer("value_number"),
-    valueBoolean: boolean("value_boolean"),
-    valueDate: timestamp("value_date", { withTimezone: true }),
-    valueJson: jsonb("value_json").$type<string[] | Record<string, unknown> | null>(),
+    value: jsonb("value").$type<CustomFieldValue>(),
     ...timestamps,
   },
-  (table) => ({
-    memberFieldIdx: uniqueIndex("member_custom_field_values_member_field_idx").on(
+  (table) => [
+    uniqueIndex("member_custom_field_values_member_field_idx").on(
       table.memberId,
       table.fieldId,
     ),
-    orgMemberIdx: index("member_custom_field_values_org_member_idx").on(
+    index("member_custom_field_values_org_member_idx").on(
       table.orgId,
       table.memberId,
     ),
-    orgFieldIdx: index("member_custom_field_values_org_field_idx").on(
+    index("member_custom_field_values_org_field_idx").on(
       table.orgId,
       table.fieldId,
     ),
-  }),
+  ],
 );
 
 export const memberInvites = pgTable(
   "member_invites",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     provisionedUserId: text("provisioned_user_id").references(() => users.id, {
@@ -589,52 +645,54 @@ export const memberInvites = pgTable(
     resendCount: integer("resend_count").notNull().default(0),
     ...timestamps,
   },
-  (table) => ({
-    memberIdx: uniqueIndex("member_invites_member_idx").on(table.memberId),
-    providerEmailIdx: uniqueIndex("member_invites_provider_email_idx").on(table.providerEmailId),
-    orgStatusIdx: index("member_invites_org_status_idx").on(table.orgId, table.status),
-    orgDeliveryStatusIdx: index("member_invites_org_delivery_status_idx").on(
+  (table) => [
+    uniqueIndex("member_invites_member_idx").on(table.memberId),
+    uniqueIndex("member_invites_provider_email_idx")
+      .on(table.providerEmailId)
+      .where(sql`provider_email_id IS NOT NULL`),
+    index("member_invites_org_status_idx").on(table.orgId, table.status),
+    index("member_invites_org_delivery_status_idx").on(
       table.orgId,
       table.deliveryStatus,
     ),
-  }),
+  ],
 );
 
 export const memberAuthEvents = pgTable(
   "member_auth_events",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
-    inviteId: text("invite_id").references(() => memberInvites.id, { onDelete: "set null" }),
+    inviteId: uuid("invite_id").references(() => memberInvites.id, { onDelete: "set null" }),
     eventType: memberAuthEventTypeEnum("event_type").notNull(),
     message: text("message"),
     metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
     ...timestamps,
   },
-  (table) => ({
-    orgMemberCreatedIdx: index("member_auth_events_org_member_created_idx").on(
+  (table) => [
+    index("member_auth_events_org_member_created_idx").on(
       table.orgId,
       table.memberId,
       table.createdAt,
     ),
-    orgEventTypeIdx: index("member_auth_events_org_event_type_idx").on(
+    index("member_auth_events_org_event_type_idx").on(
       table.orgId,
       table.eventType,
     ),
-  }),
+  ],
 );
 
 export const workspaceConnections = pgTable(
   "workspace_connections",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     refreshTokenEncrypted: text("refresh_token_encrypted").notNull(),
@@ -651,28 +709,28 @@ export const workspaceConnections = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     ...timestamps,
   },
-  (table) => ({
-    orgIdx: uniqueIndex("workspace_connections_org_idx").on(table.orgId),
-  }),
+  (table) => [
+    uniqueIndex("workspace_connections_org_idx").on(table.orgId),
+  ],
 );
 
 export const emailActivities = pgTable(
   "email_activities",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     direction: emailDirectionEnum("direction").notNull().default("outbound"),
     kind: emailKindEnum("kind").notNull(),
     currentStatus: emailActivityStatusEnum("current_status").notNull(),
-    memberId: text("member_id").references(() => tenantMembers.id, {
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
       onDelete: "set null",
     }),
-    inviteId: text("invite_id").references(() => memberInvites.id, {
+    inviteId: uuid("invite_id").references(() => memberInvites.id, {
       onDelete: "set null",
     }),
-    resendOfEmailActivityId: text("resend_of_email_activity_id"),
+    resendOfEmailActivityId: uuid("resend_of_email_activity_id"),
     actorUserId: text("actor_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -694,28 +752,28 @@ export const emailActivities = pgTable(
     metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
     ...timestamps,
   },
-  (table) => ({
-    providerEmailIdx: uniqueIndex("email_activities_provider_email_idx").on(
-      table.providerEmailId,
-    ),
-    orgStatusIdx: index("email_activities_org_status_idx").on(
+  (table) => [
+    uniqueIndex("email_activities_provider_email_idx")
+      .on(table.providerEmailId)
+      .where(sql`provider_email_id IS NOT NULL`),
+    index("email_activities_org_status_idx").on(
       table.orgId,
       table.currentStatus,
     ),
-    orgKindIdx: index("email_activities_org_kind_idx").on(table.orgId, table.kind),
-    orgSentIdx: index("email_activities_org_sent_idx").on(table.orgId, table.sentAt),
-    orgMemberIdx: index("email_activities_org_member_idx").on(table.orgId, table.memberId),
-  }),
+    index("email_activities_org_kind_idx").on(table.orgId, table.kind),
+    index("email_activities_org_sent_idx").on(table.orgId, table.sentAt),
+    index("email_activities_org_member_idx").on(table.orgId, table.memberId),
+  ],
 );
 
 export const emailActivityEvents = pgTable(
   "email_activity_events",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    emailActivityId: text("email_activity_id")
+    emailActivityId: uuid("email_activity_id")
       .notNull()
       .references(() => emailActivities.id, { onDelete: "cascade" }),
     actorUserId: text("actor_user_id").references(() => users.id, {
@@ -728,26 +786,26 @@ export const emailActivityEvents = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
     ...timestamps,
   },
-  (table) => ({
-    activityOccurredIdx: index("email_activity_events_activity_occurred_idx").on(
+  (table) => [
+    index("email_activity_events_activity_occurred_idx").on(
       table.emailActivityId,
       table.occurredAt,
     ),
-    orgOccurredIdx: index("email_activity_events_org_occurred_idx").on(
+    index("email_activity_events_org_occurred_idx").on(
       table.orgId,
       table.occurredAt,
     ),
-  }),
+  ],
 );
 
 export const memberPayments = pgTable(
   "member_payments",
   {
-    id: text("id").primaryKey(),
-    orgId: text("org_id")
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    memberId: text("member_id")
+    memberId: uuid("member_id")
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     type: memberPaymentTypeEnum("type").notNull().default("membership_fee"),
@@ -768,17 +826,22 @@ export const memberPayments = pgTable(
     notes: text("notes"),
     ...timestamps,
   },
-  (table) => ({
-    orgMemberIdx: index("member_payments_org_member_idx").on(table.orgId, table.memberId),
-    orgStatusIdx: index("member_payments_org_status_idx").on(table.orgId, table.status),
-    orgPeriodIdx: index("member_payments_org_period_idx").on(table.orgId, table.periodLabel),
-    memberPeriodKeyIdx: uniqueIndex("member_payments_member_period_key_idx").on(
+  (table) => [
+    index("member_payments_org_member_idx").on(table.orgId, table.memberId),
+    index("member_payments_org_status_idx").on(table.orgId, table.status),
+    index("member_payments_org_period_key_idx").on(table.orgId, table.periodKey),
+    uniqueIndex("member_payments_member_period_key_idx").on(
       table.memberId,
       table.periodKey,
     ),
-    orgVsIdx: index("member_payments_org_vs_idx").on(table.orgId, table.variableSymbol),
-    memberStatusIdx: index("member_payments_member_status_idx").on(table.memberId, table.status),
-  }),
+    index("member_payments_org_vs_idx").on(table.orgId, table.variableSymbol),
+    index("member_payments_member_status_idx").on(table.memberId, table.status),
+    index("member_payments_org_due_at_idx").on(table.orgId, table.dueAt),
+    check(
+      "member_payments_amount_check",
+      sql`${table.amount} > 0`,
+    ),
+  ],
 );
 
 export const schema = {

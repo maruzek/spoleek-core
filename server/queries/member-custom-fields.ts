@@ -75,11 +75,7 @@ export async function getMemberCustomFieldAnswerRows(orgId: string, memberId: st
     .select({
       id: memberCustomFieldValues.id,
       fieldId: memberCustomFieldValues.fieldId,
-      valueText: memberCustomFieldValues.valueText,
-      valueNumber: memberCustomFieldValues.valueNumber,
-      valueBoolean: memberCustomFieldValues.valueBoolean,
-      valueDate: memberCustomFieldValues.valueDate,
-      valueJson: memberCustomFieldValues.valueJson,
+      value: memberCustomFieldValues.value,
       updatedAt: memberCustomFieldValues.updatedAt,
     })
     .from(memberCustomFieldValues)
@@ -102,19 +98,7 @@ export async function getMemberCustomFieldAnswerMap(orgId: string, memberId: str
   return Object.fromEntries(
     fields.map((field) => {
       const row = rowByFieldId.get(field.id);
-      const value =
-        row == null
-          ? null
-          : extractAnswerValue({
-              valueText: row.valueText,
-              valueNumber: row.valueNumber,
-              valueBoolean: row.valueBoolean,
-              valueDate: row.valueDate,
-              valueJson: Array.isArray(row.valueJson)
-                ? row.valueJson.map(String)
-                : null,
-            });
-
+      const value = row == null ? null : extractAnswerValue(row.value);
       return [field.key, value];
     }),
   );

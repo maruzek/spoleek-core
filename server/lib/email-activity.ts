@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db";
@@ -34,7 +32,7 @@ async function createEmailActivityEvent(params: {
   occurredAt?: Date;
 }) {
   await db.insert(emailActivityEvents).values({
-    id: randomUUID(),
+
     orgId: params.orgId,
     emailActivityId: params.emailActivityId,
     actorUserId: params.actorUserId ?? null,
@@ -87,7 +85,7 @@ export async function recordMemberInviteEmailSent(
   const [activity] = await db
     .insert(emailActivities)
     .values({
-      id: randomUUID(),
+  
       orgId: organization.id,
       direction: "outbound",
       kind: "member_activation_invite",
@@ -155,7 +153,7 @@ export async function recordMemberInviteEmailFailed(
   const [activity] = await db
     .insert(emailActivities)
     .values({
-      id: randomUUID(),
+  
       orgId: organization.id,
       direction: "outbound",
       kind: "member_activation_invite",

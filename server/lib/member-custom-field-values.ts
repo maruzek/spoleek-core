@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { and, eq } from "drizzle-orm";
 
 import {
@@ -82,7 +80,7 @@ export async function upsertMemberCustomFieldAnswers(
   for (const field of params.fields) {
     const normalized = validation.normalized.get(field.id);
 
-    if (!normalized) {
+    if (normalized === undefined) {
       continue;
     }
 
@@ -91,20 +89,16 @@ export async function upsertMemberCustomFieldAnswers(
     if (existingRowId) {
       await database
         .update(memberCustomFieldValues)
-        .set({
-          ...normalized,
-          updatedAt: new Date(),
-        })
+        .set({ value: normalized })
         .where(eq(memberCustomFieldValues.id, existingRowId));
       continue;
     }
 
     await database.insert(memberCustomFieldValues).values({
-      id: randomUUID(),
       orgId: params.orgId,
       memberId: params.memberId,
       fieldId: field.id,
-      ...normalized,
+      value: normalized,
     });
   }
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
+
 
 import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
@@ -120,11 +120,9 @@ export const joinOrganizationAction = authActionClient
           })
           .where(eq(tenantMembers.id, shadow.id));
       } else {
-        memberId = randomUUID();
         status = "pending";
 
-        await tx.insert(tenantMembers).values({
-          id: memberId,
+        const [inserted] = await tx.insert(tenantMembers).values({
           orgId: organization.id,
           userId: ctx.auth.user.id,
           email: ctx.auth.user.email,
@@ -135,7 +133,9 @@ export const joinOrganizationAction = authActionClient
           linkedAt: new Date(),
           acceptedTermsAt: new Date(),
           acceptedPrivacyAt: new Date(),
-        });
+        }).returning({ id: tenantMembers.id });
+
+        memberId = inserted!.id;
       }
 
       const targetMemberId = memberId ?? existing?.id ?? shadow?.id;

@@ -104,7 +104,6 @@ export async function syncRegistrationGroupSelections(tx: DbTransaction, {
     await tx
       .insert(groupMemberships)
       .values({
-        id: crypto.randomUUID(),
         orgId,
         groupId: selection.groupId,
         memberId,

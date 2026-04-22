@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { eq } from "drizzle-orm";
 
 import { joinApplicationSchema } from "@/lib/join";
@@ -77,15 +75,14 @@ export const submitJoinApplicationAction = actionClient
       if (existingMember) {
         await tx.update(tenantMembers).set(patch).where(eq(tenantMembers.id, existingMember.id));
       } else {
-        memberId = randomUUID();
-
-        await tx.insert(tenantMembers).values({
-          id: memberId,
+        const [inserted] = await tx.insert(tenantMembers).values({
           orgId: organization.id,
           userId: null,
           linkedAt: null,
           ...patch,
-        });
+        }).returning({ id: tenantMembers.id });
+
+        memberId = inserted!.id;
       }
 
       const targetMemberId = memberId ?? existingMember?.id;

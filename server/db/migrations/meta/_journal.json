@@ -162,6 +162,13 @@
       "when": 1776803550014,
       "tag": "0022_greedy_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1776857070268,
+      "tag": "0023_schema_performance_improvements",
+      "breakpoints": true
     }
   ]
 }

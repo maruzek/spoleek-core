@@ -282,14 +282,14 @@ export const createBootstrapOrganizationAction = actionClient
       .where(eq(tenantMembers.userId, session.user.id))
       .limit(1);
 
-    const orgId = randomUUID();
     const adminName = splitMemberName(session.user.name);
     const isPeriodicRenewal =
       parsedInput.membershipManagementMode === "periodic_renewal";
 
+    let orgId: string;
+
     await db.transaction(async (tx) => {
-      await tx.insert(organizations).values({
-        id: orgId,
+      const [org] = await tx.insert(organizations).values({
         slug,
         name: parsedInput.organizationName,
         legalName: parsedInput.legalName,
@@ -322,10 +322,11 @@ export const createBootstrapOrganizationAction = actionClient
           isPeriodicRenewal && parsedInput.membershipFeeEnabled
             ? parsedInput.membershipFeePaymentWindowDays
             : 30,
-      });
+      }).returning({ id: organizations.id });
+
+      orgId = org!.id;
 
       await tx.insert(organizationPolicies).values({
-        id: randomUUID(),
         orgId,
         termsOfServiceLabel: `I agree to ${parsedInput.organizationName}'s terms of service.`,
         termsOfServiceText: `${parsedInput.organizationName} terms of service placeholder. Replace this in administration after first login.`,
@@ -346,7 +347,6 @@ export const createBootstrapOrganizationAction = actionClient
 
       if (!existingMembership) {
         await tx.insert(tenantMembers).values({
-          id: randomUUID(),
           orgId,
           userId: session.user.id,
           email: isWorkspace ? null : session.user.email,
@@ -386,6 +386,6 @@ export const createBootstrapOrganizationAction = actionClient
 
     return {
       success: true,
-      orgId,
+      orgId: orgId!,
     };
   });

@@ -1,7 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
-
 import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
@@ -58,21 +56,21 @@ export const createOrganizationSetupAction = authActionClient
       });
     }
 
-    const orgId = randomUUID();
+    let orgId: string;
 
     await db.transaction(async (tx) => {
-      await tx.insert(organizations).values({
-        id: orgId,
+      const [org] = await tx.insert(organizations).values({
         slug,
         name: parsedInput.organizationName,
         legalName: parsedInput.legalName,
         primaryEmail: parsedInput.primaryEmail,
         website: parsedInput.website || null,
         onboardingCompletedAt: new Date(),
-      });
+      }).returning({ id: organizations.id });
+
+      orgId = org!.id;
 
       await tx.insert(organizationPolicies).values({
-        id: randomUUID(),
         orgId,
         termsOfServiceLabel: parsedInput.termsLabel,
         termsOfServiceText: parsedInput.termsText,
@@ -85,7 +83,6 @@ export const createOrganizationSetupAction = authActionClient
         .update(users)
         .set({
           systemRole: "system_admin",
-          updatedAt: new Date(),
         })
         .where(eq(users.id, ctx.auth.user.id));
 
@@ -104,7 +101,6 @@ export const createOrganizationSetupAction = authActionClient
         const adminName = splitMemberName(ctx.auth.user.name);
 
         await tx.insert(tenantMembers).values({
-          id: randomUUID(),
           orgId,
           userId: ctx.auth.user.id,
           email: ctx.auth.user.email,
@@ -121,7 +117,7 @@ export const createOrganizationSetupAction = authActionClient
 
     return {
       success: true,
-      orgId,
+      orgId: orgId!,
     };
   });
 
