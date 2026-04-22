@@ -214,3 +214,34 @@ export async function createWorkspaceUser(
   };
   return { id: body.id, primaryEmail: body.primaryEmail };
 }
+
+export async function searchWorkspaceUsers(
+  orgId: string,
+  query: string,
+  maxResults = 5,
+): Promise<WorkspaceUser[]> {
+  const params = new URLSearchParams({
+    customer: "my_customer",
+    query,
+    maxResults: String(maxResults),
+    fields: "users(id,primaryEmail,name/fullName)",
+  });
+  const response = await directoryFetch(orgId, `/users?${params.toString()}`);
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  const body = (await response.json()) as {
+    users?: { id: string; primaryEmail: string; name?: { fullName?: string } }[];
+  };
+
+  return (body.users ?? []).map((u) => ({
+    id: u.id,
+    primaryEmail: u.primaryEmail,
+    fullName: u.name?.fullName ?? "",
+  }));
+}

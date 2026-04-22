@@ -8,7 +8,9 @@ import {
   bulkDeleteMembersSchema,
   createMemberSchema,
   deleteMemberSchema,
+  importMembersSchema,
   resendMemberInviteSchema,
+  searchWorkspaceUsersSchema,
   updateMemberSchema,
 } from "@/lib/member-admin";
 import { authActionClient } from "@/lib/safe-action-auth";
@@ -31,7 +33,9 @@ import {
   WorkspaceNotConnectedError,
   checkWorkspaceUserExists,
   getWorkspaceUser,
+  searchWorkspaceUsers,
 } from "@/server/lib/workspace/client";
+
 import {
   DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
   buildWorkspaceEmail,
@@ -786,4 +790,205 @@ export const bulkDeleteMembersAction = authActionClient
       memberIds: parsedInput.memberIds,
       orgId: organization.id,
     });
+  });
+
+export const searchWorkspaceUsersAction = authActionClient
+  .metadata({ actionName: "searchWorkspaceUsers" })
+  .inputSchema(searchWorkspaceUsersSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    if (!isWorkspaceModuleReady(organization)) {
+      return { users: [] as { id: string; primaryEmail: string; fullName: string }[] };
+    }
+
+    try {
+      const users = await searchWorkspaceUsers(
+        organization.id,
+        parsedInput.query,
+        5,
+      );
+      return { users };
+    } catch (error) {
+      if (
+        error instanceof WorkspaceNotConnectedError ||
+        error instanceof WorkspaceApiError
+      ) {
+        return { users: [] as { id: string; primaryEmail: string; fullName: string }[] };
+      }
+      throw error;
+    }
+  });
+
+export const importMembersAction = authActionClient
+  .metadata({ actionName: "importMembers" })
+  .inputSchema(importMembersSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    const customFields = await listMemberCustomFields(organization.id);
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors: { row: number; message: string }[] = [];
+
+    for (let i = 0; i < parsedInput.rows.length; i++) {
+      const row = parsedInput.rows[i]!;
+      const rowNum = i + 1;
+
+      try {
+        const email = row.email ? normalizeEmail(row.email) : null;
+        const allowedRole = resolveAllowedRole(
+          row.role,
+          scope.canAssignElevatedRoles,
+        );
+
+        // Resolve all group IDs this row should be assigned to — must be within scope
+        const uniqueGroupIds = [...new Set(row.groupIds)];
+        const selectionError = uniqueGroupIds.length > 0
+          ? (() => {
+              const allAllowedGroupIds = new Set(
+                scope.manageableGroupCategories.flatMap((c) =>
+                  c.groups.map((g) => g.id),
+                ),
+              );
+              const outsideScope = uniqueGroupIds.filter(
+                (id) => !allAllowedGroupIds.has(id),
+              );
+              return outsideScope.length > 0
+                ? `Group IDs not in scope: ${outsideScope.join(", ")}`
+                : null;
+            })()
+          : null;
+
+        if (selectionError) {
+          errors.push({ row: rowNum, message: selectionError });
+          skipped++;
+          continue;
+        }
+
+        // Try to find an existing member
+        const existingMember = email
+          ? await (async () => {
+              const user = await findUserByEmail(email);
+              if (user) {
+                const m = await getMemberByUserId(organization.id, user.id);
+                if (m) return m;
+              }
+              // Also try by stored email on member record directly
+              const [byEmail] = await db
+                .select()
+                .from(tenantMembers)
+                .where(
+                  and(
+                    eq(tenantMembers.orgId, organization.id),
+                    eq(tenantMembers.email, email),
+                  ),
+                )
+                .limit(1);
+              return byEmail ?? null;
+            })()
+          : null;
+
+        if (existingMember) {
+          // Update existing member
+          await db.transaction(async (tx) => {
+            await tx
+              .update(tenantMembers)
+              .set({
+                firstName: row.firstName.trim() || existingMember.firstName,
+                lastName: row.lastName.trim() || existingMember.lastName,
+                email,
+                role: allowedRole,
+                status: row.status,
+                workspaceUserId: row.workspaceUserId ?? existingMember.workspaceUserId,
+                workspaceUserEmail: row.workspaceUserEmail ?? existingMember.workspaceUserEmail,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(tenantMembers.id, existingMember.id),
+                  eq(tenantMembers.orgId, organization.id),
+                ),
+              );
+
+            if (uniqueGroupIds.length > 0) {
+              await syncManageableGroupMemberships({
+                tx,
+                orgId: organization.id,
+                memberId: existingMember.id,
+                allowedGroupIds: scope.manageableGroupCategories.flatMap((c) =>
+                  c.groups.map((g) => g.id),
+                ),
+                nextGroupIds: uniqueGroupIds,
+              });
+            }
+
+            await upsertMemberCustomFieldAnswers(tx, {
+              orgId: organization.id,
+              memberId: existingMember.id,
+              fields: customFields,
+              answers: row.customFieldAnswers,
+            });
+          });
+          updated++;
+        } else {
+          // Insert new member
+          const matchedUser = email ? await findUserByEmail(email) : null;
+          await db.transaction(async (tx) => {
+            const [{ id: memberId }] = await tx
+              .insert(tenantMembers)
+              .values({
+                orgId: organization.id,
+                userId: matchedUser?.id ?? null,
+                email,
+                firstName: row.firstName.trim(),
+                lastName: row.lastName.trim(),
+                role: allowedRole,
+                status: row.status,
+                workspaceUserId: row.workspaceUserId ?? null,
+                workspaceUserEmail: row.workspaceUserEmail ?? null,
+                linkedAt: matchedUser ? new Date() : null,
+                acceptedTermsAt: matchedUser ? new Date() : null,
+                acceptedPrivacyAt: matchedUser ? new Date() : null,
+              })
+              .returning({ id: tenantMembers.id });
+
+            if (uniqueGroupIds.length > 0) {
+              await syncManageableGroupMemberships({
+                tx,
+                orgId: organization.id,
+                memberId: memberId!,
+                allowedGroupIds: scope.manageableGroupCategories.flatMap((c) =>
+                  c.groups.map((g) => g.id),
+                ),
+                nextGroupIds: uniqueGroupIds,
+              });
+            }
+
+            await upsertMemberCustomFieldAnswers(tx, {
+              orgId: organization.id,
+              memberId: memberId!,
+              fields: customFields,
+              answers: row.customFieldAnswers,
+            });
+          });
+          created++;
+        }
+      } catch (error) {
+        errors.push({
+          row: rowNum,
+          message: error instanceof Error ? error.message : "Unexpected error",
+        });
+        skipped++;
+      }
+    }
+
+    void ctx; // actor available for future audit logging
+
+    return { created, updated, skipped, errors };
   });

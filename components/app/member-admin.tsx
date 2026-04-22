@@ -13,7 +13,9 @@ import {
   PencilIcon,
   PlusIcon,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react";
+
 import { toast } from "sonner";
 
 import {
@@ -55,6 +57,7 @@ import type {
 } from "@/server/queries/members";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import { MemberEditSheet } from "./member-edit-sheet";
+import { MemberImportDialog } from "./member-import-dialog";
 import { MailingListAction } from "./mailing-list-action";
 import {
   MemberApproveWorkspaceDialog,
@@ -212,6 +215,7 @@ export function MemberAdmin({
   const searchParams = useSearchParams();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [workspaceApproveMember, setWorkspaceApproveMember] =
     useState<WorkspaceApprovalMember | null>(null);
   const [workspaceApproveError, setWorkspaceApproveError] = useState<
@@ -727,6 +731,10 @@ export function MemberAdmin({
           getMemberId={(member) => member.id}
           showWorkspaceOptions={workspaceReady}
         />
+        <Button variant="outline" onClick={() => setImportOpen(true)}>
+          <UploadIcon data-icon="inline-start" />
+          Import
+        </Button>
         <Button onClick={() => setSheetOpen(true)}>
           <PlusIcon data-icon="inline-start" />
           {access.level === "full" ? "New member" : "New scoped member"}
@@ -818,6 +826,15 @@ export function MemberAdmin({
         onSubmit={async (value) => {
           await createAction.executeAsync(value);
         }}
+      />
+
+      <MemberImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        customFields={customFields}
+        manageableGroupCategories={manageableGroupCategories}
+        workspaceReady={workspaceReady}
+        onDone={() => router.refresh()}
       />
 
       <MemberApproveWorkspaceDialog
