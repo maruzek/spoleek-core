@@ -1,26 +1,34 @@
 "use server";
 
 import { and, eq, inArray } from "drizzle-orm";
+
+import { WorkspaceWelcomeEmail } from "@/emails/workspace-welcome-email";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
 import {
+  batchLookupWorkspaceUsersSchema,
+  batchSuggestWorkspaceEmailsSchema,
   bulkDeleteMembersSchema,
   createMemberSchema,
+  createWorkspaceAccountSchema,
   deleteMemberSchema,
   importMembersSchema,
   resendMemberInviteSchema,
   searchWorkspaceUsersSchema,
   updateMemberSchema,
 } from "@/lib/member-admin";
+import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
+import { generateRandomPassword } from "@/lib/crypto";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
-import { groupMemberships, tenantMembers } from "@/server/db/schema";
+import { groupMemberships, organizations, tenantMembers } from "@/server/db/schema";
 import {
   canAccessMemberInScope,
   resolveMemberManagementScope,
   validateManagedGroupSelection,
 } from "@/server/lib/member-management-scope";
+import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import {
   logMemberAuthEvent,
   sendMemberActivationInvite,
@@ -32,6 +40,7 @@ import {
   WorkspaceApiError,
   WorkspaceNotConnectedError,
   checkWorkspaceUserExists,
+  createWorkspaceUser,
   getWorkspaceUser,
   searchWorkspaceUsers,
 } from "@/server/lib/workspace/client";
@@ -991,4 +1000,145 @@ export const importMembersAction = authActionClient
     void ctx; // actor available for future audit logging
 
     return { created, updated, skipped, errors };
+  });
+
+// ─── Workspace Import Helpers ────────────────────────────────────────────────
+
+export const batchLookupWorkspaceUsersAction = authActionClient
+  .metadata({ actionName: "batchLookupWorkspaceUsers" })
+  .inputSchema(batchLookupWorkspaceUsersSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    if (!isWorkspaceModuleReady(organization)) {
+      return { results: {} as Record<string, { id: string; primaryEmail: string; fullName: string } | null> };
+    }
+
+    const results: Record<string, { id: string; primaryEmail: string; fullName: string } | null> = {};
+    const emails = parsedInput.emails;
+
+    const CONCURRENCY = 5;
+    for (let i = 0; i < emails.length; i += CONCURRENCY) {
+      const batch = emails.slice(i, i + CONCURRENCY);
+      const settled = await Promise.allSettled(
+        batch.map(async (email) => {
+          try {
+            const user = await getWorkspaceUser(organization.id, email);
+            results[email.toLowerCase()] = user;
+          } catch {
+            results[email.toLowerCase()] = null;
+          }
+        }),
+      );
+      void settled;
+    }
+
+    return { results };
+  });
+
+export const batchSuggestWorkspaceEmailsAction = authActionClient
+  .metadata({ actionName: "batchSuggestWorkspaceEmails" })
+  .inputSchema(batchSuggestWorkspaceEmailsSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    if (
+      !isWorkspaceModuleReady(organization) ||
+      !organization.workspaceDomain
+    ) {
+      return { suggestions: parsedInput.rows.map(() => "") };
+    }
+
+    const template =
+      organization.workspaceEmailTemplate ?? DEFAULT_WORKSPACE_EMAIL_TEMPLATE;
+
+    const suggestions = parsedInput.rows.map((row) =>
+      buildWorkspaceEmail({
+        template,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        domain: organization.workspaceDomain!,
+      }),
+    );
+
+    return { suggestions };
+  });
+
+export const createWorkspaceAccountAction = authActionClient
+  .metadata({ actionName: "createWorkspaceAccount" })
+  .inputSchema(createWorkspaceAccountSchema)
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    if (!isWorkspaceModuleReady(organization)) {
+      return { success: false as const, error: "Workspace is not connected." };
+    }
+
+    const password = generateRandomPassword(20);
+
+    let workspaceUserId: string;
+    let primaryEmail: string;
+    try {
+      const created = await createWorkspaceUser(organization.id, {
+        primaryEmail: parsedInput.primaryEmail,
+        firstName: parsedInput.firstName,
+        lastName: parsedInput.lastName,
+        password,
+      });
+      workspaceUserId = created.id;
+      primaryEmail = created.primaryEmail;
+    } catch (error) {
+      if (error instanceof WorkspaceApiError) {
+        if (error.status === 409 || error.reason === "duplicate") {
+          return {
+            success: false as const,
+            error: "Email already taken in Workspace.",
+          };
+        }
+      }
+      return {
+        success: false as const,
+        error: error instanceof Error ? error.message : "Provisioning failed.",
+      };
+    }
+
+    if (parsedInput.sendWelcomeEmail) {
+      const [org] = await db
+        .select({ name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, organization.id))
+        .limit(1);
+
+      const organizationName = org?.name ?? "Your organization";
+      const memberName = [parsedInput.firstName, parsedInput.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || primaryEmail;
+      const signInUrl = buildAbsoluteAppUrl("/auth");
+
+      try {
+        const resend = getResendClient();
+        const from = getResendFromEmail();
+        await resend.emails.send({
+          from,
+          to: [primaryEmail],
+          subject: `Your ${organizationName} account is ready`,
+          react: WorkspaceWelcomeEmail({
+            organizationName,
+            memberName,
+            workspaceEmail: primaryEmail,
+            temporaryPassword: password,
+            signInUrl,
+          }),
+        });
+      } catch {
+        // Account created successfully, email failed — still a success
+      }
+    }
+
+    return {
+      success: true as const,
+      workspaceUserId,
+      primaryEmail,
+    };
   });

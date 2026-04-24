@@ -57,7 +57,7 @@ import type {
 } from "@/server/queries/members";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 import { MemberEditSheet } from "./member-edit-sheet";
-import { MemberImportDialog } from "./member-import-dialog";
+import { MemberImportDialog } from "./member-import/index";
 import { MailingListAction } from "./mailing-list-action";
 import {
   MemberApproveWorkspaceDialog,

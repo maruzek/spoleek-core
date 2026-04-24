@@ -3,9 +3,17 @@ import { z } from "zod";
 import { memberCustomFieldAnswersSchema } from "@/lib/member-custom-fields";
 
 const tenantRoleSchema = z.enum(["member", "leader", "org_admin"]);
-const membershipStatusSchema = z.enum(["invited", "pending", "active", "suspended", "archived"]);
+const membershipStatusSchema = z.enum([
+  "invited",
+  "pending",
+  "active",
+  "suspended",
+  "archived",
+]);
 
-const emailSchema = z.union([z.literal(""), z.email("Enter a valid email.")]).default("");
+const emailSchema = z
+  .union([z.literal(""), z.email("Enter a valid email.")])
+  .default("");
 
 export const adminMemberIdentitySchema = z.object({
   firstName: z.string().trim().min(1, "First name is required."),
@@ -13,26 +21,26 @@ export const adminMemberIdentitySchema = z.object({
   email: emailSchema,
   role: tenantRoleSchema.default("member"),
   status: membershipStatusSchema.default("active"),
-  groupIds: z.array(z.string().uuid()).default([]),
+  groupIds: z.array(z.uuid()).default([]),
 });
 
 export const createMemberSchema = adminMemberIdentitySchema;
 
 export const updateMemberSchema = adminMemberIdentitySchema.extend({
-  memberId: z.string().uuid(),
+  memberId: z.uuid(),
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });
 
 export const deleteMemberSchema = z.object({
-  memberId: z.string().uuid(),
+  memberId: z.uuid(),
 });
 
 export const bulkDeleteMembersSchema = z.object({
-  memberIds: z.array(z.string().uuid()).min(1, "Select at least one member."),
+  memberIds: z.array(z.uuid()).min(1, "Select at least one member."),
 });
 
 export const resendMemberInviteSchema = z.object({
-  memberId: z.string().uuid(),
+  memberId: z.uuid(),
 });
 
 export type CreateMemberValues = z.infer<typeof createMemberSchema>;
@@ -48,7 +56,7 @@ export const importMemberRowSchema = z.object({
   workspaceUserId: z.string().optional(),
   workspaceUserEmail: z.string().optional(),
   customFieldAnswers: z.record(z.string(), z.unknown()).default({}),
-  groupIds: z.array(z.string().uuid()).default([]),
+  groupIds: z.array(z.uuid()).default([]),
   role: z.enum(["member", "leader", "org_admin"]).default("member"),
   status: z
     .enum(["invited", "pending", "active", "suspended", "archived"])
@@ -61,6 +69,24 @@ export const importMembersSchema = z.object({
 
 export const searchWorkspaceUsersSchema = z.object({
   query: z.string().min(1).max(300),
+});
+
+export const batchLookupWorkspaceUsersSchema = z.object({
+  emails: z.array(z.email()).min(1).max(500),
+});
+
+export const batchSuggestWorkspaceEmailsSchema = z.object({
+  rows: z
+    .array(z.object({ firstName: z.string(), lastName: z.string() }))
+    .min(1)
+    .max(500),
+});
+
+export const createWorkspaceAccountSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  primaryEmail: z.email(),
+  sendWelcomeEmail: z.boolean().default(true),
 });
 
 export type ImportMemberRow = z.infer<typeof importMemberRowSchema>;

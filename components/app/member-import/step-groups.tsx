@@ -1,0 +1,202 @@
+"use client";
+
+import { useMemo } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import {
+  Field,
+  FieldContent,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
+import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
+
+import type { GroupAssignmentConfig, GroupAssignmentMode, ParsedRow } from "./types";
+
+export function StepGroups({
+  csvHeaders,
+  csvRows,
+  groupAssignment,
+  manageableGroupCategories,
+  onGroupAssignmentChange,
+}: {
+  csvHeaders: string[];
+  csvRows: ParsedRow[];
+  groupAssignment: GroupAssignmentConfig;
+  manageableGroupCategories: MemberManagementGroupCategory[];
+  onGroupAssignmentChange: (config: GroupAssignmentConfig) => void;
+}) {
+  const columnGroups = useMemo<string[]>(() => {
+    const col = groupAssignment.columnMapping?.columnKey;
+    if (!col) return [];
+    const vals = new Set(
+      csvRows.map((r) => (r[col] ?? "").trim()).filter(Boolean),
+    );
+    return [...vals];
+  }, [csvRows, groupAssignment.columnMapping]);
+
+  const allGroups = useMemo(
+    () =>
+      manageableGroupCategories.flatMap((c) =>
+        c.groups.map((g) => ({ ...g, categoryName: c.name })),
+      ),
+    [manageableGroupCategories],
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <h2 className="text-base font-semibold">Group Assignment</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Optionally assign imported members to groups. You can map a CSV column
+          to groups, assign all members to fixed groups, or skip.
+        </p>
+      </div>
+
+      <ToggleGroup
+        type="single"
+        value={groupAssignment.mode}
+        onValueChange={(v) => {
+          if (v) {
+            onGroupAssignmentChange({
+              ...groupAssignment,
+              mode: v as GroupAssignmentMode,
+            });
+          }
+        }}
+        className="justify-start gap-2"
+      >
+        <ToggleGroupItem value="none" className="text-xs">
+          No assignment
+        </ToggleGroupItem>
+        <ToggleGroupItem value="fixed" className="text-xs">
+          Assign all to groups
+        </ToggleGroupItem>
+        {csvHeaders.length > 0 && (
+          <ToggleGroupItem value="column" className="text-xs">
+            Map from CSV column
+          </ToggleGroupItem>
+        )}
+      </ToggleGroup>
+
+      {groupAssignment.mode === "fixed" && (
+        <MemberGroupAssignmentField
+          categories={manageableGroupCategories}
+          groupIds={groupAssignment.fixedGroupIds}
+          description="All imported members will be added to the selected groups."
+          onChange={(ids) =>
+            onGroupAssignmentChange({
+              ...groupAssignment,
+              fixedGroupIds: ids,
+            })
+          }
+        />
+      )}
+
+      {groupAssignment.mode === "column" && (
+        <div className="flex flex-col gap-4">
+          <FieldGroup>
+            <Field>
+              <FieldLabel>Which column contains group names?</FieldLabel>
+              <FieldContent>
+                <select
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  value={groupAssignment.columnMapping?.columnKey ?? ""}
+                  onChange={(e) => {
+                    const col = e.target.value;
+                    if (!col) {
+                      onGroupAssignmentChange({
+                        ...groupAssignment,
+                        columnMapping: null,
+                      });
+                      return;
+                    }
+                    const vals = new Set(
+                      csvRows
+                        .map((r) => (r[col] ?? "").trim())
+                        .filter(Boolean),
+                    );
+                    const valueToGroupId: Record<string, string | null> = {};
+                    for (const v of vals) valueToGroupId[v] = null;
+                    onGroupAssignmentChange({
+                      ...groupAssignment,
+                      columnMapping: { columnKey: col, valueToGroupId },
+                    });
+                  }}
+                >
+                  <option value="">— select a column —</option>
+                  {csvHeaders.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </select>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+
+          {groupAssignment.columnMapping && columnGroups.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Map column values → groups
+              </p>
+              <div className="overflow-hidden rounded-xl border">
+                <div className="grid grid-cols-2 gap-px bg-border text-xs font-medium text-muted-foreground">
+                  <div className="bg-muted/60 px-3 py-2">CSV Value</div>
+                  <div className="bg-muted/60 px-3 py-2">Spoleek Group</div>
+                </div>
+                <div className="divide-y">
+                  {columnGroups.map((val) => (
+                    <div
+                      key={val}
+                      className="grid grid-cols-2 items-center gap-px"
+                    >
+                      <div className="bg-background px-3 py-2">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {val}
+                        </Badge>
+                      </div>
+                      <div className="bg-background px-3 py-2">
+                        <select
+                          className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-0.5 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                          value={
+                            groupAssignment.columnMapping?.valueToGroupId[
+                              val
+                            ] ?? ""
+                          }
+                          onChange={(e) => {
+                            if (!groupAssignment.columnMapping) return;
+                            onGroupAssignmentChange({
+                              ...groupAssignment,
+                              columnMapping: {
+                                ...groupAssignment.columnMapping,
+                                valueToGroupId: {
+                                  ...groupAssignment.columnMapping
+                                    .valueToGroupId,
+                                  [val]: e.target.value || null,
+                                },
+                              },
+                            });
+                          }}
+                        >
+                          <option value="">— ignore —</option>
+                          {allGroups.map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.categoryName} / {g.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
