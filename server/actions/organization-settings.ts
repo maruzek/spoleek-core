@@ -9,6 +9,7 @@ import { decryptSecret } from "@/lib/crypto";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import {
+  groupCategories,
   organizationPolicies,
   organizations,
   workspaceConnections,
@@ -227,6 +228,46 @@ export const disconnectWorkspaceAction = orgAdminActionClient
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));
+
+    return { success: true };
+  });
+
+export const setWorkspaceOrgUnitCategoryAction = orgAdminActionClient
+  .metadata({ actionName: "setWorkspaceOrgUnitCategory" })
+  .inputSchema(z.object({ categoryId: z.string().uuid().nullable() }))
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(groupCategories)
+        .set({ specialCapability: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(groupCategories.orgId, organization.id),
+            eq(groupCategories.specialCapability, "workspace_org_unit"),
+          ),
+        );
+
+      if (parsedInput.categoryId) {
+        await tx
+          .update(groupCategories)
+          .set({
+            specialCapability: "workspace_org_unit",
+            selectionMode: "single",
+            selectionRequired: true,
+            defaultJoinPolicy: "admin_only",
+            maxSelections: null,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(groupCategories.id, parsedInput.categoryId),
+              eq(groupCategories.orgId, organization.id),
+            ),
+          );
+      }
+    });
 
     return { success: true };
   });

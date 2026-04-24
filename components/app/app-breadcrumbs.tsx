@@ -36,7 +36,9 @@ function getLabel(segment: string) {
 }
 
 function isDynamicId(segment: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    segment,
+  );
 }
 
 export function AppBreadcrumbs() {
@@ -68,7 +70,9 @@ export function AppBreadcrumbs() {
             <Fragment key={segment}>
               <BreadcrumbItem key={segment}>
                 {isLast ? (
-                  <BreadcrumbPage className="capitalize">{label}</BreadcrumbPage>
+                  <BreadcrumbPage className="capitalize">
+                    {label}
+                  </BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink
                     href={toHref(basePath, segments, index)}

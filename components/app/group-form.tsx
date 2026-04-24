@@ -1,6 +1,9 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "@tanstack/react-form";
+import { useAction } from "next-safe-action/hooks";
+import { Loader2Icon } from "lucide-react";
 
 import {
   groupJoinPolicyOptions,
@@ -11,6 +14,14 @@ import { feeCurrencyOptions } from "@/lib/membership";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
 import {
   Field,
   FieldContent,
@@ -33,11 +44,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  getWorkspaceOrgUnitsAction,
+  searchWorkspaceGroupsAction,
+} from "@/server/actions/workspace";
+import type {
+  WorkspaceGroup,
+  WorkspaceOrgUnit,
+} from "@/server/lib/workspace/client";
 
 export type GroupValidationErrors = Partial<
   Record<keyof GroupFormValues, { _errors?: string[] }>
 >;
-
 
 function toDefaultValues(
   group?: Partial<GroupFormValues> | null,
@@ -57,12 +75,24 @@ function toDefaultValues(
     feeAmount: group?.feeAmount ?? null,
     feeCurrency: group?.feeCurrency ?? null,
     feeBankAccount: group?.feeBankAccount ?? null,
+    workspaceGroupEmail: group?.workspaceGroupEmail ?? null,
+    workspaceOrgUnitPath: group?.workspaceOrgUnitPath ?? null,
   };
 }
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 function formatOrgDefault(
@@ -79,6 +109,9 @@ export function GroupForm({
   isPending,
   validationErrors,
   categoryManagesFees,
+  workspaceConnected,
+  canManageWorkspaceIntegration = false,
+  isWorkspaceOrgUnitCategory,
   onSubmit,
   onCancel,
   submitLabel,
@@ -89,6 +122,9 @@ export function GroupForm({
   isPending: boolean;
   validationErrors?: GroupValidationErrors;
   categoryManagesFees?: boolean;
+  workspaceConnected?: boolean;
+  canManageWorkspaceIntegration?: boolean;
+  isWorkspaceOrgUnitCategory?: boolean;
   onSubmit: (value: GroupFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -114,8 +150,44 @@ export function GroupForm({
     validationErrors?.[fieldName]?._errors ?? [];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
-      ? errors.filter((message): message is string => typeof message === "string")
+      ? errors.filter(
+          (message): message is string => typeof message === "string",
+        )
       : [];
+
+  // ── Workspace: group search ──
+  const searchGroupsAction = useAction(searchWorkspaceGroupsAction);
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+  const [wsGroups, setWsGroups] = useState<WorkspaceGroup[]>([]);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerGroupSearch = useCallback(
+    (query: string) => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = setTimeout(async () => {
+        const result = await searchGroupsAction.executeAsync({ query });
+        setWsGroups(result?.data ?? []);
+      }, 300);
+    },
+    [searchGroupsAction],
+  );
+
+  useEffect(() => {
+    if (workspaceConnected) triggerGroupSearch(groupSearchQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceConnected]);
+
+  // ── Workspace: org units ──
+  const getOrgUnitsAction = useAction(getWorkspaceOrgUnitsAction);
+  const [orgUnits, setOrgUnits] = useState<WorkspaceOrgUnit[]>([]);
+  const orgUnitsFetchedRef = useRef(false);
+
+  const ensureOrgUnitsFetched = useCallback(async () => {
+    if (orgUnitsFetchedRef.current) return;
+    orgUnitsFetchedRef.current = true;
+    const result = await getOrgUnitsAction.executeAsync({});
+    setOrgUnits(result?.data ?? []);
+  }, [getOrgUnitsAction]);
 
   return (
     <form
@@ -132,8 +204,10 @@ export function GroupForm({
             {(formField) => (
               <Field
                 data-invalid={
-                  (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                  (formField.state.meta.errors.length > 0 || getFieldError("name").length > 0)
+                  (formField.state.meta.isTouched ||
+                    form.state.submissionAttempts > 0) &&
+                  (formField.state.meta.errors.length > 0 ||
+                    getFieldError("name").length > 0)
                 }
               >
                 <FieldLabel htmlFor="group-name">Name *</FieldLabel>
@@ -147,15 +221,19 @@ export function GroupForm({
                       form.setFieldValue("slug", slugify(event.target.value));
                     }}
                     aria-invalid={
-                      (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                      (formField.state.meta.errors.length > 0 || getFieldError("name").length > 0)
+                      (formField.state.meta.isTouched ||
+                        form.state.submissionAttempts > 0) &&
+                      (formField.state.meta.errors.length > 0 ||
+                        getFieldError("name").length > 0)
                     }
                   />
                   <FieldError
                     errors={[
-                      ...getClientFieldErrors(formField.state.meta.errors).map((message) => ({
-                        message,
-                      })),
+                      ...getClientFieldErrors(formField.state.meta.errors).map(
+                        (message) => ({
+                          message,
+                        }),
+                      ),
                       ...getFieldError("name").map((message) => ({ message })),
                     ]}
                   />
@@ -168,8 +246,10 @@ export function GroupForm({
             {(formField) => (
               <Field
                 data-invalid={
-                  (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                  (formField.state.meta.errors.length > 0 || getFieldError("slug").length > 0)
+                  (formField.state.meta.isTouched ||
+                    form.state.submissionAttempts > 0) &&
+                  (formField.state.meta.errors.length > 0 ||
+                    getFieldError("slug").length > 0)
                 }
               >
                 <FieldLabel htmlFor="group-slug">Slug *</FieldLabel>
@@ -178,10 +258,14 @@ export function GroupForm({
                     id="group-slug"
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
-                    onChange={(event) => formField.handleChange(event.target.value)}
+                    onChange={(event) =>
+                      formField.handleChange(event.target.value)
+                    }
                     aria-invalid={
-                      (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                      (formField.state.meta.errors.length > 0 || getFieldError("slug").length > 0)
+                      (formField.state.meta.isTouched ||
+                        form.state.submissionAttempts > 0) &&
+                      (formField.state.meta.errors.length > 0 ||
+                        getFieldError("slug").length > 0)
                     }
                   />
                   <FieldDescription>
@@ -189,9 +273,11 @@ export function GroupForm({
                   </FieldDescription>
                   <FieldError
                     errors={[
-                      ...getClientFieldErrors(formField.state.meta.errors).map((message) => ({
-                        message,
-                      })),
+                      ...getClientFieldErrors(formField.state.meta.errors).map(
+                        (message) => ({
+                          message,
+                        }),
+                      ),
                       ...getFieldError("slug").map((message) => ({ message })),
                     ]}
                   />
@@ -230,7 +316,9 @@ export function GroupForm({
               </FieldDescription>
               <RadioGroup
                 value={formField.state.value}
-                onValueChange={(value) => formField.handleChange(value as GroupFormValues["joinPolicy"])}
+                onValueChange={(value) =>
+                  formField.handleChange(value as GroupFormValues["joinPolicy"])
+                }
                 className="max-w-2xl"
               >
                 {groupJoinPolicyOptions.map((option) => {
@@ -241,7 +329,9 @@ export function GroupForm({
                       <Field orientation="horizontal">
                         <FieldContent>
                           <FieldTitle>{option.label}</FieldTitle>
-                          <FieldDescription>{option.description}</FieldDescription>
+                          <FieldDescription>
+                            {option.description}
+                          </FieldDescription>
                         </FieldContent>
                         <RadioGroupItem value={option.value} id={id} />
                       </Field>
@@ -265,7 +355,9 @@ export function GroupForm({
                     min={0}
                     value={formField.state.value}
                     onBlur={formField.handleBlur}
-                    onChange={(event) => formField.handleChange(Number(event.target.value))}
+                    onChange={(event) =>
+                      formField.handleChange(Number(event.target.value))
+                    }
                   />
                 </FieldContent>
               </Field>
@@ -285,13 +377,134 @@ export function GroupForm({
           </form.Field>
         </div>
       </FieldGroup>
+      {workspaceConnected ? (
+        <FieldSet>
+          <FieldLegend>Workspace integration</FieldLegend>
+          <FieldDescription>
+            Link this group to Google Workspace resources. Changes take effect
+            when members are next assigned or synced.
+          </FieldDescription>
+
+          <form.Field name="workspaceGroupEmail">
+            {(formField) => (
+              <Field>
+                <FieldLabel htmlFor="group-workspace-group">
+                  Workspace group email
+                </FieldLabel>
+                <FieldContent>
+                  <Combobox
+                    value={formField.state.value ?? null}
+                    onValueChange={(v) => formField.handleChange(v)}
+                    filter={() => true}
+                    disabled={!canManageWorkspaceIntegration}
+                  >
+                    <ComboboxInput
+                      id="group-workspace-group"
+                      placeholder="Search Google groups…"
+                      showClear={!!formField.state.value}
+                      value={groupSearchQuery}
+                      onChange={(e) => {
+                        setGroupSearchQuery(e.target.value);
+                        triggerGroupSearch(e.target.value);
+                      }}
+                    />
+                    <ComboboxContent>
+                      <ComboboxList>
+                        {searchGroupsAction.isPending ? (
+                          <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
+                            <Loader2Icon className="size-4 animate-spin" />
+                            Searching…
+                          </div>
+                        ) : (
+                          <>
+                            <ComboboxEmpty>No groups found.</ComboboxEmpty>
+                            {wsGroups.map((g) => (
+                              <ComboboxItem key={g.id} value={g.email}>
+                                <span className="font-medium">{g.name}</span>
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                  {g.email}
+                                </span>
+                              </ComboboxItem>
+                            ))}
+                          </>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  {formField.state.value ? (
+                    <FieldDescription>
+                      Members assigned to this group will be added to{" "}
+                      <span className="font-mono text-foreground">
+                        {formField.state.value}
+                      </span>
+                      .
+                    </FieldDescription>
+                  ) : null}
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
+
+          {isWorkspaceOrgUnitCategory ? (
+            <form.Field name="workspaceOrgUnitPath">
+              {(formField) => (
+                <Field>
+                  <FieldLabel htmlFor="group-workspace-ou">
+                    Workspace org unit path
+                  </FieldLabel>
+                  <FieldContent>
+                    <Select
+                      value={formField.state.value ?? "__none__"}
+                      onValueChange={(v) =>
+                        formField.handleChange(v === "__none__" ? null : v)
+                      }
+                      onOpenChange={(open) => {
+                        if (open) void ensureOrgUnitsFetched();
+                      }}
+                      disabled={!canManageWorkspaceIntegration}
+                    >
+                      <SelectTrigger id="group-workspace-ou">
+                        {getOrgUnitsAction.isPending ? (
+                          <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <SelectValue placeholder="Select org unit…" />
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {orgUnits.map((ou) => (
+                          <SelectItem
+                            key={ou.orgUnitPath}
+                            value={ou.orgUnitPath}
+                          >
+                            {ou.orgUnitPath}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {formField.state.value ? (
+                      <FieldDescription>
+                        Members assigned here will be moved to{" "}
+                        <span className="font-mono text-foreground">
+                          {formField.state.value}
+                        </span>
+                        .
+                      </FieldDescription>
+                    ) : null}
+                  </FieldContent>
+                </Field>
+              )}
+            </form.Field>
+          ) : null}
+        </FieldSet>
+      ) : null}
 
       {categoryManagesFees ? (
         <FieldSet>
           <FieldLegend>Membership fee overrides</FieldLegend>
           <FieldDescription>
-            Leave fields empty to use the organization defaults. Fill in only the
-            values this group should override.
+            Leave fields empty to use the organization defaults. Fill in only
+            the values this group should override.
           </FieldDescription>
 
           <div className="grid gap-5 md:grid-cols-2">
@@ -299,8 +512,10 @@ export function GroupForm({
               {(formField) => (
                 <Field
                   data-invalid={
-                    (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                    (formField.state.meta.errors.length > 0 || getFieldError("feeRenewalMonth").length > 0)
+                    (formField.state.meta.isTouched ||
+                      form.state.submissionAttempts > 0) &&
+                    (formField.state.meta.errors.length > 0 ||
+                      getFieldError("feeRenewalMonth").length > 0)
                   }
                 >
                   <FieldLabel htmlFor="group-fee-renewal-month">
@@ -308,7 +523,11 @@ export function GroupForm({
                   </FieldLabel>
                   <FieldContent>
                     <Select
-                      value={formField.state.value != null ? String(formField.state.value) : ""}
+                      value={
+                        formField.state.value != null
+                          ? String(formField.state.value)
+                          : ""
+                      }
                       onValueChange={(v) =>
                         formField.handleChange(v ? Number(v) : null)
                       }
@@ -327,15 +546,19 @@ export function GroupForm({
                     <FieldDescription>
                       {formatOrgDefault(
                         orgFeeDefaults?.renewalMonth != null
-                          ? MONTH_NAMES[orgFeeDefaults.renewalMonth - 1] ?? ""
+                          ? (MONTH_NAMES[orgFeeDefaults.renewalMonth - 1] ?? "")
                           : "",
                         orgFeeDefaults?.renewalMonth,
                       )}
                     </FieldDescription>
                     <FieldError
                       errors={[
-                        ...getClientFieldErrors(formField.state.meta.errors).map((m) => ({ message: m })),
-                        ...getFieldError("feeRenewalMonth").map((m) => ({ message: m })),
+                        ...getClientFieldErrors(
+                          formField.state.meta.errors,
+                        ).map((m) => ({ message: m })),
+                        ...getFieldError("feeRenewalMonth").map((m) => ({
+                          message: m,
+                        })),
                       ]}
                     />
                   </FieldContent>
@@ -347,8 +570,10 @@ export function GroupForm({
               {(formField) => (
                 <Field
                   data-invalid={
-                    (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                    (formField.state.meta.errors.length > 0 || getFieldError("feeRenewalDay").length > 0)
+                    (formField.state.meta.isTouched ||
+                      form.state.submissionAttempts > 0) &&
+                    (formField.state.meta.errors.length > 0 ||
+                      getFieldError("feeRenewalDay").length > 0)
                   }
                 >
                   <FieldLabel htmlFor="group-fee-renewal-day">
@@ -383,8 +608,12 @@ export function GroupForm({
                     </FieldDescription>
                     <FieldError
                       errors={[
-                        ...getClientFieldErrors(formField.state.meta.errors).map((m) => ({ message: m })),
-                        ...getFieldError("feeRenewalDay").map((m) => ({ message: m })),
+                        ...getClientFieldErrors(
+                          formField.state.meta.errors,
+                        ).map((m) => ({ message: m })),
+                        ...getFieldError("feeRenewalDay").map((m) => ({
+                          message: m,
+                        })),
                       ]}
                     />
                   </FieldContent>
@@ -398,8 +627,10 @@ export function GroupForm({
               {(formField) => (
                 <Field
                   data-invalid={
-                    (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                    (formField.state.meta.errors.length > 0 || getFieldError("feeAmount").length > 0)
+                    (formField.state.meta.isTouched ||
+                      form.state.submissionAttempts > 0) &&
+                    (formField.state.meta.errors.length > 0 ||
+                      getFieldError("feeAmount").length > 0)
                   }
                 >
                   <FieldLabel htmlFor="group-fee-amount">Fee amount</FieldLabel>
@@ -431,8 +662,12 @@ export function GroupForm({
                     </FieldDescription>
                     <FieldError
                       errors={[
-                        ...getClientFieldErrors(formField.state.meta.errors).map((m) => ({ message: m })),
-                        ...getFieldError("feeAmount").map((m) => ({ message: m })),
+                        ...getClientFieldErrors(
+                          formField.state.meta.errors,
+                        ).map((m) => ({ message: m })),
+                        ...getFieldError("feeAmount").map((m) => ({
+                          message: m,
+                        })),
                       ]}
                     />
                   </FieldContent>
@@ -447,9 +682,7 @@ export function GroupForm({
                   <FieldContent>
                     <Select
                       value={formField.state.value ?? ""}
-                      onValueChange={(v) =>
-                        formField.handleChange(v || null)
-                      }
+                      onValueChange={(v) => formField.handleChange(v || null)}
                     >
                       <SelectTrigger id="group-fee-currency">
                         <SelectValue placeholder="Use org default" />
@@ -478,8 +711,10 @@ export function GroupForm({
             {(formField) => (
               <Field
                 data-invalid={
-                  (formField.state.meta.isTouched || form.state.submissionAttempts > 0) &&
-                  (formField.state.meta.errors.length > 0 || getFieldError("feeBankAccount").length > 0)
+                  (formField.state.meta.isTouched ||
+                    form.state.submissionAttempts > 0) &&
+                  (formField.state.meta.errors.length > 0 ||
+                    getFieldError("feeBankAccount").length > 0)
                 }
               >
                 <FieldLabel htmlFor="group-fee-bank-account">
@@ -496,7 +731,8 @@ export function GroupForm({
                       )
                     }
                     placeholder={
-                      orgFeeDefaults?.feeBankAccount ?? "CZ6508000000192000145399"
+                      orgFeeDefaults?.feeBankAccount ??
+                      "CZ6508000000192000145399"
                     }
                     autoComplete="off"
                     spellCheck={false}
@@ -509,8 +745,12 @@ export function GroupForm({
                   </FieldDescription>
                   <FieldError
                     errors={[
-                      ...getClientFieldErrors(formField.state.meta.errors).map((m) => ({ message: m })),
-                      ...getFieldError("feeBankAccount").map((m) => ({ message: m })),
+                      ...getClientFieldErrors(formField.state.meta.errors).map(
+                        (m) => ({ message: m }),
+                      ),
+                      ...getFieldError("feeBankAccount").map((m) => ({
+                        message: m,
+                      })),
                     ]}
                   />
                 </FieldContent>
@@ -529,7 +769,7 @@ export function GroupForm({
         <Button type="submit" disabled={isPending}>
           {isPending
             ? "Saving\u2026"
-            : submitLabel ?? (group?.id ? "Save group" : "Create group")}
+            : (submitLabel ?? (group?.id ? "Save group" : "Create group"))}
         </Button>
       </div>
     </form>

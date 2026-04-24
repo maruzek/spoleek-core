@@ -31,7 +31,10 @@ async function loadActiveConnection(orgId: string) {
     .select()
     .from(workspaceConnections)
     .where(
-      and(eq(workspaceConnections.orgId, orgId), isNull(workspaceConnections.revokedAt)),
+      and(
+        eq(workspaceConnections.orgId, orgId),
+        isNull(workspaceConnections.revokedAt),
+      ),
     )
     .limit(1);
   return row ?? null;
@@ -48,10 +51,7 @@ export async function getAccessTokenForOrg(orgId: string) {
     ? new Date(connection.accessTokenExpiresAt).getTime()
     : 0;
 
-  if (
-    connection.accessToken &&
-    expiresAt - ACCESS_TOKEN_SKEW_MS > now
-  ) {
+  if (connection.accessToken && expiresAt - ACCESS_TOKEN_SKEW_MS > now) {
     return connection.accessToken;
   }
 
@@ -236,7 +236,11 @@ export async function searchWorkspaceUsers(
   }
 
   const body = (await response.json()) as {
-    users?: { id: string; primaryEmail: string; name?: { fullName?: string } }[];
+    users?: {
+      id: string;
+      primaryEmail: string;
+      name?: { fullName?: string };
+    }[];
   };
 
   return (body.users ?? []).map((u) => ({
@@ -259,9 +263,14 @@ export async function searchWorkspaceGroups(
 ): Promise<WorkspaceGroup[]> {
   const params = new URLSearchParams({
     customer: "my_customer",
-    query,
     maxResults: String(maxResults),
   });
+  if (query.trim()) {
+    // Directory API prefix search: `email:prefix*` — the prefix must be the local part only.
+    // If the user typed "user@domain.c", the prefix is "user" (everything before @).
+    const prefix = query.trim().split("@")[0];
+    params.set("query", `email:${prefix}*`);
+  }
   const response = await directoryFetch(orgId, `/groups?${params.toString()}`);
 
   if (response.status === 404) {
@@ -294,7 +303,10 @@ export async function searchWorkspaceOrgUnits(
   const params = new URLSearchParams({
     type: "all",
   });
-  const response = await directoryFetch(orgId, `/customer/my_customer/orgunits?${params.toString()}`);
+  const response = await directoryFetch(
+    orgId,
+    `/customer/my_customer/orgunits?${params.toString()}`,
+  );
 
   if (response.status === 404) {
     return [];
@@ -315,10 +327,14 @@ export async function addWorkspaceGroupMember(
   groupEmail: string,
   userEmail: string,
 ): Promise<void> {
-  const response = await directoryFetch(orgId, `/groups/${encodeURIComponent(groupEmail)}/members`, {
-    method: "POST",
-    body: JSON.stringify({ email: userEmail, role: "MEMBER" }),
-  });
+  const response = await directoryFetch(
+    orgId,
+    `/groups/${encodeURIComponent(groupEmail)}/members`,
+    {
+      method: "POST",
+      body: JSON.stringify({ email: userEmail, role: "MEMBER" }),
+    },
+  );
 
   // Ignore if already a member
   if (response.status === 409) {
@@ -334,9 +350,13 @@ export async function removeWorkspaceGroupMember(
   groupEmail: string,
   userEmail: string,
 ): Promise<void> {
-  const response = await directoryFetch(orgId, `/groups/${encodeURIComponent(groupEmail)}/members/${encodeURIComponent(userEmail)}`, {
-    method: "DELETE",
-  });
+  const response = await directoryFetch(
+    orgId,
+    `/groups/${encodeURIComponent(groupEmail)}/members/${encodeURIComponent(userEmail)}`,
+    {
+      method: "DELETE",
+    },
+  );
 
   // Ignore if not a member or group doesn't exist
   if (response.status === 404 || response.status === 400) {
@@ -352,10 +372,14 @@ export async function updateWorkspaceUserOrgUnit(
   userEmail: string,
   orgUnitPath: string,
 ): Promise<void> {
-  const response = await directoryFetch(orgId, `/users/${encodeURIComponent(userEmail)}`, {
-    method: "PUT",
-    body: JSON.stringify({ orgUnitPath }),
-  });
+  const response = await directoryFetch(
+    orgId,
+    `/users/${encodeURIComponent(userEmail)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ orgUnitPath }),
+    },
+  );
 
   if (!response.ok) {
     throw await parseError(response);

@@ -60,6 +60,9 @@ type GroupDetailProps = {
     feeAmount: number | null;
     feeCurrency: string | null;
     feeBankAccount: string | null;
+    workspaceGroupEmail: string | null;
+    workspaceOrgUnitPath: string | null;
+    categorySpecialCapability: string | null;
     createdAt: Date;
     updatedAt: Date;
     categoryName: string;
@@ -103,6 +106,8 @@ type GroupDetailProps = {
     linkedUserName: string | null;
     createdAt: Date;
   }>;
+  workspaceConnected: boolean;
+  canManageWorkspaceIntegration: boolean;
 };
 
 const memberColumnHelper =
@@ -126,6 +131,8 @@ export function GroupDetail({
   members,
   admins,
   assignableMembers,
+  workspaceConnected,
+  canManageWorkspaceIntegration,
 }: GroupDetailProps) {
   const router = useRouter();
   const [memberSheetOpen, setMemberSheetOpen] = useState(false);
@@ -437,6 +444,9 @@ export function GroupDetail({
                 isPending={saveGroup.isPending}
                 validationErrors={saveGroup.result.validationErrors}
                 categoryManagesFees={group.categoryManagesFees}
+                workspaceConnected={workspaceConnected}
+                canManageWorkspaceIntegration={canManageWorkspaceIntegration}
+                isWorkspaceOrgUnitCategory={group.categorySpecialCapability === "workspace_org_unit"}
                 submitLabel="Save group"
                 onSubmit={async (value: GroupFormValues) => {
                   const result = await saveGroup.executeAsync(value);

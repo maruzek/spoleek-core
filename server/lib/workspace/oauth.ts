@@ -8,6 +8,8 @@ export const WORKSPACE_OAUTH_SCOPES = [
   "email",
   "profile",
   "https://www.googleapis.com/auth/admin.directory.user",
+  "https://www.googleapis.com/auth/admin.directory.group",
+  "https://www.googleapis.com/auth/admin.directory.orgunit",
 ] as const;
 
 export const WORKSPACE_OAUTH_CALLBACK_PATH = "/api/workspace/oauth/callback";
@@ -60,7 +62,8 @@ export function buildWorkspaceAuthUrl(params: {
 }
 
 export async function exchangeAuthorizationCode(code: string) {
-  const { clientId, clientSecret, redirectUri } = getWorkspaceOAuthCredentials();
+  const { clientId, clientSecret, redirectUri } =
+    getWorkspaceOAuthCredentials();
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -107,9 +110,12 @@ export async function revokeWorkspaceToken(token: string) {
 }
 
 export async function fetchGoogleUserInfo(accessToken: string) {
-  const response = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-    headers: { authorization: `Bearer ${accessToken}` },
-  });
+  const response = await fetch(
+    "https://openidconnect.googleapis.com/v1/userinfo",
+    {
+      headers: { authorization: `Bearer ${accessToken}` },
+    },
+  );
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Failed to fetch Google userinfo: ${text}`);
