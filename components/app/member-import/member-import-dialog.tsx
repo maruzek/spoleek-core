@@ -51,6 +51,7 @@ export function MemberImportDialog({
   customFields,
   manageableGroupCategories,
   workspaceReady,
+  workspaceProvisionFields,
   onDone,
 }: ImportDialogProps) {
   // ── Wizard state ──
@@ -401,6 +402,7 @@ export function MemberImportDialog({
                 workspaceMatches={workspaceMatches}
                 onWorkspaceMatchesChange={setWorkspaceMatches}
                 onSkip={goNext}
+                provisionFields={workspaceProvisionFields}
               />
             )}
 

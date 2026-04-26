@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "workspace_provision_fields" jsonb DEFAULT '[]'::jsonb NOT NULL;

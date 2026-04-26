@@ -1,3 +1,4 @@
+import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 import type { MemberCustomField } from "@/server/db/schema";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 
@@ -58,6 +59,7 @@ export interface ImportDialogProps {
   customFields: MemberCustomField[];
   manageableGroupCategories: MemberManagementGroupCategory[];
   workspaceReady: boolean;
+  workspaceProvisionFields?: EnabledProvisionField[];
   onDone: () => void;
 }
 

@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { organizations, tenantMembers } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { logMemberAuthEvent } from "@/server/lib/member-invites";
+import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 import {
   WorkspaceApiError,
   WorkspaceNotConnectedError,
@@ -21,6 +22,7 @@ export type ProvisionWorkspaceAccountInput = {
   primaryEmail: string;
   toEmail: string;
   actorUserId: string | null;
+  extraFields?: WorkspaceFieldValues;
 };
 
 export type ProvisionWorkspaceAccountResult =
@@ -68,6 +70,7 @@ export async function provisionWorkspaceAccountForMember(
       firstName: input.firstName,
       lastName: input.lastName,
       password,
+      extraFields: input.extraFields,
     });
     workspaceUserId = created.id;
     primaryEmail = created.primaryEmail;
@@ -160,6 +163,9 @@ export async function provisionWorkspaceAccountForMember(
       workspaceUserId,
       primaryEmail,
       toEmail: input.toEmail,
+      ...(input.extraFields && Object.keys(input.extraFields).length > 0
+        ? { extraFields: input.extraFields }
+        : {}),
     },
   }).catch(() => undefined);
 

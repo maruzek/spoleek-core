@@ -26,12 +26,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   disconnectWorkspaceAction,
+  saveWorkspaceProvisionFieldsAction,
   saveWorkspaceSettingsAction,
   setWorkspaceOrgUnitCategoryAction,
 } from "@/server/actions/organization-settings";
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
+import {
+  WORKSPACE_FIELD_CATALOG,
+  type WorkspaceProvisionFieldConfig,
+} from "@/server/lib/workspace/field-catalog";
 import type { MemberPreferredEmail } from "@/server/db/schema";
 
 export type WorkspaceSettingsState = {
@@ -44,6 +50,7 @@ export type WorkspaceSettingsState = {
   defaultEmailPreference: MemberPreferredEmail;
   groupCategories: { id: string; name: string }[];
   workspaceOrgUnitCategoryId: string | null;
+  provisionFields: WorkspaceProvisionFieldConfig[];
 };
 
 export function WorkspaceSettingsCard({
@@ -93,6 +100,28 @@ export function WorkspaceSettingsCard({
     },
     onError({ error }) {
       toast.error(error.serverError ?? "Could not disconnect Workspace.");
+    },
+  });
+
+  const [provisionFields, setProvisionFields] = useState<
+    WorkspaceProvisionFieldConfig[]
+  >(() => {
+    return WORKSPACE_FIELD_CATALOG.map((def) => {
+      const existing = state.provisionFields.find(
+        (f) => f.fieldKey === def.key,
+      );
+      return existing ?? { fieldKey: def.key, enabled: false, required: false };
+    });
+  });
+  const provisionFieldsAction = useAction(saveWorkspaceProvisionFieldsAction, {
+    onSuccess() {
+      toast.success("Account creation fields saved.");
+      router.refresh();
+    },
+    onError({ error }) {
+      toast.error(
+        error.serverError ?? "Could not save account creation fields.",
+      );
     },
   });
 
@@ -274,6 +303,103 @@ export function WorkspaceSettingsCard({
                 : "Save org unit category"}
             </Button>
           </div>
+        </div>
+      ) : null}
+
+      {state.connected ? (
+        <div className="flex flex-col gap-3 rounded-xl border p-4">
+          <div className="flex flex-col gap-1">
+            <Label>Account creation fields</Label>
+            <p className="text-xs text-muted-foreground">
+              Configure which additional fields are collected when provisioning
+              Workspace accounts. These apply during member approval, import,
+              and manual creation.
+            </p>
+          </div>
+
+          <div className="rounded-xl border overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-px bg-border text-xs font-medium text-muted-foreground">
+              <div className="bg-muted/60 px-3 py-2">Field</div>
+              <div className="bg-muted/60 px-3 py-2 text-center">Enabled</div>
+              <div className="bg-muted/60 px-3 py-2 text-center">Required</div>
+            </div>
+            <div className="divide-y">
+              {WORKSPACE_FIELD_CATALOG.map((def) => {
+                const fieldConfig = provisionFields.find(
+                  (f) => f.fieldKey === def.key,
+                );
+                const enabled = fieldConfig?.enabled ?? false;
+                const required = fieldConfig?.required ?? false;
+
+                return (
+                  <div
+                    key={def.key}
+                    className="grid grid-cols-[1fr_auto_auto] items-center gap-px"
+                  >
+                    <div className="bg-background px-3 py-2.5">
+                      <p className="text-sm font-medium">{def.label}</p>
+                      {def.description ? (
+                        <p className="text-[11px] text-muted-foreground">
+                          {def.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center justify-center bg-background px-3 py-2.5">
+                      <Switch
+                        checked={enabled}
+                        onCheckedChange={(checked) => {
+                          setProvisionFields((prev) =>
+                            prev.map((f) =>
+                              f.fieldKey === def.key
+                                ? {
+                                    ...f,
+                                    enabled: checked,
+                                    required: checked ? f.required : false,
+                                  }
+                                : f,
+                            ),
+                          );
+                        }}
+                        aria-label={`Enable ${def.label}`}
+                      />
+                    </div>
+                    <div className="flex items-center justify-center bg-background px-3 py-2.5">
+                      <Checkbox
+                        checked={required}
+                        disabled={!enabled}
+                        onCheckedChange={(checked) => {
+                          setProvisionFields((prev) =>
+                            prev.map((f) =>
+                              f.fieldKey === def.key
+                                ? { ...f, required: Boolean(checked) }
+                                : f,
+                            ),
+                          );
+                        }}
+                        aria-label={`Require ${def.label}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            onClick={() =>
+              provisionFieldsAction.execute({
+                fields: provisionFields.filter((f) => f.enabled),
+              })
+            }
+            disabled={provisionFieldsAction.isPending}
+          >
+            {provisionFieldsAction.isPending
+              ? "Saving…"
+              : "Save account creation fields"}
+          </Button>
         </div>
       ) : null}
 

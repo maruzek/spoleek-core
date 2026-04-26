@@ -276,6 +276,10 @@ export const organizations = pgTable(
       withTimezone: true,
     }),
     workspaceAdminEmail: text("workspace_admin_email"),
+    workspaceProvisionFields: jsonb("workspace_provision_fields")
+      .$type<{ fieldKey: string; enabled: boolean; required: boolean }[]>()
+      .notNull()
+      .default([]),
     defaultEmailPreference: memberPreferredEmailEnum("default_email_preference")
       .notNull()
       .default("personal"),

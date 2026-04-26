@@ -92,6 +92,11 @@ export default async function AdminSettingsPage({
     defaultEmailPreference: organization.defaultEmailPreference,
     groupCategories: categories.map((c) => ({ id: c.id, name: c.name })),
     workspaceOrgUnitCategoryId: workspaceOrgUnitCategory?.id ?? null,
+    provisionFields: (organization.workspaceProvisionFields ?? []) as {
+      fieldKey: string;
+      enabled: boolean;
+      required: boolean;
+    }[],
   };
 
   return (

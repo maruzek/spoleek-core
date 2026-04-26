@@ -25,6 +25,8 @@ import {
 
 import { buildWorkspaceQuery } from "./helpers";
 import type { FieldTarget, ParsedRow, WorkspaceMatch } from "./types";
+import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
+import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 
 type SyncPhase = "email-lookup" | "search" | "provision";
 
@@ -35,6 +37,7 @@ export function StepWorkspaceSync({
   workspaceMatches,
   onWorkspaceMatchesChange,
   onSkip,
+  provisionFields = [],
 }: {
   csvHeaders: string[];
   csvRows: ParsedRow[];
@@ -42,6 +45,7 @@ export function StepWorkspaceSync({
   workspaceMatches: Map<number, WorkspaceMatch>;
   onWorkspaceMatchesChange: (matches: Map<number, WorkspaceMatch>) => void;
   onSkip: () => void;
+  provisionFields?: EnabledProvisionField[];
 }) {
   const [phase, setPhase] = useState<SyncPhase>("email-lookup");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -61,6 +65,8 @@ export function StepWorkspaceSync({
     new Set(),
   );
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
+  const [defaultExtraFields, setDefaultExtraFields] =
+    useState<WorkspaceFieldValues>({});
   const [provisioningStatus, setProvisioningStatus] = useState<
     Record<number, "pending" | "loading" | "success" | "error">
   >({});
@@ -279,6 +285,10 @@ export function StepWorkspaceSync({
         lastName,
         primaryEmail,
         sendWelcomeEmail,
+        extraFields:
+          Object.keys(defaultExtraFields).length > 0
+            ? defaultExtraFields
+            : undefined,
       });
 
       if (result?.data?.success) {
@@ -604,6 +614,77 @@ export function StepWorkspaceSync({
               </p>
             </div>
           </div>
+
+          {provisionFields.length > 0 && unmatchedIndices.length > 0 ? (
+            <div className="flex flex-col gap-3 rounded-lg border p-4">
+              <div>
+                <p className="text-sm font-medium">
+                  Default values for new accounts
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  These values will be applied to all provisioned accounts.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {provisionFields.map((field) => (
+                  <div key={field.fieldKey} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium">
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </label>
+                    {field.type === "boolean" ? (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={
+                            typeof defaultExtraFields[field.fieldKey] ===
+                            "boolean"
+                              ? (defaultExtraFields[
+                                  field.fieldKey
+                                ] as boolean)
+                              : false
+                          }
+                          onCheckedChange={(checked) =>
+                            setDefaultExtraFields((prev) => ({
+                              ...prev,
+                              [field.fieldKey]: checked,
+                            }))
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {field.description}
+                        </span>
+                      </div>
+                    ) : (
+                      <Input
+                        type={
+                          field.type === "email"
+                            ? "email"
+                            : field.type === "phone"
+                              ? "tel"
+                              : "text"
+                        }
+                        value={
+                          typeof defaultExtraFields[field.fieldKey] === "string"
+                            ? (defaultExtraFields[
+                                field.fieldKey
+                              ] as string)
+                            : ""
+                        }
+                        onChange={(e) =>
+                          setDefaultExtraFields((prev) => ({
+                            ...prev,
+                            [field.fieldKey]: e.target.value,
+                          }))
+                        }
+                        placeholder={field.placeholder}
+                        className="h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {unmatchedIndices.length === 0 ? (
             <div className="flex items-center gap-2 rounded-lg border bg-green-50 px-3 py-2 dark:bg-green-950/30">

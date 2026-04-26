@@ -3,6 +3,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { db } from "@/server/db";
 import { workspaceConnections } from "@/server/db/schema";
+import {
+  buildGoogleApiExtraFields,
+  type WorkspaceFieldValues,
+} from "@/server/lib/workspace/field-catalog";
 import { refreshWorkspaceAccessToken } from "@/server/lib/workspace/oauth";
 
 const DIRECTORY_BASE = "https://admin.googleapis.com/admin/directory/v1";
@@ -183,6 +187,7 @@ export type CreateWorkspaceUserInput = {
   firstName: string;
   lastName: string;
   password: string;
+  extraFields?: WorkspaceFieldValues;
 };
 
 export type CreateWorkspaceUserResult = {
@@ -194,14 +199,21 @@ export async function createWorkspaceUser(
   orgId: string,
   input: CreateWorkspaceUserInput,
 ): Promise<CreateWorkspaceUserResult> {
+  const base: Record<string, unknown> = {
+    primaryEmail: input.primaryEmail,
+    name: { givenName: input.firstName, familyName: input.lastName },
+    password: input.password,
+    changePasswordAtNextLogin: true,
+  };
+
+  if (input.extraFields && Object.keys(input.extraFields).length > 0) {
+    const extra = buildGoogleApiExtraFields(input.extraFields);
+    Object.assign(base, extra);
+  }
+
   const response = await directoryFetch(orgId, "/users", {
     method: "POST",
-    body: JSON.stringify({
-      primaryEmail: input.primaryEmail,
-      name: { givenName: input.firstName, familyName: input.lastName },
-      password: input.password,
-      changePasswordAtNextLogin: true,
-    }),
+    body: JSON.stringify(base),
   });
 
   if (!response.ok) {

@@ -61,6 +61,7 @@ import { MemberImportDialog } from "./member-import/index";
 import { MailingListAction } from "./mailing-list-action";
 import {
   MemberApproveWorkspaceDialog,
+  type EnabledProvisionField,
   type WorkspaceApprovalMember,
 } from "./member-approve-workspace-dialog";
 import { MemberSheet } from "./member-sheet";
@@ -201,6 +202,7 @@ export function MemberAdmin({
   manageableGroupCategories,
   selectedMember,
   workspace,
+  workspaceProvisionFields = [],
 }: {
   access: MemberAdminAccess;
   members: MemberRow[];
@@ -209,6 +211,7 @@ export function MemberAdmin({
   manageableGroupCategories: MemberManagementGroupCategory[];
   selectedMember: MemberEditorData | null;
   workspace: WorkspaceModuleProp;
+  workspaceProvisionFields?: EnabledProvisionField[];
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -834,6 +837,7 @@ export function MemberAdmin({
         customFields={customFields}
         manageableGroupCategories={manageableGroupCategories}
         workspaceReady={workspaceReady}
+        workspaceProvisionFields={workspaceProvisionFields}
         onDone={() => router.refresh()}
       />
 
@@ -849,13 +853,14 @@ export function MemberAdmin({
         workspaceDomain={workspace.domain ?? ""}
         isPending={approveAction.isPending}
         submitError={workspaceApproveError}
-        onConfirm={async ({ primaryEmail }) => {
+        provisionFields={workspaceProvisionFields}
+        onConfirm={async ({ primaryEmail, extraFields }) => {
           if (!workspaceApproveMember) return;
           setWorkspaceApproveError(null);
           await approveAction.executeAsync({
             memberId: workspaceApproveMember.id,
             role: workspaceApproveMember.role,
-            workspace: { primaryEmail },
+            workspace: { primaryEmail, extraFields },
           });
         }}
       />

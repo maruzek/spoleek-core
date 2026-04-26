@@ -87,6 +87,9 @@ export const createWorkspaceAccountSchema = z.object({
   lastName: z.string().min(1),
   primaryEmail: z.email(),
   sendWelcomeEmail: z.boolean().default(true),
+  extraFields: z
+    .record(z.string(), z.union([z.string(), z.boolean()]))
+    .optional(),
 });
 
 export type ImportMemberRow = z.infer<typeof importMemberRowSchema>;

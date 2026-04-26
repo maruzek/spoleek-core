@@ -15,10 +15,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   checkWorkspaceEmailAvailabilityAction,
   suggestWorkspaceEmailAction,
 } from "@/server/actions/member-admin";
+import type {
+  WorkspaceFieldDefinition,
+  WorkspaceFieldValues,
+  WorkspaceProvisionFieldConfig,
+} from "@/server/lib/workspace/field-catalog";
 
 export type WorkspaceApprovalMember = {
   id: string;
@@ -27,6 +33,9 @@ export type WorkspaceApprovalMember = {
   email: string | null;
   role: "member" | "leader" | "org_admin";
 };
+
+export type EnabledProvisionField = WorkspaceProvisionFieldConfig &
+  Pick<WorkspaceFieldDefinition, "label" | "type" | "placeholder" | "description">;
 
 type AvailabilityState =
   | { status: "idle" }
@@ -44,7 +53,11 @@ type DialogProps = {
   workspaceDomain: string;
   isPending: boolean;
   submitError: string | null;
-  onConfirm: (input: { primaryEmail: string }) => Promise<void>;
+  provisionFields: EnabledProvisionField[];
+  onConfirm: (input: {
+    primaryEmail: string;
+    extraFields: WorkspaceFieldValues;
+  }) => Promise<void>;
 };
 
 export function MemberApproveWorkspaceDialog(props: DialogProps) {
@@ -53,7 +66,11 @@ export function MemberApproveWorkspaceDialog(props: DialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         {member ? (
-          <DialogBody key={`${member.id}:${open ? "open" : "closed"}`} {...props} member={member} />
+          <DialogBody
+            key={`${member.id}:${open ? "open" : "closed"}`}
+            {...props}
+            member={member}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -66,9 +83,13 @@ function DialogBody({
   workspaceDomain,
   isPending,
   submitError,
+  provisionFields,
   onConfirm,
-}: Omit<DialogProps, "open" | "member"> & { member: WorkspaceApprovalMember }) {
+}: Omit<DialogProps, "open" | "member"> & {
+  member: WorkspaceApprovalMember;
+}) {
   const [email, setEmail] = useState("");
+  const [extraFields, setExtraFields] = useState<WorkspaceFieldValues>({});
   const [availability, setAvailability] = useState<AvailabilityState>({
     status: "idle",
   });
@@ -78,7 +99,9 @@ function DialogBody({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const result = await suggestWorkspaceEmailAction({ memberId: member.id });
+      const result = await suggestWorkspaceEmailAction({
+        memberId: member.id,
+      });
       if (cancelled) return;
       const suggestion = result?.data?.suggestion ?? "";
       setEmail(suggestion);
@@ -145,9 +168,20 @@ function DialogBody({
     return /^[a-z0-9._-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(trimmed);
   }, [email]);
 
+  const requiredFieldsMissing = useMemo(() => {
+    for (const field of provisionFields) {
+      if (!field.required) continue;
+      const val = extraFields[field.fieldKey];
+      if (field.type === "boolean") continue;
+      if (!val || (typeof val === "string" && val.trim() === "")) return true;
+    }
+    return false;
+  }, [provisionFields, extraFields]);
+
   const canSubmit =
     !isPending &&
     emailIsValid &&
+    !requiredFieldsMissing &&
     (availability.status === "available" || availability.status === "idle");
 
   const memberName =
@@ -180,6 +214,24 @@ function DialogBody({
           <AvailabilityBadge state={availability} />
         </div>
 
+        {provisionFields.length > 0 ? (
+          <div className="flex flex-col gap-3">
+            {provisionFields.map((field) => (
+              <ProvisionFieldInput
+                key={field.fieldKey}
+                field={field}
+                value={extraFields[field.fieldKey]}
+                onChange={(val) =>
+                  setExtraFields((prev) => ({
+                    ...prev,
+                    [field.fieldKey]: val,
+                  }))
+                }
+              />
+            ))}
+          </div>
+        ) : null}
+
         <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
           A temporary password will be generated and sent to{" "}
           <span className="font-medium text-foreground">
@@ -210,13 +262,67 @@ function DialogBody({
           type="button"
           disabled={!canSubmit}
           onClick={() =>
-            onConfirm({ primaryEmail: email.trim().toLowerCase() })
+            onConfirm({
+              primaryEmail: email.trim().toLowerCase(),
+              extraFields,
+            })
           }
         >
           {isPending ? "Creating account..." : "Approve & create account"}
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+function ProvisionFieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: EnabledProvisionField;
+  value: string | boolean | undefined;
+  onChange: (value: string | boolean) => void;
+}) {
+  const labelSuffix = field.required ? " *" : "";
+
+  if (field.type === "boolean") {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+        <div className="flex flex-col gap-0.5">
+          <Label className="text-sm">{field.label}</Label>
+          {field.description ? (
+            <p className="text-[11px] text-muted-foreground">
+              {field.description}
+            </p>
+          ) : null}
+        </div>
+        <Switch
+          checked={typeof value === "boolean" ? value : false}
+          onCheckedChange={onChange}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>
+        {field.label}
+        {labelSuffix}
+      </Label>
+      <Input
+        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+        value={typeof value === "string" ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={field.placeholder}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      {field.description ? (
+        <p className="text-[11px] text-muted-foreground">{field.description}</p>
+      ) : null}
+    </div>
   );
 }
 

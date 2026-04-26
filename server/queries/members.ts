@@ -93,6 +93,11 @@ export type WorkspaceModuleState = {
   connected: boolean;
   domain: string | null;
   emailTemplate: string;
+  provisionFields: {
+    fieldKey: string;
+    enabled: boolean;
+    required: boolean;
+  }[];
 };
 
 export type MembersAdminPageData = {
@@ -706,6 +711,7 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
           workspaceConnectedAt: organizationsTable.workspaceConnectedAt,
           workspaceDomain: organizationsTable.workspaceDomain,
           workspaceEmailTemplate: organizationsTable.workspaceEmailTemplate,
+          workspaceProvisionFields: organizationsTable.workspaceProvisionFields,
         })
         .from(organizationsTable)
         .where(eq(organizationsTable.id, scope.organizationId))
@@ -731,6 +737,11 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
       domain: organization?.workspaceDomain ?? null,
       emailTemplate:
         organization?.workspaceEmailTemplate ?? "{first}.{last}",
+      provisionFields: (organization?.workspaceProvisionFields ?? []) as {
+        fieldKey: string;
+        enabled: boolean;
+        required: boolean;
+      }[],
     },
   } satisfies MembersAdminPageData;
 }

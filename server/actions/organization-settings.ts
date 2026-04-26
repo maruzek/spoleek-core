@@ -15,6 +15,7 @@ import {
   workspaceConnections,
 } from "@/server/db/schema";
 import { requireOrgAdminAccess } from "@/server/queries/access";
+import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
 import { revokeWorkspaceToken } from "@/server/lib/workspace/oauth";
 import {
   DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
@@ -268,6 +269,37 @@ export const setWorkspaceOrgUnitCategoryAction = orgAdminActionClient
           );
       }
     });
+
+    return { success: true };
+  });
+
+export const saveWorkspaceProvisionFieldsAction = orgAdminActionClient
+  .metadata({ actionName: "saveWorkspaceProvisionFields" })
+  .inputSchema(
+    z.object({
+      fields: z.array(
+        z.object({
+          fieldKey: z.string(),
+          enabled: z.boolean(),
+          required: z.boolean(),
+        }),
+      ),
+    }),
+  )
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    const validated = parsedInput.fields.filter((f) =>
+      WORKSPACE_FIELD_MAP.has(f.fieldKey),
+    );
+
+    await db
+      .update(organizations)
+      .set({
+        workspaceProvisionFields: validated,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, organization.id));
 
     return { success: true };
   });

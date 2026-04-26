@@ -294,6 +294,9 @@ export const approveMemberAction = authActionClient
       workspace: z
         .object({
           primaryEmail: z.email(),
+          extraFields: z
+            .record(z.string(), z.union([z.string(), z.boolean()]))
+            .optional(),
         })
         .optional(),
     }),
@@ -339,6 +342,7 @@ export const approveMemberAction = authActionClient
         primaryEmail: parsedInput.workspace.primaryEmail.trim().toLowerCase(),
         toEmail: (member.email ?? "").trim().toLowerCase(),
         actorUserId: ctx.auth.user.id,
+        extraFields: parsedInput.workspace.extraFields,
       });
 
       if (!provision.success) {
@@ -1084,6 +1088,7 @@ export const createWorkspaceAccountAction = authActionClient
         firstName: parsedInput.firstName,
         lastName: parsedInput.lastName,
         password,
+        extraFields: parsedInput.extraFields,
       });
       workspaceUserId = created.id;
       primaryEmail = created.primaryEmail;
