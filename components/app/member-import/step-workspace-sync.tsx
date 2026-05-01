@@ -37,6 +37,38 @@ import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog"
 
 type SyncPhase = "email-lookup" | "search" | "provision";
 
+function getAssignedGroup(
+  row: ParsedRow,
+  groupAssignment: GroupAssignmentConfig,
+  groupsById: Map<string, ImportGroupInfo> | undefined,
+  categoryId?: string | null,
+): ImportGroupInfo | null {
+  if (!groupsById) return null;
+
+  let groupId: string | null = null;
+  if (groupAssignment.mode === "column" && groupAssignment.columnMapping) {
+    const colVal = (
+      row[groupAssignment.columnMapping.columnKey] ?? ""
+    ).trim();
+    groupId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
+  } else if (
+    groupAssignment.mode === "fixed" &&
+    groupAssignment.fixedGroupIds.length > 0
+  ) {
+    if (categoryId) {
+      groupId =
+        groupAssignment.fixedGroupIds.find((id) => {
+          const g = groupsById.get(id);
+          return g?.categoryId === categoryId;
+        }) ?? null;
+    } else {
+      groupId = groupAssignment.fixedGroupIds[0] ?? null;
+    }
+  }
+
+  return groupId ? (groupsById.get(groupId) ?? null) : null;
+}
+
 function resolveRowFieldValues(
   row: ParsedRow,
   fieldConfigs: EnabledProvisionField[],
@@ -47,61 +79,71 @@ function resolveRowFieldValues(
 ): WorkspaceFieldValues {
   const result: WorkspaceFieldValues = {};
 
+  const emailCol = Object.entries(columnMappings).find(
+    ([, v]) => v === "email",
+  )?.[0];
+  const memberEmail = emailCol ? (row[emailCol] ?? "").trim() : "";
+
   for (const field of fieldConfigs) {
     const source = field.source;
-    if (!source || source.type === "manual") continue;
 
-    if (source.type === "member_custom_field") {
-      // Find CSV column mapped to this custom field
-      const col = Object.entries(columnMappings).find(
-        ([, v]) => v === `custom:${source.customFieldKey}`,
-      )?.[0];
-      if (col) {
-        const val = (row[col] ?? "").trim();
-        if (val) result[field.fieldKey] = val;
-      }
-    } else if (
-      source.type === "group_category" ||
-      source.type === "org_unit_auto"
-    ) {
-      const categoryId =
-        source.type === "group_category"
-          ? source.categoryId
-          : orgUnitCategoryId;
-      if (!categoryId || !groupsById) continue;
-
-      let groupId: string | null = null;
-      if (groupAssignment.mode === "column" && groupAssignment.columnMapping) {
-        const colVal = (
-          row[groupAssignment.columnMapping.columnKey] ?? ""
-        ).trim();
-        groupId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
+    // 1. Try explicit auto-fill source
+    if (source && source.type !== "manual") {
+      if (source.type === "member_custom_field") {
+        const col = Object.entries(columnMappings).find(
+          ([, v]) => v === `custom:${source.customFieldKey}`,
+        )?.[0];
+        if (col) {
+          const val = (row[col] ?? "").trim();
+          if (val) { result[field.fieldKey] = val; continue; }
+        }
       } else if (
-        groupAssignment.mode === "fixed" &&
-        groupAssignment.fixedGroupIds.length > 0
+        source.type === "group_category" ||
+        source.type === "org_unit_auto"
       ) {
-        // Find first group in the target category
-        const fixedInCategory = groupAssignment.fixedGroupIds.find((id) => {
-          const g = groupsById.get(id);
-          return g?.categoryId === categoryId;
-        });
-        groupId = fixedInCategory ?? null;
-      }
-
-      if (groupId) {
-        const grp = groupsById.get(groupId);
+        const catId =
+          source.type === "group_category"
+            ? source.categoryId
+            : orgUnitCategoryId;
+        const grp = getAssignedGroup(row, groupAssignment, groupsById, catId);
         if (grp) {
           if (source.type === "org_unit_auto") {
-            if (grp.workspaceOrgUnitPath)
+            if (grp.workspaceOrgUnitPath) {
               result[field.fieldKey] = grp.workspaceOrgUnitPath;
+              continue;
+            }
           } else {
             const formatted = applyFormatTemplate(
               source.formatTemplate,
               grp.name,
             );
-            if (formatted) result[field.fieldKey] = formatted;
+            if (formatted) { result[field.fieldKey] = formatted; continue; }
           }
         }
+      }
+    }
+
+    // 2. Smart fallback: derive from CSV mappings / group assignment
+    if (field.fieldKey === "recoveryEmail" && memberEmail) {
+      result[field.fieldKey] = memberEmail;
+    } else if (field.fieldKey === "orgUnitPath") {
+      const grp = getAssignedGroup(
+        row, groupAssignment, groupsById, orgUnitCategoryId,
+      );
+      if (grp?.workspaceOrgUnitPath) {
+        result[field.fieldKey] = grp.workspaceOrgUnitPath;
+      }
+    } else if (field.fieldKey === "department") {
+      const grp = getAssignedGroup(row, groupAssignment, groupsById);
+      if (grp) result[field.fieldKey] = grp.name;
+    } else if (field.type !== "boolean") {
+      // Try matching a mapped custom field by key name
+      const col = Object.entries(columnMappings).find(
+        ([, v]) => v === `custom:${field.fieldKey}`,
+      )?.[0];
+      if (col) {
+        const val = (row[col] ?? "").trim();
+        if (val) result[field.fieldKey] = val;
       }
     }
   }
@@ -375,6 +417,11 @@ export function StepWorkspaceSync({
             for (const [k, v] of newMap) {
               if (!prev.has(k)) next.set(k, v);
             }
+            return next;
+          });
+          setExpandedRows((prev) => {
+            const next = new Set(prev);
+            for (const k of newMap.keys()) next.add(k);
             return next;
           });
         }
@@ -780,6 +827,12 @@ export function StepWorkspaceSync({
                         f.type !== "boolean" &&
                         !(rowFields[f.fieldKey] ?? ""),
                     );
+                    const filledCount = provisionFields.filter(
+                      (f) => {
+                        const v = rowFields[f.fieldKey];
+                        return f.type === "boolean" ? v === true : !!v;
+                      },
+                    ).length;
 
                     return (
                       <div key={rowIdx} className="flex flex-col">
@@ -807,8 +860,13 @@ export function StepWorkspaceSync({
                               >
                                 ▶
                               </span>
-                              {requiredMissing ? (
+                              {!isExpanded && requiredMissing ? (
                                 <span className="ml-1 size-1.5 rounded-full bg-destructive" />
+                              ) : null}
+                              {!isExpanded && filledCount > 0 ? (
+                                <span className="ml-1 text-[9px] tabular-nums text-muted-foreground">
+                                  {filledCount}/{provisionFields.length}
+                                </span>
                               ) : null}
                             </button>
                           ) : null}
