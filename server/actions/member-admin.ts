@@ -22,7 +22,7 @@ import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { generateRandomPassword } from "@/lib/crypto";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
-import { groupMemberships, organizations, tenantMembers } from "@/server/db/schema";
+import { groupCategories, groupMemberships, organizations, tenantMembers } from "@/server/db/schema";
 import {
   canAccessMemberInScope,
   resolveMemberManagementScope,
@@ -50,6 +50,7 @@ import {
   buildWorkspaceEmail,
 } from "@/server/lib/workspace/email-template";
 import { provisionWorkspaceAccountForMember } from "@/server/lib/workspace/provision";
+import { resolveProvisionFieldsForMember } from "@/server/lib/workspace/resolve-provision-fields";
 import { requireOrganization } from "@/server/queries/access";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import {
@@ -1146,4 +1147,34 @@ export const createWorkspaceAccountAction = authActionClient
       workspaceUserId,
       primaryEmail,
     };
+  });
+
+export const getProvisionFieldDefaultsAction = authActionClient
+  .metadata({ actionName: "getProvisionFieldDefaults" })
+  .inputSchema(z.object({ memberId: z.string().uuid() }))
+  .action(async ({ parsedInput }) => {
+    const organization = await requireOrganization();
+
+    const provisionFieldConfigs = (organization.workspaceProvisionFields ?? []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[];
+
+    // Find the org unit category
+    const [ouCategory] = await db
+      .select({ id: groupCategories.id })
+      .from(groupCategories)
+      .where(
+        and(
+          eq(groupCategories.orgId, organization.id),
+          eq(groupCategories.specialCapability, "workspace_org_unit"),
+        ),
+      )
+      .limit(1);
+
+    const defaults = await resolveProvisionFieldsForMember(
+      organization.id,
+      parsedInput.memberId,
+      provisionFieldConfigs,
+      ouCategory?.id ?? null,
+    );
+
+    return { defaults };
   });

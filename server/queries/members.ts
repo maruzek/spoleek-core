@@ -93,11 +93,8 @@ export type WorkspaceModuleState = {
   connected: boolean;
   domain: string | null;
   emailTemplate: string;
-  provisionFields: {
-    fieldKey: string;
-    enabled: boolean;
-    required: boolean;
-  }[];
+  orgUnitCategoryId: string | null;
+  provisionFields: import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[];
 };
 
 export type MembersAdminPageData = {
@@ -690,7 +687,7 @@ export async function getMembersByIds(orgId: string, memberIds: string[]) {
 export async function getMembersAdminPageData(editMemberId: string | null) {
   const scope = await resolveMemberManagementScope();
 
-  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, organization] =
+  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, organization, ouCategory] =
     await Promise.all([
       listTenantMembers(scope.organizationId, {
         visibleGroupIds: scope.managedGroupIds,
@@ -717,6 +714,17 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
         .where(eq(organizationsTable.id, scope.organizationId))
         .limit(1)
         .then((rows) => rows[0] ?? null),
+      db
+        .select({ id: groupCategories.id })
+        .from(groupCategories)
+        .where(
+          and(
+            eq(groupCategories.orgId, scope.organizationId),
+            eq(groupCategories.specialCapability, "workspace_org_unit"),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
     ]);
 
   return {
@@ -737,11 +745,8 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
       domain: organization?.workspaceDomain ?? null,
       emailTemplate:
         organization?.workspaceEmailTemplate ?? "{first}.{last}",
-      provisionFields: (organization?.workspaceProvisionFields ?? []) as {
-        fieldKey: string;
-        enabled: boolean;
-        required: boolean;
-      }[],
+      orgUnitCategoryId: ouCategory?.id ?? null,
+      provisionFields: (organization?.workspaceProvisionFields ?? []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[],
     },
   } satisfies MembersAdminPageData;
 }

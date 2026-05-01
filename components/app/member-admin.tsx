@@ -203,6 +203,8 @@ export function MemberAdmin({
   selectedMember,
   workspace,
   workspaceProvisionFields = [],
+  groupsById,
+  orgUnitCategoryId,
 }: {
   access: MemberAdminAccess;
   members: MemberRow[];
@@ -212,6 +214,8 @@ export function MemberAdmin({
   selectedMember: MemberEditorData | null;
   workspace: WorkspaceModuleProp;
   workspaceProvisionFields?: EnabledProvisionField[];
+  groupsById?: Map<string, { id: string; name: string; categoryId: string; workspaceOrgUnitPath: string | null }>;
+  orgUnitCategoryId?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -838,6 +842,8 @@ export function MemberAdmin({
         manageableGroupCategories={manageableGroupCategories}
         workspaceReady={workspaceReady}
         workspaceProvisionFields={workspaceProvisionFields}
+        groupsById={groupsById}
+        orgUnitCategoryId={orgUnitCategoryId}
         onDone={() => router.refresh()}
       />
 

@@ -24,28 +24,92 @@ import {
 } from "@/server/actions/member-admin";
 
 import { buildWorkspaceQuery } from "./helpers";
-import type { FieldTarget, ParsedRow, WorkspaceMatch } from "./types";
-import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
+import type { FieldTarget, GroupAssignmentConfig, ImportGroupInfo, ParsedRow, WorkspaceMatch } from "./types";
+import { applyFormatTemplate } from "@/server/lib/workspace/field-catalog";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
+import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 
 type SyncPhase = "email-lookup" | "search" | "provision";
+
+function resolveRowFieldValues(
+  row: ParsedRow,
+  fieldConfigs: EnabledProvisionField[],
+  columnMappings: Record<string, FieldTarget | null>,
+  groupAssignment: GroupAssignmentConfig,
+  groupsById: Map<string, ImportGroupInfo> | undefined,
+  orgUnitCategoryId: string | null | undefined,
+): WorkspaceFieldValues {
+  const result: WorkspaceFieldValues = {};
+
+  for (const field of fieldConfigs) {
+    const source = field.source;
+    if (!source || source.type === "manual") continue;
+
+    if (source.type === "member_custom_field") {
+      // Find CSV column mapped to this custom field
+      const col = Object.entries(columnMappings).find(
+        ([, v]) => v === `custom:${source.customFieldKey}`,
+      )?.[0];
+      if (col) {
+        const val = (row[col] ?? "").trim();
+        if (val) result[field.fieldKey] = val;
+      }
+    } else if (source.type === "group_category" || source.type === "org_unit_auto") {
+      const categoryId = source.type === "group_category" ? source.categoryId : orgUnitCategoryId;
+      if (!categoryId || !groupsById) continue;
+
+      let groupId: string | null = null;
+      if (groupAssignment.mode === "column" && groupAssignment.columnMapping) {
+        const colVal = (row[groupAssignment.columnMapping.columnKey] ?? "").trim();
+        groupId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
+      } else if (groupAssignment.mode === "fixed" && groupAssignment.fixedGroupIds.length > 0) {
+        // Find first group in the target category
+        const fixedInCategory = groupAssignment.fixedGroupIds.find((id) => {
+          const g = groupsById.get(id);
+          return g?.categoryId === categoryId;
+        });
+        groupId = fixedInCategory ?? null;
+      }
+
+      if (groupId) {
+        const grp = groupsById.get(groupId);
+        if (grp) {
+          if (source.type === "org_unit_auto") {
+            if (grp.workspaceOrgUnitPath) result[field.fieldKey] = grp.workspaceOrgUnitPath;
+          } else {
+            const formatted = applyFormatTemplate(source.formatTemplate, grp.name);
+            if (formatted) result[field.fieldKey] = formatted;
+          }
+        }
+      }
+    }
+  }
+
+  return result;
+}
 
 export function StepWorkspaceSync({
   csvHeaders,
   csvRows,
   columnMappings,
+  groupAssignment,
   workspaceMatches,
   onWorkspaceMatchesChange,
   onSkip,
   provisionFields = [],
+  groupsById,
+  orgUnitCategoryId,
 }: {
   csvHeaders: string[];
   csvRows: ParsedRow[];
   columnMappings: Record<string, FieldTarget | null>;
+  groupAssignment: GroupAssignmentConfig;
   workspaceMatches: Map<number, WorkspaceMatch>;
   onWorkspaceMatchesChange: (matches: Map<number, WorkspaceMatch>) => void;
   onSkip: () => void;
   provisionFields?: EnabledProvisionField[];
+  groupsById?: Map<string, ImportGroupInfo>;
+  orgUnitCategoryId?: string | null;
 }) {
   const [phase, setPhase] = useState<SyncPhase>("email-lookup");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -65,8 +129,8 @@ export function StepWorkspaceSync({
     new Set(),
   );
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
-  const [defaultExtraFields, setDefaultExtraFields] =
-    useState<WorkspaceFieldValues>({});
+  const [perRowExtraFields, setPerRowExtraFields] = useState<Map<number, WorkspaceFieldValues>>(new Map());
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [provisioningStatus, setProvisioningStatus] = useState<
     Record<number, "pending" | "loading" | "success" | "error">
   >({});
@@ -246,8 +310,33 @@ export function StepWorkspaceSync({
   }, [unmatchedIndices, csvRows, columnMappings, batchSuggest]);
 
   useEffect(() => {
-    if (phase === "provision" && suggestions.length === 0 && unmatchedIndices.length > 0) {
-      void loadSuggestions();
+    if (phase === "provision") {
+      if (suggestions.length === 0 && unmatchedIndices.length > 0) {
+        void loadSuggestions();
+      }
+      // Pre-compute per-row field values from auto-fill sources
+      if (provisionFields.length > 0) {
+        const newMap = new Map<number, WorkspaceFieldValues>();
+        for (const rowIdx of unmatchedIndices) {
+          const row = csvRows[rowIdx];
+          if (!row) continue;
+          const resolved = resolveRowFieldValues(
+            row, provisionFields, columnMappings, groupAssignment, groupsById, orgUnitCategoryId,
+          );
+          if (Object.keys(resolved).length > 0) {
+            newMap.set(rowIdx, { ...(perRowExtraFields.get(rowIdx) ?? {}), ...resolved });
+          }
+        }
+        if (newMap.size > 0) {
+          setPerRowExtraFields((prev) => {
+            const next = new Map(prev);
+            for (const [k, v] of newMap) {
+              if (!prev.has(k)) next.set(k, v);
+            }
+            return next;
+          });
+        }
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -280,15 +369,13 @@ export function StepWorkspaceSync({
         continue;
       }
 
+      const rowExtraFields = perRowExtraFields.get(rowIdx) ?? {};
       const result = await createAccount.executeAsync({
         firstName,
         lastName,
         primaryEmail,
         sendWelcomeEmail,
-        extraFields:
-          Object.keys(defaultExtraFields).length > 0
-            ? defaultExtraFields
-            : undefined,
+        extraFields: Object.keys(rowExtraFields).length > 0 ? rowExtraFields : undefined,
       });
 
       if (result?.data?.success) {
@@ -316,6 +403,7 @@ export function StepWorkspaceSync({
     csvRows,
     editedEmails,
     sendWelcomeEmail,
+    perRowExtraFields,
     createAccount,
     workspaceMatches,
     onWorkspaceMatchesChange,
@@ -615,76 +703,7 @@ export function StepWorkspaceSync({
             </div>
           </div>
 
-          {provisionFields.length > 0 && unmatchedIndices.length > 0 ? (
-            <div className="flex flex-col gap-3 rounded-lg border p-4">
-              <div>
-                <p className="text-sm font-medium">
-                  Default values for new accounts
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  These values will be applied to all provisioned accounts.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {provisionFields.map((field) => (
-                  <div key={field.fieldKey} className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium">
-                      {field.label}
-                      {field.required ? " *" : ""}
-                    </label>
-                    {field.type === "boolean" ? (
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={
-                            typeof defaultExtraFields[field.fieldKey] ===
-                            "boolean"
-                              ? (defaultExtraFields[
-                                  field.fieldKey
-                                ] as boolean)
-                              : false
-                          }
-                          onCheckedChange={(checked) =>
-                            setDefaultExtraFields((prev) => ({
-                              ...prev,
-                              [field.fieldKey]: checked,
-                            }))
-                          }
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {field.description}
-                        </span>
-                      </div>
-                    ) : (
-                      <Input
-                        type={
-                          field.type === "email"
-                            ? "email"
-                            : field.type === "phone"
-                              ? "tel"
-                              : "text"
-                        }
-                        value={
-                          typeof defaultExtraFields[field.fieldKey] === "string"
-                            ? (defaultExtraFields[
-                                field.fieldKey
-                              ] as string)
-                            : ""
-                        }
-                        onChange={(e) =>
-                          setDefaultExtraFields((prev) => ({
-                            ...prev,
-                            [field.fieldKey]: e.target.value,
-                          }))
-                        }
-                        placeholder={field.placeholder}
-                        className="h-8 text-xs"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {/* Per-row field values are shown inline in the table below */}
 
           {unmatchedIndices.length === 0 ? (
             <div className="flex items-center gap-2 rounded-lg border bg-green-50 px-3 py-2 dark:bg-green-950/30">
@@ -696,13 +715,14 @@ export function StepWorkspaceSync({
           ) : (
             <>
               <div className="overflow-hidden rounded-xl border">
-                <div className="grid grid-cols-[auto_1fr_1fr_auto] gap-px bg-border text-xs font-medium text-muted-foreground">
+                <div className={`grid gap-px bg-border text-xs font-medium text-muted-foreground ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}>
+                  {provisionFields.length > 0 ? <div className="bg-muted/60 px-2 py-2" /> : null}
                   <div className="bg-muted/60 px-3 py-2">Select</div>
                   <div className="bg-muted/60 px-3 py-2">Name</div>
                   <div className="bg-muted/60 px-3 py-2">Email to create</div>
                   <div className="bg-muted/60 px-3 py-2">Status</div>
                 </div>
-                <div className="max-h-60 divide-y overflow-auto">
+                <div className="max-h-80 divide-y overflow-auto">
                   {unmatchedIndices.map((rowIdx, i) => {
                     const firstNameCol = Object.entries(columnMappings).find(
                       ([, v]) => v === "first_name",
@@ -717,62 +737,145 @@ export function StepWorkspaceSync({
                       csvRows[rowIdx]![lastNameCol ?? ""] ?? ""
                     ).trim();
                     const status = provisioningStatus[rowIdx];
+                    const isExpanded = expandedRows.has(rowIdx);
+                    const rowFields = perRowExtraFields.get(rowIdx) ?? {};
+                    const manualFields = provisionFields.filter((f) => !f.source || f.source.type === "manual");
+                    const requiredMissing = provisionFields.some(
+                      (f) => f.required && f.type !== "boolean" && !(rowFields[f.fieldKey] ?? ""),
+                    );
 
                     return (
-                      <div
-                        key={rowIdx}
-                        className="grid grid-cols-[auto_1fr_1fr_auto] items-center gap-px"
-                      >
-                        <div className="bg-background px-3 py-2">
-                          <Checkbox
-                            checked={provisionSelection.has(rowIdx)}
-                            disabled={status === "loading" || status === "success"}
-                            onCheckedChange={(checked) => {
-                              setProvisionSelection((prev) => {
-                                const next = new Set(prev);
-                                if (checked) next.add(rowIdx);
-                                else next.delete(rowIdx);
-                                return next;
-                              });
-                            }}
-                          />
-                        </div>
-                        <div className="bg-background px-3 py-2 text-xs">
-                          {firstName} {lastName}
-                        </div>
-                        <div className="bg-background px-1 py-1">
-                          <Input
-                            className="h-7 text-xs"
-                            value={editedEmails[rowIdx] ?? suggestions[i] ?? ""}
-                            disabled={status === "loading" || status === "success"}
-                            onChange={(e) =>
-                              setEditedEmails((prev) => ({
-                                ...prev,
-                                [rowIdx]: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="bg-background px-3 py-2">
-                          {status === "loading" ? (
-                            <Loader2Icon className="size-3 animate-spin text-primary" />
-                          ) : status === "success" ? (
-                            <Badge
-                              variant="outline"
-                              className="border-green-200 bg-green-50 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400"
+                      <div key={rowIdx} className="flex flex-col">
+                        <div className={`grid items-center gap-px ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}>
+                          {provisionFields.length > 0 ? (
+                            <button
+                              type="button"
+                              className="flex items-center justify-center bg-background px-2 py-2 text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                setExpandedRows((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(rowIdx)) next.delete(rowIdx);
+                                  else next.add(rowIdx);
+                                  return next;
+                                })
+                              }
+                              aria-label={isExpanded ? "Collapse" : "Expand fields"}
                             >
-                              Created
-                            </Badge>
-                          ) : status === "error" ? (
-                            <Badge variant="destructive" className="text-xs">
-                              {provisionErrors[rowIdx] ?? "Error"}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Ready
-                            </span>
-                          )}
+                              <span className={`text-[10px] transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                              {requiredMissing ? (
+                                <span className="ml-1 size-1.5 rounded-full bg-destructive" />
+                              ) : null}
+                            </button>
+                          ) : null}
+                          <div className="bg-background px-3 py-2">
+                            <Checkbox
+                              checked={provisionSelection.has(rowIdx)}
+                              disabled={status === "loading" || status === "success"}
+                              onCheckedChange={(checked) => {
+                                setProvisionSelection((prev) => {
+                                  const next = new Set(prev);
+                                  if (checked) next.add(rowIdx);
+                                  else next.delete(rowIdx);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className="bg-background px-3 py-2 text-xs">
+                            {firstName} {lastName}
+                          </div>
+                          <div className="bg-background px-1 py-1">
+                            <Input
+                              className="h-7 text-xs"
+                              value={editedEmails[rowIdx] ?? suggestions[i] ?? ""}
+                              disabled={status === "loading" || status === "success"}
+                              onChange={(e) =>
+                                setEditedEmails((prev) => ({
+                                  ...prev,
+                                  [rowIdx]: e.target.value,
+                                }))
+                              }
+                            />
+                          </div>
+                          <div className="bg-background px-3 py-2">
+                            {status === "loading" ? (
+                              <Loader2Icon className="size-3 animate-spin text-primary" />
+                            ) : status === "success" ? (
+                              <Badge
+                                variant="outline"
+                                className="border-green-200 bg-green-50 text-xs text-green-700 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400"
+                              >
+                                Created
+                              </Badge>
+                            ) : status === "error" ? (
+                              <Badge variant="destructive" className="text-xs">
+                                {provisionErrors[rowIdx] ?? "Error"}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                Ready
+                              </span>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Expanded field values */}
+                        {isExpanded && provisionFields.length > 0 ? (
+                          <div className="border-t bg-muted/20 px-4 py-3">
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {provisionFields.map((field) => {
+                                const isAuto = field.source && field.source.type !== "manual";
+                                const val = rowFields[field.fieldKey];
+                                return (
+                                  <div key={field.fieldKey} className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <label className="text-[11px] font-medium">
+                                        {field.label}
+                                        {field.required ? " *" : ""}
+                                      </label>
+                                      {isAuto && val !== undefined && val !== "" ? (
+                                        <span className="rounded-sm bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
+                                          auto
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {field.type === "boolean" ? (
+                                      <Switch
+                                        checked={typeof val === "boolean" ? val : false}
+                                        onCheckedChange={(checked) =>
+                                          setPerRowExtraFields((prev) => {
+                                            const next = new Map(prev);
+                                            next.set(rowIdx, { ...(prev.get(rowIdx) ?? {}), [field.fieldKey]: checked });
+                                            return next;
+                                          })
+                                        }
+                                      />
+                                    ) : (
+                                      <Input
+                                        className={`h-7 text-xs ${field.required && !val ? "border-destructive" : ""}`}
+                                        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
+                                        value={typeof val === "string" ? val : ""}
+                                        placeholder={field.placeholder}
+                                        onChange={(e) =>
+                                          setPerRowExtraFields((prev) => {
+                                            const next = new Map(prev);
+                                            next.set(rowIdx, { ...(prev.get(rowIdx) ?? {}), [field.fieldKey]: e.target.value });
+                                            return next;
+                                          })
+                                        }
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {manualFields.length === 0 && provisionFields.length > 0 ? (
+                              <p className="mt-2 text-[11px] text-muted-foreground">
+                                All values are auto-filled from member data. You can override them above.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })}

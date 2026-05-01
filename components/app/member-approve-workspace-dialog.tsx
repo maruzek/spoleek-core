@@ -18,9 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   checkWorkspaceEmailAvailabilityAction,
+  getProvisionFieldDefaultsAction,
   suggestWorkspaceEmailAction,
 } from "@/server/actions/member-admin";
 import type {
+  FieldSource,
   WorkspaceFieldDefinition,
   WorkspaceFieldValues,
   WorkspaceProvisionFieldConfig,
@@ -35,7 +37,9 @@ export type WorkspaceApprovalMember = {
 };
 
 export type EnabledProvisionField = WorkspaceProvisionFieldConfig &
-  Pick<WorkspaceFieldDefinition, "label" | "type" | "placeholder" | "description">;
+  Pick<WorkspaceFieldDefinition, "label" | "type" | "placeholder" | "description"> & {
+    source?: FieldSource;
+  };
 
 type AvailabilityState =
   | { status: "idle" }
@@ -99,12 +103,15 @@ function DialogBody({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const result = await suggestWorkspaceEmailAction({
-        memberId: member.id,
-      });
+      const [emailResult, defaultsResult] = await Promise.all([
+        suggestWorkspaceEmailAction({ memberId: member.id }),
+        getProvisionFieldDefaultsAction({ memberId: member.id }),
+      ]);
       if (cancelled) return;
-      const suggestion = result?.data?.suggestion ?? "";
-      setEmail(suggestion);
+      setEmail(emailResult?.data?.suggestion ?? "");
+      if (defaultsResult?.data?.defaults) {
+        setExtraFields((prev) => ({ ...defaultsResult.data!.defaults, ...prev }));
+      }
     })();
     return () => {
       cancelled = true;
@@ -285,6 +292,7 @@ function ProvisionFieldInput({
   onChange: (value: string | boolean) => void;
 }) {
   const labelSuffix = field.required ? " *" : "";
+  const isAutoFilled = field.source && field.source.type !== "manual" && value !== undefined && value !== "";
 
   if (field.type === "boolean") {
     return (
@@ -307,10 +315,17 @@ function ProvisionFieldInput({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>
-        {field.label}
-        {labelSuffix}
-      </Label>
+      <div className="flex items-center gap-2">
+        <Label>
+          {field.label}
+          {labelSuffix}
+        </Label>
+        {isAutoFilled ? (
+          <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            auto
+          </span>
+        ) : null}
+      </div>
       <Input
         type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
         value={typeof value === "string" ? value : ""}

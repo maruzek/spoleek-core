@@ -1,7 +1,13 @@
+import { eq } from "drizzle-orm";
+
 import { AppPage } from "@/components/app/app-page";
 import { MemberAdmin } from "@/components/app/member-admin";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
+import type { ImportGroupInfo } from "@/components/app/member-import/types";
+import { db } from "@/server/db";
+import { groups } from "@/server/db/schema";
 import { getMembersAdminPageData } from "@/server/queries/members";
+import { getAppOrganization } from "@/server/queries/app";
 import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
 import type { TenantMember } from "@/server/db/schema";
 
@@ -17,24 +23,44 @@ export default async function AdminMembersPage({
     typeof params.edit === "string" && params.edit.length > 0
       ? params.edit
       : null;
-  const data = await getMembersAdminPageData(editMemberId);
 
-  const enabledProvisionFields: EnabledProvisionField[] = (
-    data.workspace.provisionFields ?? []
-  )
+  const organization = await getAppOrganization();
+  const [data, orgGroups] = await Promise.all([
+    getMembersAdminPageData(editMemberId),
+    organization
+      ? db
+          .select({
+            id: groups.id,
+            name: groups.name,
+            categoryId: groups.categoryId,
+            workspaceOrgUnitPath: groups.workspaceOrgUnitPath,
+          })
+          .from(groups)
+          .where(eq(groups.orgId, organization.id))
+      : Promise.resolve([] as ImportGroupInfo[]),
+  ]);
+
+  const groupsById = new Map<string, ImportGroupInfo>(
+    orgGroups.map((g) => [g.id, g]),
+  );
+
+  const enabledProvisionFields = (data.workspace.provisionFields ?? [])
     .filter((f) => f.enabled)
-    .map((f) => {
+    .flatMap((f) => {
       const def = WORKSPACE_FIELD_MAP.get(f.fieldKey);
-      if (!def) return null;
-      return {
-        ...f,
+      if (!def) return [];
+      const field: EnabledProvisionField = {
+        fieldKey: f.fieldKey,
+        enabled: f.enabled,
+        required: f.required,
+        source: f.source,
         label: def.label,
         type: def.type,
         placeholder: def.placeholder,
         description: def.description,
       };
-    })
-    .filter((f): f is EnabledProvisionField => f !== null);
+      return [field];
+    });
 
   return (
     <AppPage
@@ -67,6 +93,8 @@ export default async function AdminMembersPage({
         }
         workspace={data.workspace}
         workspaceProvisionFields={enabledProvisionFields}
+        groupsById={groupsById}
+        orgUnitCategoryId={data.workspace.orgUnitCategoryId}
       />
     </AppPage>
   );

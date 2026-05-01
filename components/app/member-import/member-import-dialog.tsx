@@ -52,6 +52,8 @@ export function MemberImportDialog({
   manageableGroupCategories,
   workspaceReady,
   workspaceProvisionFields,
+  groupsById,
+  orgUnitCategoryId,
   onDone,
 }: ImportDialogProps) {
   // ── Wizard state ──
@@ -399,10 +401,13 @@ export function MemberImportDialog({
                 csvHeaders={csvHeaders}
                 csvRows={csvRows}
                 columnMappings={columnMappings}
+                groupAssignment={groupAssignment}
                 workspaceMatches={workspaceMatches}
                 onWorkspaceMatchesChange={setWorkspaceMatches}
                 onSkip={goNext}
                 provisionFields={workspaceProvisionFields}
+                groupsById={groupsById}
+                orgUnitCategoryId={orgUnitCategoryId}
               />
             )}
 

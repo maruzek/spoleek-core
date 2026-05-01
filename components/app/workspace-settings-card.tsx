@@ -36,6 +36,7 @@ import {
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
 import {
   WORKSPACE_FIELD_CATALOG,
+  type FieldSource,
   type WorkspaceProvisionFieldConfig,
 } from "@/server/lib/workspace/field-catalog";
 import type { MemberPreferredEmail } from "@/server/db/schema";
@@ -51,6 +52,7 @@ export type WorkspaceSettingsState = {
   groupCategories: { id: string; name: string }[];
   workspaceOrgUnitCategoryId: string | null;
   provisionFields: WorkspaceProvisionFieldConfig[];
+  customFields: { key: string; label: string }[];
 };
 
 export function WorkspaceSettingsCard({
@@ -70,8 +72,9 @@ export function WorkspaceSettingsCard({
   );
   const [defaultEmailPreference, setDefaultEmailPreference] =
     useState<MemberPreferredEmail>(state.defaultEmailPreference);
+  const NONE_SENTINEL = "__none__";
   const [orgUnitCategoryId, setOrgUnitCategoryId] = useState<string>(
-    state.workspaceOrgUnitCategoryId ?? "",
+    state.workspaceOrgUnitCategoryId ?? NONE_SENTINEL,
   );
   const [isConnecting, startConnecting] = useTransition();
 
@@ -113,6 +116,12 @@ export function WorkspaceSettingsCard({
       return existing ?? { fieldKey: def.key, enabled: false, required: false };
     });
   });
+
+  const updateFieldSource = (fieldKey: string, source: FieldSource) => {
+    setProvisionFields((prev) =>
+      prev.map((f) => (f.fieldKey === fieldKey ? { ...f, source } : f)),
+    );
+  };
   const provisionFieldsAction = useAction(saveWorkspaceProvisionFieldsAction, {
     onSuccess() {
       toast.success("Account creation fields saved.");
@@ -273,7 +282,7 @@ export function WorkspaceSettingsCard({
                   <SelectValue placeholder="None — disable org unit sync" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem>None</SelectItem>
+                  <SelectItem value={NONE_SENTINEL}>None</SelectItem>
                   {state.groupCategories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
                       {cat.name}
@@ -281,7 +290,7 @@ export function WorkspaceSettingsCard({
                   ))}
                 </SelectContent>
               </Select>
-              {orgUnitCategoryId ? (
+              {orgUnitCategoryId !== NONE_SENTINEL ? (
                 <p className="text-xs text-muted-foreground">
                   Saving will enforce single selection, required, and admin-only
                   join on this category.
@@ -293,7 +302,7 @@ export function WorkspaceSettingsCard({
               variant="outline"
               onClick={() =>
                 orgUnitCategoryAction.execute({
-                  categoryId: orgUnitCategoryId || null,
+                  categoryId: orgUnitCategoryId === NONE_SENTINEL ? null : orgUnitCategoryId,
                 })
               }
               disabled={orgUnitCategoryAction.isPending}
@@ -330,55 +339,154 @@ export function WorkspaceSettingsCard({
                 );
                 const enabled = fieldConfig?.enabled ?? false;
                 const required = fieldConfig?.required ?? false;
+                const source = fieldConfig?.source ?? { type: "manual" as const };
 
                 return (
-                  <div
-                    key={def.key}
-                    className="grid grid-cols-[1fr_auto_auto] items-center gap-px"
-                  >
-                    <div className="bg-background px-3 py-2.5">
-                      <p className="text-sm font-medium">{def.label}</p>
-                      {def.description ? (
-                        <p className="text-[11px] text-muted-foreground">
-                          {def.description}
+                  <div key={def.key} className="flex flex-col">
+                    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-px">
+                      <div className="bg-background px-3 py-2.5">
+                        <p className="text-sm font-medium">{def.label}</p>
+                        {def.description ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {def.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center justify-center bg-background px-3 py-2.5">
+                        <Switch
+                          checked={enabled}
+                          onCheckedChange={(checked) => {
+                            setProvisionFields((prev) =>
+                              prev.map((f) =>
+                                f.fieldKey === def.key
+                                  ? {
+                                      ...f,
+                                      enabled: checked,
+                                      required: checked ? f.required : false,
+                                    }
+                                  : f,
+                              ),
+                            );
+                          }}
+                          aria-label={`Enable ${def.label}`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-center bg-background px-3 py-2.5">
+                        <Checkbox
+                          checked={required}
+                          disabled={!enabled}
+                          onCheckedChange={(checked) => {
+                            setProvisionFields((prev) =>
+                              prev.map((f) =>
+                                f.fieldKey === def.key
+                                  ? { ...f, required: Boolean(checked) }
+                                  : f,
+                              ),
+                            );
+                          }}
+                          aria-label={`Require ${def.label}`}
+                        />
+                      </div>
+                    </div>
+
+                    {enabled && def.type !== "boolean" ? (
+                      <div className="border-t bg-muted/20 px-3 py-2.5">
+                        <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Auto-fill source
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center justify-center bg-background px-3 py-2.5">
-                      <Switch
-                        checked={enabled}
-                        onCheckedChange={(checked) => {
-                          setProvisionFields((prev) =>
-                            prev.map((f) =>
-                              f.fieldKey === def.key
-                                ? {
-                                    ...f,
-                                    enabled: checked,
-                                    required: checked ? f.required : false,
+                        <div className="flex flex-wrap items-start gap-2">
+                          {/* Source type selector */}
+                          <select
+                            className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                            value={source.type}
+                            onChange={(e) => {
+                              const t = e.target.value as FieldSource["type"];
+                              if (t === "manual") updateFieldSource(def.key, { type: "manual" });
+                              else if (t === "org_unit_auto") updateFieldSource(def.key, { type: "org_unit_auto" });
+                              else if (t === "member_custom_field") updateFieldSource(def.key, { type: "member_custom_field", customFieldKey: "" });
+                              else if (t === "group_category") updateFieldSource(def.key, { type: "group_category", categoryId: "", formatTemplate: "{name}" });
+                            }}
+                          >
+                            <option value="manual">Manual — entered at provision time</option>
+                            {def.key === "orgUnitPath" ? (
+                              <option value="org_unit_auto">Auto — from org unit category</option>
+                            ) : null}
+                            {state.customFields.length > 0 ? (
+                              <option value="member_custom_field">From member custom field</option>
+                            ) : null}
+                            <option value="group_category">From group category (with template)</option>
+                          </select>
+
+                          {/* Member custom field picker */}
+                          {source.type === "member_custom_field" ? (
+                            <select
+                              className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                              value={source.customFieldKey}
+                              onChange={(e) =>
+                                updateFieldSource(def.key, {
+                                  type: "member_custom_field",
+                                  customFieldKey: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">— select field —</option>
+                              {state.customFields.map((cf) => (
+                                <option key={cf.key} value={cf.key}>
+                                  {cf.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+
+                          {/* Group category picker + format template */}
+                          {source.type === "group_category" ? (
+                            <>
+                              <select
+                                className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                value={source.categoryId}
+                                onChange={(e) =>
+                                  updateFieldSource(def.key, {
+                                    type: "group_category",
+                                    categoryId: e.target.value,
+                                    formatTemplate: source.formatTemplate,
+                                  })
+                                }
+                              >
+                                <option value="">— select category —</option>
+                                {state.groupCategories.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="flex flex-col gap-1">
+                                <Input
+                                  className="h-8 w-48 text-xs"
+                                  placeholder="{name}"
+                                  value={source.formatTemplate}
+                                  onChange={(e) =>
+                                    updateFieldSource(def.key, {
+                                      type: "group_category",
+                                      categoryId: source.categoryId,
+                                      formatTemplate: e.target.value,
+                                    })
                                   }
-                                : f,
-                            ),
-                          );
-                        }}
-                        aria-label={`Enable ${def.label}`}
-                      />
-                    </div>
-                    <div className="flex items-center justify-center bg-background px-3 py-2.5">
-                      <Checkbox
-                        checked={required}
-                        disabled={!enabled}
-                        onCheckedChange={(checked) => {
-                          setProvisionFields((prev) =>
-                            prev.map((f) =>
-                              f.fieldKey === def.key
-                                ? { ...f, required: Boolean(checked) }
-                                : f,
-                            ),
-                          );
-                        }}
-                        aria-label={`Require ${def.label}`}
-                      />
-                    </div>
+                                />
+                                <p className="text-[10px] text-muted-foreground">
+                                  <code>{"{name}"}</code> = group name
+                                </p>
+                              </div>
+                            </>
+                          ) : null}
+
+                          {source.type === "org_unit_auto" ? (
+                            <p className="flex items-center text-[11px] text-muted-foreground">
+                              Uses the <code className="mx-1">{"{name}"}</code> org unit path from the member&apos;s group in the org unit category.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

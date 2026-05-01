@@ -9,7 +9,7 @@ import { requireAdminAccess } from "@/server/queries/access";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listGroupCategories } from "@/server/queries/groups";
 import { db } from "@/server/db";
-import { workspaceConnections } from "@/server/db/schema";
+import { memberCustomFields, workspaceConnections } from "@/server/db/schema";
 import type { EmailNotificationSettingsState } from "@/components/app/email-notification-settings-card";
 import type { MembershipSettingsState } from "@/components/app/membership-settings-card";
 import type { WorkspaceSettingsState } from "@/components/app/workspace-settings-card";
@@ -38,7 +38,7 @@ export default async function AdminSettingsPage({
     throw new Error("Organization policy setup is incomplete.");
   }
 
-  const [categories, connections] = await Promise.all([
+  const [categories, connections, customFields] = await Promise.all([
     listGroupCategories(organization.id),
     db
       .select({
@@ -53,6 +53,15 @@ export default async function AdminSettingsPage({
         ),
       )
       .limit(1),
+    db
+      .select({ key: memberCustomFields.key, label: memberCustomFields.label })
+      .from(memberCustomFields)
+      .where(
+        and(
+          eq(memberCustomFields.orgId, organization.id),
+          eq(memberCustomFields.isActive, true),
+        ),
+      ),
   ]);
   const [connection] = connections;
 
@@ -92,11 +101,8 @@ export default async function AdminSettingsPage({
     defaultEmailPreference: organization.defaultEmailPreference,
     groupCategories: categories.map((c) => ({ id: c.id, name: c.name })),
     workspaceOrgUnitCategoryId: workspaceOrgUnitCategory?.id ?? null,
-    provisionFields: (organization.workspaceProvisionFields ?? []) as {
-      fieldKey: string;
-      enabled: boolean;
-      required: boolean;
-    }[],
+    provisionFields: (organization.workspaceProvisionFields ?? []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[],
+    customFields,
   };
 
   return (

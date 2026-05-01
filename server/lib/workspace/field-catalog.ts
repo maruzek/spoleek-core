@@ -16,11 +16,22 @@ export type WorkspaceFieldDefinition = {
 
 export type WorkspaceFieldValues = Record<string, string | boolean>;
 
+export type FieldSource =
+  | { type: "manual" }
+  | { type: "member_custom_field"; customFieldKey: string }
+  | { type: "group_category"; categoryId: string; formatTemplate: string }
+  | { type: "org_unit_auto" };
+
 export type WorkspaceProvisionFieldConfig = {
   fieldKey: string;
   enabled: boolean;
   required: boolean;
+  source?: FieldSource;
 };
+
+export function applyFormatTemplate(template: string, groupName: string): string {
+  return template.replace(/\{name\}/g, groupName);
+}
 
 export const WORKSPACE_FIELD_CATALOG: WorkspaceFieldDefinition[] = [
   {
@@ -144,7 +155,7 @@ function setNestedPath(body: ApiBody, path: string, value: unknown): void {
       if (!arr[index]) arr[index] = {};
 
       if (isLast) {
-        arr[index] = value;
+        arr[index] = value as Record<string, unknown>;
       } else {
         current = arr[index] as Record<string, unknown>;
       }

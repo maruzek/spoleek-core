@@ -2,6 +2,13 @@ import type { EnabledProvisionField } from "@/components/app/member-approve-work
 import type { MemberCustomField } from "@/server/db/schema";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 
+export type ImportGroupInfo = {
+  id: string;
+  name: string;
+  categoryId: string;
+  workspaceOrgUnitPath: string | null;
+};
+
 export type ParsedRow = Record<string, string>;
 
 export type BuiltinFieldKey =
@@ -60,6 +67,8 @@ export interface ImportDialogProps {
   manageableGroupCategories: MemberManagementGroupCategory[];
   workspaceReady: boolean;
   workspaceProvisionFields?: EnabledProvisionField[];
+  groupsById?: Map<string, ImportGroupInfo>;
+  orgUnitCategoryId?: string | null;
   onDone: () => void;
 }
 
