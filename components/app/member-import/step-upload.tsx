@@ -7,6 +7,7 @@ import {
   UploadIcon,
   XIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,9 @@ export function StepUpload({
       <FileUpload
         accept=".csv,text/csv"
         maxFiles={1}
+        maxSize={10 * 1024 * 1024}
         onAccept={onFileAccept}
+        onFileReject={(_file, message) => toast.error(message)}
         className="w-full"
       >
         <FileUploadDropzone className="flex min-h-48 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 transition-colors hover:bg-muted/60 data-drag-over:border-primary data-drag-over:bg-primary/5">

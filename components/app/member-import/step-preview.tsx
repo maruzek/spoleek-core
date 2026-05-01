@@ -1,20 +1,137 @@
 "use client";
 
-import { useMemo } from "react";
-import {
-  AlertTriangleIcon,
-  InfoIcon,
-  UsersIcon,
-} from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { AlertTriangleIcon, InfoIcon, UsersIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
 import type { ImportMemberRow } from "@/lib/member-admin";
 
+const ROW_HEIGHT = 33;
+
+const ROLE_OPTIONS = ["member", "leader", "org_admin"] as const;
+const STATUS_OPTIONS = [
+  "invited",
+  "pending",
+  "active",
+  "suspended",
+  "archived",
+] as const;
+
+function getCellValue(row: ImportMemberRow, key: string): string {
+  if (key === "firstName") return row.firstName;
+  if (key === "lastName") return row.lastName;
+  if (key === "email") return row.email ?? "";
+  if (key === "workspaceUserEmail") return row.workspaceUserEmail ?? "";
+  if (key === "role") return row.role;
+  if (key === "status") return row.status;
+  if (key.startsWith("custom:")) {
+    const cfKey = key.slice(7);
+    return String(row.customFieldAnswers[cfKey] ?? "");
+  }
+  return "";
+}
+
+function displayLabel(key: string) {
+  const labels: Record<string, string> = {
+    firstName: "First Name",
+    lastName: "Last Name",
+    email: "Email",
+    workspaceUserEmail: "Workspace Email",
+    role: "Role",
+    status: "Status",
+  };
+  if (key.startsWith("custom:")) return key.slice(7);
+  return labels[key] ?? key;
+}
+
+const PreviewRow = memo(function PreviewRow({
+  row,
+  rowIndex,
+  columnKeys,
+  onCellChange,
+}: {
+  row: ImportMemberRow;
+  rowIndex: number;
+  columnKeys: string[];
+  onCellChange: (rowIndex: number, key: string, value: string) => void;
+}) {
+  return (
+    <>
+      <td className="px-3 py-1.5 text-muted-foreground tabular-nums">
+        {rowIndex + 1}
+      </td>
+      {columnKeys.map((key) => {
+        const isReadOnly = key === "workspaceUserEmail";
+        const isSelect = key === "role" || key === "status";
+
+        if (isReadOnly) {
+          return (
+            <td
+              key={key}
+              className="max-w-40 truncate px-3 py-1.5 text-muted-foreground"
+            >
+              {getCellValue(row, key)}
+            </td>
+          );
+        }
+
+        if (isSelect) {
+          const options =
+            key === "role" ? ROLE_OPTIONS : STATUS_OPTIONS;
+          return (
+            <td key={key} className="px-1 py-0.5">
+              <Select
+                value={getCellValue(row, key)}
+                onValueChange={(v) => onCellChange(rowIndex, key, v)}
+              >
+                <SelectTrigger size="sm" className="h-7 w-full border-transparent bg-transparent text-xs shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper">
+                  {options.map((o) => (
+                    <SelectItem key={o} value={o}>
+                      {o}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </td>
+          );
+        }
+
+        return (
+          <td key={key} className="px-1 py-0.5">
+            <input
+              type="text"
+              className="h-7 w-full min-w-20 rounded border-transparent bg-transparent px-2 text-xs focus:border-input focus:outline-none focus:ring-1 focus:ring-ring"
+              defaultValue={getCellValue(row, key)}
+              onBlur={(e) => {
+                const newVal = e.target.value;
+                if (newVal !== getCellValue(row, key)) {
+                  onCellChange(rowIndex, key, newVal);
+                }
+              }}
+            />
+          </td>
+        );
+      })}
+    </>
+  );
+});
+
 export function StepPreview({
-  editableRows,
+  editableRows: initialRows,
   onRowsChange,
   importStatus,
   onImportStatusChange,
@@ -26,9 +143,21 @@ export function StepPreview({
   onImportStatusChange: (status: "active" | "pending") => void;
   duplicateEmails: string[];
 }) {
+  const [rows, setRows] = useState(initialRows);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  // Sync back to parent on unmount or when rows settle
+  useEffect(() => {
+    return () => {
+      onRowsChange(rowsRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const columnKeys = useMemo(() => {
     const keys = new Set<string>();
-    for (const row of editableRows) {
+    for (const row of rows) {
       if (row.firstName) keys.add("firstName");
       if (row.lastName) keys.add("lastName");
       if (row.email) keys.add("email");
@@ -40,66 +169,62 @@ export function StepPreview({
       }
     }
     return [...keys];
-  }, [editableRows]);
+  }, [rows]);
 
-  const displayLabel = (key: string) => {
-    const labels: Record<string, string> = {
-      firstName: "First Name",
-      lastName: "Last Name",
-      email: "Email",
-      workspaceUserEmail: "Workspace Email",
-      role: "Role",
-      status: "Status",
-    };
-    if (key.startsWith("custom:")) return key.slice(7);
-    return labels[key] ?? key;
-  };
+  const setCellValue = useCallback(
+    (rowIndex: number, key: string, value: string) => {
+      setRows((prev) => {
+        const updated = [...prev];
+        const row = { ...updated[rowIndex]! };
+        if (key === "firstName") row.firstName = value;
+        else if (key === "lastName") row.lastName = value;
+        else if (key === "email") row.email = value || undefined;
+        else if (key === "role") {
+          if (value === "member" || value === "leader" || value === "org_admin")
+            row.role = value;
+        } else if (key === "status") {
+          if (
+            ["invited", "pending", "active", "suspended", "archived"].includes(
+              value,
+            )
+          )
+            row.status = value as typeof row.status;
+        } else if (key.startsWith("custom:")) {
+          const cfKey = key.slice(7);
+          row.customFieldAnswers = {
+            ...row.customFieldAnswers,
+            [cfKey]: value,
+          };
+        }
+        updated[rowIndex] = row;
+        return updated;
+      });
+    },
+    [],
+  );
 
-  const getCellValue = (row: ImportMemberRow, key: string): string => {
-    if (key === "firstName") return row.firstName;
-    if (key === "lastName") return row.lastName;
-    if (key === "email") return row.email ?? "";
-    if (key === "workspaceUserEmail") return row.workspaceUserEmail ?? "";
-    if (key === "role") return row.role;
-    if (key === "status") return row.status;
-    if (key.startsWith("custom:")) {
-      const cfKey = key.slice(7);
-      return String(row.customFieldAnswers[cfKey] ?? "");
-    }
-    return "";
-  };
+  // Sync local rows back to parent periodically
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => {
+    clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(() => {
+      onRowsChange(rows);
+    }, 300);
+    return () => clearTimeout(syncTimeoutRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
 
-  const setCellValue = (
-    rowIndex: number,
-    key: string,
-    value: string,
-  ) => {
-    const updated = [...editableRows];
-    const row = { ...updated[rowIndex]! };
-    if (key === "firstName") row.firstName = value;
-    else if (key === "lastName") row.lastName = value;
-    else if (key === "email") row.email = value || undefined;
-    else if (key === "role") {
-      if (
-        value === "member" ||
-        value === "leader" ||
-        value === "org_admin"
-      )
-        row.role = value;
-    } else if (key === "status") {
-      if (
-        ["invited", "pending", "active", "suspended", "archived"].includes(
-          value,
-        )
-      )
-        row.status = value as typeof row.status;
-    } else if (key.startsWith("custom:")) {
-      const cfKey = key.slice(7);
-      row.customFieldAnswers = { ...row.customFieldAnswers, [cfKey]: value };
-    }
-    updated[rowIndex] = row;
-    onRowsChange(updated);
-  };
+  // Virtualization
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
+  const virtualRows = virtualizer.getVirtualItems();
+  const totalHeight = virtualizer.getTotalSize();
 
   return (
     <div className="flex flex-col gap-4">
@@ -156,8 +281,8 @@ export function StepPreview({
       <div className="flex items-center gap-2 rounded-lg border px-4 py-3">
         <UsersIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="text-sm">
-          <strong>{editableRows.length}</strong> row
-          {editableRows.length !== 1 ? "s" : ""} will be imported with status{" "}
+          <strong>{rows.length}</strong> row
+          {rows.length !== 1 ? "s" : ""} will be imported with status{" "}
           <Badge
             variant={importStatus === "active" ? "default" : "secondary"}
             className="text-xs"
@@ -167,12 +292,15 @@ export function StepPreview({
         </span>
       </div>
 
-      {/* Editable table */}
+      {/* Virtualized editable table */}
       <div className="flex flex-col gap-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Data ({editableRows.length} rows — click cells to edit)
+          Data ({rows.length} rows — click cells to edit)
         </p>
-        <div className="max-h-[400px] overflow-auto rounded-xl border">
+        <div
+          ref={scrollContainerRef}
+          className="max-h-[400px] overflow-auto rounded-xl border"
+        >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-muted/60 text-muted-foreground">
@@ -184,73 +312,45 @@ export function StepPreview({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {editableRows.map((row, i) => (
-                <tr key={i} className="bg-background hover:bg-muted/20">
-                  <td className="px-3 py-1.5 text-muted-foreground tabular-nums">
-                    {i + 1}
-                  </td>
-                  {columnKeys.map((key) => {
-                    const isReadOnly =
-                      key === "workspaceUserEmail";
-                    const isSelect = key === "role" || key === "status";
-
-                    if (isReadOnly) {
-                      return (
-                        <td
-                          key={key}
-                          className="max-w-40 truncate px-3 py-1.5 text-muted-foreground"
-                        >
-                          {getCellValue(row, key)}
-                        </td>
-                      );
-                    }
-
-                    if (isSelect) {
-                      const options =
-                        key === "role"
-                          ? ["member", "leader", "org_admin"]
-                          : [
-                              "invited",
-                              "pending",
-                              "active",
-                              "suspended",
-                              "archived",
-                            ];
-                      return (
-                        <td key={key} className="px-1 py-0.5">
-                          <select
-                            className="h-7 w-full rounded border-transparent bg-transparent px-1 text-xs focus:border-input focus:outline-none focus:ring-1 focus:ring-ring"
-                            value={getCellValue(row, key)}
-                            onChange={(e) =>
-                              setCellValue(i, key, e.target.value)
-                            }
-                          >
-                            {options.map((o) => (
-                              <option key={o} value={o}>
-                                {o}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                      );
-                    }
-
-                    return (
-                      <td key={key} className="px-1 py-0.5">
-                        <input
-                          type="text"
-                          className="h-7 w-full min-w-20 rounded border-transparent bg-transparent px-2 text-xs focus:border-input focus:outline-none focus:ring-1 focus:ring-ring"
-                          value={getCellValue(row, key)}
-                          onChange={(e) =>
-                            setCellValue(i, key, e.target.value)
-                          }
-                        />
-                      </td>
-                    );
-                  })}
+            <tbody>
+              {virtualRows.length > 0 && virtualRows[0]!.start > 0 && (
+                <tr>
+                  <td
+                    style={{ height: virtualRows[0]!.start }}
+                    colSpan={columnKeys.length + 1}
+                  />
                 </tr>
-              ))}
+              )}
+              {virtualRows.map((virtualRow) => {
+                const row = rows[virtualRow.index]!;
+                return (
+                  <tr
+                    key={virtualRow.index}
+                    className="bg-background hover:bg-muted/20"
+                    style={{ height: ROW_HEIGHT }}
+                  >
+                    <PreviewRow
+                      row={row}
+                      rowIndex={virtualRow.index}
+                      columnKeys={columnKeys}
+                      onCellChange={setCellValue}
+                    />
+                  </tr>
+                );
+              })}
+              {virtualRows.length > 0 && (
+                <tr>
+                  <td
+                    style={{
+                      height:
+                        totalHeight -
+                        (virtualRows[virtualRows.length - 1]!.start +
+                          virtualRows[virtualRows.length - 1]!.size),
+                    }}
+                    colSpan={columnKeys.length + 1}
+                  />
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

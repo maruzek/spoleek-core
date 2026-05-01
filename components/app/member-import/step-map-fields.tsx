@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { AlertTriangleIcon } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,6 +25,20 @@ export function StepMapFields({
   const hasName = Object.values(columnMappings).some(
     (v) => v === "first_name" || v === "last_name",
   );
+
+  const usedTargets = useMemo(() => {
+    const targets = Object.values(columnMappings).filter(
+      (v): v is FieldTarget => v != null,
+    );
+    return new Set(targets);
+  }, [columnMappings]);
+
+  const hasDuplicates = useMemo(() => {
+    const targets = Object.values(columnMappings).filter(
+      (v): v is FieldTarget => v != null,
+    );
+    return new Set(targets).size < targets.length;
+  }, [columnMappings]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,6 +76,7 @@ export function StepMapFields({
                   columnHeader={header}
                   value={columnMappings[header] ?? null}
                   options={fieldOptions}
+                  usedTargets={usedTargets}
                   onChange={(v) => onMappingChange(header, v)}
                 />
               </div>
@@ -68,6 +84,16 @@ export function StepMapFields({
           ))}
         </div>
       </div>
+
+      {hasDuplicates && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertTriangleIcon className="text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            Some fields are mapped to multiple columns. Only the last column for
+            each field will take effect.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!hasName && (
         <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">

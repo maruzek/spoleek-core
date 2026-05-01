@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { AlertCircleIcon, UploadIcon } from "lucide-react";
 
+import { Spinner } from "@/components/ui/spinner";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Stepper,
   StepperIndicator,
@@ -306,13 +307,20 @@ export function MemberImportDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[90vh] max-w-3/5 min-w-2/5 flex-col gap-0 overflow-hidden p-0"
+        className="flex max-h-[90vh] max-w-3/5 min-w-2/5 flex-col gap-0 overflow-hidden p-0 sm:max-w-3/5"
         onInteractOutside={(e) => {
+          if (activeStep === "importing") {
+            e.preventDefault();
+            return;
+          }
           if (
             e.target instanceof Element &&
             e.target.closest('[data-slot="combobox-content"]')
           )
             e.preventDefault();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (activeStep === "importing") e.preventDefault();
         }}
         onFocusOutside={(e) => {
           if (
@@ -361,7 +369,7 @@ export function MemberImportDialog({
         </div>
 
         {/* Step content */}
-        <ScrollArea className="flex-1">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="px-6 py-5">
             {activeStep === "upload" && (
               <StepUpload
@@ -439,7 +447,7 @@ export function MemberImportDialog({
               </Alert>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer nav */}
         <div className="flex shrink-0 items-center justify-between border-t px-6 py-4">
@@ -471,9 +479,14 @@ export function MemberImportDialog({
                     onClick={() => void triggerImport()}
                     disabled={importAction.isPending}
                   >
-                    <UploadIcon data-icon="inline-start" />
-                    Import {editableRows.length} member
-                    {editableRows.length !== 1 ? "s" : ""}
+                    {importAction.isPending ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <UploadIcon data-icon="inline-start" />
+                    )}
+                    {importAction.isPending
+                      ? "Importing…"
+                      : `Import ${editableRows.length} member${editableRows.length !== 1 ? "s" : ""}`}
                   </Button>
                 ) : (
                   <Button

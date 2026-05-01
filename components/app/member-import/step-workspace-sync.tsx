@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import {
   CheckCircle2Icon,
@@ -24,7 +24,13 @@ import {
 } from "@/server/actions/member-admin";
 
 import { buildWorkspaceQuery } from "./helpers";
-import type { FieldTarget, GroupAssignmentConfig, ImportGroupInfo, ParsedRow, WorkspaceMatch } from "./types";
+import type {
+  FieldTarget,
+  GroupAssignmentConfig,
+  ImportGroupInfo,
+  ParsedRow,
+  WorkspaceMatch,
+} from "./types";
 import { applyFormatTemplate } from "@/server/lib/workspace/field-catalog";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
@@ -54,15 +60,26 @@ function resolveRowFieldValues(
         const val = (row[col] ?? "").trim();
         if (val) result[field.fieldKey] = val;
       }
-    } else if (source.type === "group_category" || source.type === "org_unit_auto") {
-      const categoryId = source.type === "group_category" ? source.categoryId : orgUnitCategoryId;
+    } else if (
+      source.type === "group_category" ||
+      source.type === "org_unit_auto"
+    ) {
+      const categoryId =
+        source.type === "group_category"
+          ? source.categoryId
+          : orgUnitCategoryId;
       if (!categoryId || !groupsById) continue;
 
       let groupId: string | null = null;
       if (groupAssignment.mode === "column" && groupAssignment.columnMapping) {
-        const colVal = (row[groupAssignment.columnMapping.columnKey] ?? "").trim();
+        const colVal = (
+          row[groupAssignment.columnMapping.columnKey] ?? ""
+        ).trim();
         groupId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
-      } else if (groupAssignment.mode === "fixed" && groupAssignment.fixedGroupIds.length > 0) {
+      } else if (
+        groupAssignment.mode === "fixed" &&
+        groupAssignment.fixedGroupIds.length > 0
+      ) {
         // Find first group in the target category
         const fixedInCategory = groupAssignment.fixedGroupIds.find((id) => {
           const g = groupsById.get(id);
@@ -75,9 +92,13 @@ function resolveRowFieldValues(
         const grp = groupsById.get(groupId);
         if (grp) {
           if (source.type === "org_unit_auto") {
-            if (grp.workspaceOrgUnitPath) result[field.fieldKey] = grp.workspaceOrgUnitPath;
+            if (grp.workspaceOrgUnitPath)
+              result[field.fieldKey] = grp.workspaceOrgUnitPath;
           } else {
-            const formatted = applyFormatTemplate(source.formatTemplate, grp.name);
+            const formatted = applyFormatTemplate(
+              source.formatTemplate,
+              grp.name,
+            );
             if (formatted) result[field.fieldKey] = formatted;
           }
         }
@@ -118,7 +139,10 @@ export function StepWorkspaceSync({
   // Phase 2 state
   const [searchColumnKeys, setSearchColumnKeys] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<
-    Record<string, { id: string; primaryEmail: string; fullName: string } | null>
+    Record<
+      string,
+      { id: string; primaryEmail: string; fullName: string } | null
+    >
   >({});
   const [searchLoading, setSearchLoading] = useState(false);
 
@@ -129,7 +153,9 @@ export function StepWorkspaceSync({
     new Set(),
   );
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
-  const [perRowExtraFields, setPerRowExtraFields] = useState<Map<number, WorkspaceFieldValues>>(new Map());
+  const [perRowExtraFields, setPerRowExtraFields] = useState<
+    Map<number, WorkspaceFieldValues>
+  >(new Map());
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [provisioningStatus, setProvisioningStatus] = useState<
     Record<number, "pending" | "loading" | "success" | "error">
@@ -156,11 +182,22 @@ export function StepWorkspaceSync({
 
   const lookupCol = workspaceEmailCol ?? emailCol;
 
-  const unmatchedIndices = useMemo(
+  const firstNameCol = useMemo(
     () =>
-      csvRows
-        .map((_, i) => i)
-        .filter((i) => !workspaceMatches.has(i)),
+      Object.entries(columnMappings).find(([, v]) => v === "first_name")?.[0] ??
+      null,
+    [columnMappings],
+  );
+
+  const lastNameCol = useMemo(
+    () =>
+      Object.entries(columnMappings).find(([, v]) => v === "last_name")?.[0] ??
+      null,
+    [columnMappings],
+  );
+
+  const unmatchedIndices = useMemo(
+    () => csvRows.map((_, i) => i).filter((i) => !workspaceMatches.has(i)),
     [csvRows, workspaceMatches],
   );
 
@@ -250,14 +287,19 @@ export function StepWorkspaceSync({
     setSearchLoading(false);
   }, [searchLoading, searchColumnKeys, unmatchedIndices, csvRows, wsSearch]);
 
-  // Re-search when columns change
+  // Re-search when columns change (debounced)
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [prevSearchKey, setPrevSearchKey] = useState("");
   useEffect(() => {
     if (phase !== "search") return;
     const key = searchColumnKeys.join(",");
     if (key === prevSearchKey || key === "") return;
-    setPrevSearchKey(key);
-    void runSearch();
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setPrevSearchKey(key);
+      void runSearch();
+    }, 400);
+    return () => clearTimeout(searchDebounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchColumnKeys, phase]);
 
@@ -283,16 +325,8 @@ export function StepWorkspaceSync({
 
   const loadSuggestions = useCallback(async () => {
     const rows = unmatchedIndices.map((i) => ({
-      firstName: (csvRows[i]![
-        Object.entries(columnMappings).find(
-          ([, v]) => v === "first_name",
-        )?.[0] ?? ""
-      ] ?? "").trim(),
-      lastName: (csvRows[i]![
-        Object.entries(columnMappings).find(
-          ([, v]) => v === "last_name",
-        )?.[0] ?? ""
-      ] ?? "").trim(),
+      firstName: (csvRows[i]![firstNameCol ?? ""] ?? "").trim(),
+      lastName: (csvRows[i]![lastNameCol ?? ""] ?? "").trim(),
     }));
 
     const result = await batchSuggest.executeAsync({ rows });
@@ -307,7 +341,7 @@ export function StepWorkspaceSync({
       setProvisionSelection(sel);
       setEditedEmails(edited);
     }
-  }, [unmatchedIndices, csvRows, columnMappings, batchSuggest]);
+  }, [unmatchedIndices, csvRows, firstNameCol, lastNameCol, batchSuggest]);
 
   useEffect(() => {
     if (phase === "provision") {
@@ -321,10 +355,18 @@ export function StepWorkspaceSync({
           const row = csvRows[rowIdx];
           if (!row) continue;
           const resolved = resolveRowFieldValues(
-            row, provisionFields, columnMappings, groupAssignment, groupsById, orgUnitCategoryId,
+            row,
+            provisionFields,
+            columnMappings,
+            groupAssignment,
+            groupsById,
+            orgUnitCategoryId,
           );
           if (Object.keys(resolved).length > 0) {
-            newMap.set(rowIdx, { ...(perRowExtraFields.get(rowIdx) ?? {}), ...resolved });
+            newMap.set(rowIdx, {
+              ...(perRowExtraFields.get(rowIdx) ?? {}),
+              ...resolved,
+            });
           }
         }
         if (newMap.size > 0) {
@@ -349,13 +391,6 @@ export function StepWorkspaceSync({
     for (const rowIdx of toProvision) {
       setProvisioningStatus((prev) => ({ ...prev, [rowIdx]: "loading" }));
 
-      const firstNameCol = Object.entries(columnMappings).find(
-        ([, v]) => v === "first_name",
-      )?.[0];
-      const lastNameCol = Object.entries(columnMappings).find(
-        ([, v]) => v === "last_name",
-      )?.[0];
-
       const firstName = (csvRows[rowIdx]![firstNameCol ?? ""] ?? "").trim();
       const lastName = (csvRows[rowIdx]![lastNameCol ?? ""] ?? "").trim();
       const primaryEmail = editedEmails[rowIdx] ?? "";
@@ -375,7 +410,8 @@ export function StepWorkspaceSync({
         lastName,
         primaryEmail,
         sendWelcomeEmail,
-        extraFields: Object.keys(rowExtraFields).length > 0 ? rowExtraFields : undefined,
+        extraFields:
+          Object.keys(rowExtraFields).length > 0 ? rowExtraFields : undefined,
       });
 
       if (result?.data?.success) {
@@ -399,7 +435,8 @@ export function StepWorkspaceSync({
   }, [
     unmatchedIndices,
     provisionSelection,
-    columnMappings,
+    firstNameCol,
+    lastNameCol,
     csvRows,
     editedEmails,
     sendWelcomeEmail,
@@ -574,9 +611,7 @@ export function StepWorkspaceSync({
                   checked={searchColumnKeys.includes(h)}
                   onCheckedChange={(checked) => {
                     setSearchColumnKeys((prev) =>
-                      checked
-                        ? [...prev, h]
-                        : prev.filter((k) => k !== h),
+                      checked ? [...prev, h] : prev.filter((k) => k !== h),
                     );
                   }}
                 />
@@ -588,7 +623,8 @@ export function StepWorkspaceSync({
           {searchColumnKeys.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Results (first {Math.min(10, unmatchedIndices.length)} unmatched)
+                Results (first {Math.min(10, unmatchedIndices.length)}{" "}
+                unmatched)
               </p>
               <div className="overflow-hidden rounded-xl border">
                 <div className="grid grid-cols-[1fr_1fr_auto] gap-px bg-border text-xs font-medium text-muted-foreground">
@@ -609,9 +645,7 @@ export function StepWorkspaceSync({
                         className="grid grid-cols-[1fr_1fr_auto] items-center gap-px"
                       >
                         <div className="bg-background px-3 py-2">
-                          <code className="text-xs">
-                            {query || "—"}
-                          </code>
+                          <code className="text-xs">{query || "—"}</code>
                         </div>
                         <div className="bg-background px-3 py-2">
                           {searchLoading ? (
@@ -715,8 +749,12 @@ export function StepWorkspaceSync({
           ) : (
             <>
               <div className="overflow-hidden rounded-xl border">
-                <div className={`grid gap-px bg-border text-xs font-medium text-muted-foreground ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}>
-                  {provisionFields.length > 0 ? <div className="bg-muted/60 px-2 py-2" /> : null}
+                <div
+                  className={`grid gap-px bg-border text-xs font-medium text-muted-foreground ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}
+                >
+                  {provisionFields.length > 0 ? (
+                    <div className="bg-muted/60 px-2 py-2" />
+                  ) : null}
                   <div className="bg-muted/60 px-3 py-2">Select</div>
                   <div className="bg-muted/60 px-3 py-2">Name</div>
                   <div className="bg-muted/60 px-3 py-2">Email to create</div>
@@ -724,12 +762,6 @@ export function StepWorkspaceSync({
                 </div>
                 <div className="max-h-80 divide-y overflow-auto">
                   {unmatchedIndices.map((rowIdx, i) => {
-                    const firstNameCol = Object.entries(columnMappings).find(
-                      ([, v]) => v === "first_name",
-                    )?.[0];
-                    const lastNameCol = Object.entries(columnMappings).find(
-                      ([, v]) => v === "last_name",
-                    )?.[0];
                     const firstName = (
                       csvRows[rowIdx]![firstNameCol ?? ""] ?? ""
                     ).trim();
@@ -739,14 +771,21 @@ export function StepWorkspaceSync({
                     const status = provisioningStatus[rowIdx];
                     const isExpanded = expandedRows.has(rowIdx);
                     const rowFields = perRowExtraFields.get(rowIdx) ?? {};
-                    const manualFields = provisionFields.filter((f) => !f.source || f.source.type === "manual");
+                    const manualFields = provisionFields.filter(
+                      (f) => !f.source || f.source.type === "manual",
+                    );
                     const requiredMissing = provisionFields.some(
-                      (f) => f.required && f.type !== "boolean" && !(rowFields[f.fieldKey] ?? ""),
+                      (f) =>
+                        f.required &&
+                        f.type !== "boolean" &&
+                        !(rowFields[f.fieldKey] ?? ""),
                     );
 
                     return (
                       <div key={rowIdx} className="flex flex-col">
-                        <div className={`grid items-center gap-px ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}>
+                        <div
+                          className={`grid items-center gap-px ${provisionFields.length > 0 ? "grid-cols-[auto_auto_1fr_1fr_auto]" : "grid-cols-[auto_1fr_1fr_auto]"}`}
+                        >
                           {provisionFields.length > 0 ? (
                             <button
                               type="button"
@@ -759,9 +798,15 @@ export function StepWorkspaceSync({
                                   return next;
                                 })
                               }
-                              aria-label={isExpanded ? "Collapse" : "Expand fields"}
+                              aria-label={
+                                isExpanded ? "Collapse" : "Expand fields"
+                              }
                             >
-                              <span className={`text-[10px] transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                              <span
+                                className={`text-[10px] transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              >
+                                ▶
+                              </span>
                               {requiredMissing ? (
                                 <span className="ml-1 size-1.5 rounded-full bg-destructive" />
                               ) : null}
@@ -770,7 +815,9 @@ export function StepWorkspaceSync({
                           <div className="bg-background px-3 py-2">
                             <Checkbox
                               checked={provisionSelection.has(rowIdx)}
-                              disabled={status === "loading" || status === "success"}
+                              disabled={
+                                status === "loading" || status === "success"
+                              }
                               onCheckedChange={(checked) => {
                                 setProvisionSelection((prev) => {
                                   const next = new Set(prev);
@@ -787,8 +834,12 @@ export function StepWorkspaceSync({
                           <div className="bg-background px-1 py-1">
                             <Input
                               className="h-7 text-xs"
-                              value={editedEmails[rowIdx] ?? suggestions[i] ?? ""}
-                              disabled={status === "loading" || status === "success"}
+                              value={
+                                editedEmails[rowIdx] ?? suggestions[i] ?? ""
+                              }
+                              disabled={
+                                status === "loading" || status === "success"
+                              }
                               onChange={(e) =>
                                 setEditedEmails((prev) => ({
                                   ...prev,
@@ -824,16 +875,23 @@ export function StepWorkspaceSync({
                           <div className="border-t bg-muted/20 px-4 py-3">
                             <div className="grid gap-2 sm:grid-cols-2">
                               {provisionFields.map((field) => {
-                                const isAuto = field.source && field.source.type !== "manual";
+                                const isAuto =
+                                  field.source &&
+                                  field.source.type !== "manual";
                                 const val = rowFields[field.fieldKey];
                                 return (
-                                  <div key={field.fieldKey} className="flex flex-col gap-1">
+                                  <div
+                                    key={field.fieldKey}
+                                    className="flex flex-col gap-1"
+                                  >
                                     <div className="flex items-center gap-1.5">
                                       <label className="text-[11px] font-medium">
                                         {field.label}
                                         {field.required ? " *" : ""}
                                       </label>
-                                      {isAuto && val !== undefined && val !== "" ? (
+                                      {isAuto &&
+                                      val !== undefined &&
+                                      val !== "" ? (
                                         <span className="rounded-sm bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
                                           auto
                                         </span>
@@ -841,25 +899,41 @@ export function StepWorkspaceSync({
                                     </div>
                                     {field.type === "boolean" ? (
                                       <Switch
-                                        checked={typeof val === "boolean" ? val : false}
+                                        checked={
+                                          typeof val === "boolean" ? val : false
+                                        }
                                         onCheckedChange={(checked) =>
                                           setPerRowExtraFields((prev) => {
                                             const next = new Map(prev);
-                                            next.set(rowIdx, { ...(prev.get(rowIdx) ?? {}), [field.fieldKey]: checked });
+                                            next.set(rowIdx, {
+                                              ...(prev.get(rowIdx) ?? {}),
+                                              [field.fieldKey]: checked,
+                                            });
                                             return next;
                                           })
                                         }
                                       />
                                     ) : (
                                       <Input
-                                        className={`h-7 text-xs ${field.required && !val ? "border-destructive" : ""}`}
-                                        type={field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"}
-                                        value={typeof val === "string" ? val : ""}
+                                        className={`h-7 ${field.required && !val ? "border-destructive" : ""}`}
+                                        type={
+                                          field.type === "email"
+                                            ? "email"
+                                            : field.type === "phone"
+                                              ? "tel"
+                                              : "text"
+                                        }
+                                        value={
+                                          typeof val === "string" ? val : ""
+                                        }
                                         placeholder={field.placeholder}
                                         onChange={(e) =>
                                           setPerRowExtraFields((prev) => {
                                             const next = new Map(prev);
-                                            next.set(rowIdx, { ...(prev.get(rowIdx) ?? {}), [field.fieldKey]: e.target.value });
+                                            next.set(rowIdx, {
+                                              ...(prev.get(rowIdx) ?? {}),
+                                              [field.fieldKey]: e.target.value,
+                                            });
                                             return next;
                                           })
                                         }
@@ -869,9 +943,11 @@ export function StepWorkspaceSync({
                                 );
                               })}
                             </div>
-                            {manualFields.length === 0 && provisionFields.length > 0 ? (
+                            {manualFields.length === 0 &&
+                            provisionFields.length > 0 ? (
                               <p className="mt-2 text-[11px] text-muted-foreground">
-                                All values are auto-filled from member data. You can override them above.
+                                All values are auto-filled from member data. You
+                                can override them above.
                               </p>
                             ) : null}
                           </div>

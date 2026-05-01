@@ -9,11 +9,24 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 
-import type { GroupAssignmentConfig, GroupAssignmentMode, ParsedRow } from "./types";
+import type {
+  GroupAssignmentConfig,
+  GroupAssignmentMode,
+  ParsedRow,
+} from "./types";
+
+const NONE_SENTINEL = "__none__";
 
 export function StepGroups({
   csvHeaders,
@@ -101,11 +114,10 @@ export function StepGroups({
             <Field>
               <FieldLabel>Which column contains group names?</FieldLabel>
               <FieldContent>
-                <select
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                  value={groupAssignment.columnMapping?.columnKey ?? ""}
-                  onChange={(e) => {
-                    const col = e.target.value;
+                <Select
+                  value={groupAssignment.columnMapping?.columnKey ?? NONE_SENTINEL}
+                  onValueChange={(v) => {
+                    const col = v === NONE_SENTINEL ? "" : v;
                     if (!col) {
                       onGroupAssignmentChange({
                         ...groupAssignment,
@@ -126,13 +138,20 @@ export function StepGroups({
                     });
                   }}
                 >
-                  <option value="">— select a column —</option>
-                  {csvHeaders.map((h) => (
-                    <option key={h} value={h}>
-                      {h}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="— select a column —" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    <SelectItem value={NONE_SENTINEL}>
+                      — select a column —
+                    </SelectItem>
+                    {csvHeaders.map((h) => (
+                      <SelectItem key={h} value={h}>
+                        {h}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </FieldContent>
             </Field>
           </FieldGroup>
@@ -159,14 +178,13 @@ export function StepGroups({
                         </Badge>
                       </div>
                       <div className="bg-background px-3 py-2">
-                        <select
-                          className="flex h-8 w-full rounded-md border border-input bg-transparent px-2 py-0.5 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        <Select
                           value={
                             groupAssignment.columnMapping?.valueToGroupId[
                               val
-                            ] ?? ""
+                            ] ?? NONE_SENTINEL
                           }
-                          onChange={(e) => {
+                          onValueChange={(v) => {
                             if (!groupAssignment.columnMapping) return;
                             onGroupAssignmentChange({
                               ...groupAssignment,
@@ -175,19 +193,27 @@ export function StepGroups({
                                 valueToGroupId: {
                                   ...groupAssignment.columnMapping
                                     .valueToGroupId,
-                                  [val]: e.target.value || null,
+                                  [val]:
+                                    v === NONE_SENTINEL ? null : v,
                                 },
                               },
                             });
                           }}
                         >
-                          <option value="">— ignore —</option>
-                          {allGroups.map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.categoryName} / {g.name}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger size="sm" className="w-full text-xs">
+                            <SelectValue placeholder="— ignore —" />
+                          </SelectTrigger>
+                          <SelectContent position="popper">
+                            <SelectItem value={NONE_SENTINEL}>
+                              — ignore —
+                            </SelectItem>
+                            {allGroups.map((g) => (
+                              <SelectItem key={g.id} value={g.id}>
+                                {g.categoryName} / {g.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
                   ))}
