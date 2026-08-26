@@ -6,9 +6,11 @@ import {
   groups,
   memberCustomFieldValues,
   memberCustomFields,
+  tenantMembers,
 } from "@/server/db/schema";
 import {
   applyFormatTemplate,
+  type MemberFieldKey,
   type WorkspaceFieldValues,
   type WorkspaceProvisionFieldConfig,
 } from "./field-catalog";
@@ -25,11 +27,36 @@ export async function resolveProvisionFieldsForMember(
   if (enabledConfigs.length === 0) return result;
 
   // Collect what we need to query
+  const needsMemberFields = enabledConfigs.some((f) => f.source?.type === "member_field");
   const needsCustomFields = enabledConfigs.some((f) => f.source?.type === "member_custom_field");
   const groupCategoryIds = new Set<string>();
   for (const f of enabledConfigs) {
     if (f.source?.type === "group_category") groupCategoryIds.add((f.source as { type: "group_category"; categoryId: string }).categoryId);
     if (f.source?.type === "org_unit_auto" && orgUnitCategoryId) groupCategoryIds.add(orgUnitCategoryId);
+  }
+
+  // Fetch built-in member fields if needed
+  const memberFieldValues: Record<string, string | null> = {};
+  if (needsMemberFields) {
+    const [member] = await db
+      .select({
+        email: tenantMembers.email,
+        firstName: tenantMembers.firstName,
+        lastName: tenantMembers.lastName,
+      })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.id, memberId),
+          eq(tenantMembers.orgId, orgId),
+        ),
+      )
+      .limit(1);
+    if (member) {
+      memberFieldValues.email = member.email;
+      memberFieldValues.firstName = member.firstName;
+      memberFieldValues.lastName = member.lastName;
+    }
   }
 
   // Fetch custom field values for this member if needed
@@ -88,7 +115,10 @@ export async function resolveProvisionFieldsForMember(
     const source = config.source;
     if (!source || source.type === "manual") continue;
 
-    if (source.type === "member_custom_field") {
+    if (source.type === "member_field") {
+      const val = memberFieldValues[source.memberFieldKey as MemberFieldKey];
+      if (val) result[config.fieldKey] = val;
+    } else if (source.type === "member_custom_field") {
       const val = customFieldsByKey.get(source.customFieldKey);
       if (val !== undefined && val !== "") result[config.fieldKey] = val;
     } else if (source.type === "group_category") {

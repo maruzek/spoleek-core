@@ -35,6 +35,7 @@ import {
 } from "@/server/actions/organization-settings";
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
 import {
+  MEMBER_FIELD_OPTIONS,
   WORKSPACE_FIELD_CATALOG,
   type FieldSource,
   type WorkspaceProvisionFieldConfig,
@@ -402,12 +403,14 @@ export function WorkspaceSettingsCard({
                             onChange={(e) => {
                               const t = e.target.value as FieldSource["type"];
                               if (t === "manual") updateFieldSource(def.key, { type: "manual" });
+                              else if (t === "member_field") updateFieldSource(def.key, { type: "member_field", memberFieldKey: "email" });
                               else if (t === "org_unit_auto") updateFieldSource(def.key, { type: "org_unit_auto" });
                               else if (t === "member_custom_field") updateFieldSource(def.key, { type: "member_custom_field", customFieldKey: "" });
                               else if (t === "group_category") updateFieldSource(def.key, { type: "group_category", categoryId: "", formatTemplate: "{name}" });
                             }}
                           >
                             <option value="manual">Manual — entered at provision time</option>
+                            <option value="member_field">From member profile field</option>
                             {def.key === "orgUnitPath" ? (
                               <option value="org_unit_auto">Auto — from org unit category</option>
                             ) : null}
@@ -416,6 +419,26 @@ export function WorkspaceSettingsCard({
                             ) : null}
                             <option value="group_category">From group category (with template)</option>
                           </select>
+
+                          {/* Member profile field picker */}
+                          {source.type === "member_field" ? (
+                            <select
+                              className="flex h-8 rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                              value={source.memberFieldKey}
+                              onChange={(e) =>
+                                updateFieldSource(def.key, {
+                                  type: "member_field",
+                                  memberFieldKey: e.target.value as typeof source.memberFieldKey,
+                                })
+                              }
+                            >
+                              {MEMBER_FIELD_OPTIONS.map((mf) => (
+                                <option key={mf.key} value={mf.key}>
+                                  {mf.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
 
                           {/* Member custom field picker */}
                           {source.type === "member_custom_field" ? (

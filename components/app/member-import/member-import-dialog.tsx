@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { AlertCircleIcon, UploadIcon } from "lucide-react";
 
@@ -27,7 +27,7 @@ import { importMembersAction } from "@/server/actions/member-admin";
 import type { ImportMemberRow } from "@/lib/member-admin";
 
 import { parseCsv } from "./csv-parser";
-import { buildFieldOptions } from "./helpers";
+import { buildFieldOptions, normalizeForMatch } from "./helpers";
 import { StepDone } from "./step-done";
 import { StepGroups } from "./step-groups";
 import { StepImporting } from "./step-importing";
@@ -79,6 +79,9 @@ export function MemberImportDialog({
   );
   const [editableRows, setEditableRows] = useState<ImportMemberRow[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [prevAssembledStep, setPrevAssembledStep] = useState<WizardStep | null>(
+    null,
+  );
 
   const fieldOptions = useMemo(
     () => buildFieldOptions(customFields, workspaceReady),
@@ -114,21 +117,26 @@ export function MemberImportDialog({
     return [...seen.entries()].filter(([, c]) => c > 1).map(([e]) => e);
   }, [csvRows, columnMappings, emailMapped]);
 
-  // Reset on dialog open
-  useEffect(() => {
-    if (!open) return;
-    setActiveStep("upload");
-    setCsvFile(null);
-    setCsvHeaders([]);
-    setCsvRows([]);
-    setParseWarning(null);
-    setColumnMappings({});
-    setGroupAssignment({ mode: "none", fixedGroupIds: [], columnMapping: null });
-    setWorkspaceMatches(new Map());
-    setImportStatus("active");
-    setEditableRows([]);
-    setImportResult(null);
-  }, [open]);
+  // Reset on dialog open (adjusted during render rather than in an effect, so
+  // the very first render after opening already reflects the reset state).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setActiveStep("upload");
+      setCsvFile(null);
+      setCsvHeaders([]);
+      setCsvRows([]);
+      setParseWarning(null);
+      setColumnMappings({});
+      setGroupAssignment({ mode: "none", fixedGroupIds: [], columnMapping: null });
+      setWorkspaceMatches(new Map());
+      setImportStatus("active");
+      setEditableRows([]);
+      setImportResult(null);
+      setPrevAssembledStep(null);
+    }
+  }
 
   // ── File handling ──
   const handleFileAccept = useCallback(
@@ -155,7 +163,7 @@ export function MemberImportDialog({
 
         const auto: Record<string, FieldTarget | null> = {};
         for (const h of headers) {
-          const lower = h.toLowerCase().trim();
+          const lower = normalizeForMatch(h);
           if (/first\s*name/.test(lower)) auto[h] = "first_name";
           else if (/last\s*name|surname/.test(lower)) auto[h] = "last_name";
           else if (/^email/.test(lower)) auto[h] = "email";
@@ -163,7 +171,9 @@ export function MemberImportDialog({
           else if (/^status/.test(lower)) auto[h] = "status";
           else {
             const match = customFields.find(
-              (f) => f.label.toLowerCase() === lower || f.key === lower,
+              (f) =>
+                normalizeForMatch(f.label) === lower ||
+                normalizeForMatch(f.key) === lower,
             );
             if (match) auto[h] = `custom:${match.key}`;
             else auto[h] = null;
@@ -218,9 +228,8 @@ export function MemberImportDialog({
       }
 
       // Group assignment
-      if (groupAssignment.mode === "fixed") {
-        entry.groupIds = groupAssignment.fixedGroupIds;
-      } else if (
+      const assignedIds: string[] = [];
+      if (
         groupAssignment.mode === "column" &&
         groupAssignment.columnMapping
       ) {
@@ -228,8 +237,14 @@ export function MemberImportDialog({
           row[groupAssignment.columnMapping.columnKey] ?? ""
         ).trim();
         const gid = groupAssignment.columnMapping.valueToGroupId[colVal];
-        if (gid) entry.groupIds = [gid];
+        if (gid) assignedIds.push(gid);
       }
+      if (groupAssignment.fixedGroupIds.length > 0) {
+        for (const id of groupAssignment.fixedGroupIds) {
+          if (!assignedIds.includes(id)) assignedIds.push(id);
+        }
+      }
+      entry.groupIds = assignedIds;
 
       // Workspace match
       const wsMatch = workspaceMatches.get(rowIdx);
@@ -242,13 +257,15 @@ export function MemberImportDialog({
     });
   }, [csvRows, columnMappings, groupAssignment, importStatus, workspaceMatches]);
 
-  // Build editable rows when entering preview
-  useEffect(() => {
-    if (activeStep === "preview") {
-      setEditableRows(assembleRows());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStep]);
+  // Assemble rows synchronously the moment we enter preview, before it renders —
+  // a useEffect here would run one tick too late, mounting StepPreview with
+  // stale/empty data first (it only seeds its state from props once, on mount).
+  if (activeStep === "preview" && prevAssembledStep !== "preview") {
+    setEditableRows(assembleRows());
+    setPrevAssembledStep("preview");
+  } else if (activeStep !== "preview" && prevAssembledStep === "preview") {
+    setPrevAssembledStep(null);
+  }
 
   // ── Import action ──
   const importAction = useAction(importMembersAction, {
@@ -315,7 +332,7 @@ export function MemberImportDialog({
           }
           if (
             e.target instanceof Element &&
-            e.target.closest('[data-slot="combobox-content"]')
+            e.target.closest('[data-slot="popover-content"]')
           )
             e.preventDefault();
         }}
@@ -325,7 +342,7 @@ export function MemberImportDialog({
         onFocusOutside={(e) => {
           if (
             e.target instanceof Element &&
-            e.target.closest('[data-slot="combobox-content"]')
+            e.target.closest('[data-slot="popover-content"]')
           )
             e.preventDefault();
         }}

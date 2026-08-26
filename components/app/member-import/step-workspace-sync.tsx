@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import {
   CheckCircle2Icon,
@@ -46,22 +46,37 @@ function getAssignedGroup(
   if (!groupsById) return null;
 
   let groupId: string | null = null;
+
   if (groupAssignment.mode === "column" && groupAssignment.columnMapping) {
     const colVal = (
       row[groupAssignment.columnMapping.columnKey] ?? ""
     ).trim();
-    groupId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
-  } else if (
-    groupAssignment.mode === "fixed" &&
-    groupAssignment.fixedGroupIds.length > 0
-  ) {
-    if (categoryId) {
+    const mappedId = groupAssignment.columnMapping.valueToGroupId[colVal] ?? null;
+    if (mappedId) {
+      if (categoryId) {
+        const g = groupsById.get(mappedId);
+        if (g?.categoryId === categoryId) groupId = mappedId;
+      } else {
+        groupId = mappedId;
+      }
+    }
+  }
+
+  if (groupAssignment.fixedGroupIds.length > 0) {
+    if (!groupId && categoryId) {
       groupId =
         groupAssignment.fixedGroupIds.find((id) => {
           const g = groupsById.get(id);
           return g?.categoryId === categoryId;
         }) ?? null;
-    } else {
+    } else if (
+      !groupId &&
+      (groupAssignment.mode === "fixed" || groupAssignment.mode === "column")
+    ) {
+      // In "column" mode the fixed groups are the "also assign to these"
+      // extras (e.g. an org-unit category not covered by the column mapping) —
+      // they should be a valid fallback for category-less fields too, not
+      // only when the whole mode is "fixed".
       groupId = groupAssignment.fixedGroupIds[0] ?? null;
     }
   }
@@ -89,7 +104,23 @@ function resolveRowFieldValues(
 
     // 1. Try explicit auto-fill source
     if (source && source.type !== "manual") {
-      if (source.type === "member_custom_field") {
+      if (source.type === "member_field") {
+        const targetMap: Record<string, FieldTarget> = {
+          email: "email",
+          firstName: "first_name",
+          lastName: "last_name",
+        };
+        const target = targetMap[source.memberFieldKey];
+        if (target) {
+          const col = Object.entries(columnMappings).find(
+            ([, v]) => v === target,
+          )?.[0];
+          if (col) {
+            const val = (row[col] ?? "").trim();
+            if (val) { result[field.fieldKey] = val; continue; }
+          }
+        }
+      } else if (source.type === "member_custom_field") {
         const col = Object.entries(columnMappings).find(
           ([, v]) => v === `custom:${source.customFieldKey}`,
         )?.[0];
@@ -127,9 +158,13 @@ function resolveRowFieldValues(
     if (field.fieldKey === "recoveryEmail" && memberEmail) {
       result[field.fieldKey] = memberEmail;
     } else if (field.fieldKey === "orgUnitPath") {
-      const grp = getAssignedGroup(
-        row, groupAssignment, groupsById, orgUnitCategoryId,
-      );
+      // Prefer the group matching the org-unit category (if configured),
+      // but fall back to the plainly assigned group — same lookup as
+      // "department" below — since that group may carry its own
+      // workspaceOrgUnitPath even outside the configured category.
+      const grp =
+        getAssignedGroup(row, groupAssignment, groupsById, orgUnitCategoryId) ??
+        getAssignedGroup(row, groupAssignment, groupsById);
       if (grp?.workspaceOrgUnitPath) {
         result[field.fieldKey] = grp.workspaceOrgUnitPath;
       }
@@ -317,7 +352,7 @@ export function StepWorkspaceSync({
     await Promise.all(
       previewRows.map(async (rowIdx) => {
         const row = csvRows[rowIdx]!;
-        const query = buildWorkspaceQuery(row, searchColumnKeys);
+        const query = buildWorkspaceQuery(row, searchColumnKeys, columnMappings);
         if (!query) return;
         const result = await wsSearch.executeAsync({ query });
         const users = result?.data?.users ?? [];
@@ -327,23 +362,14 @@ export function StepWorkspaceSync({
 
     setSearchResults(newResults);
     setSearchLoading(false);
-  }, [searchLoading, searchColumnKeys, unmatchedIndices, csvRows, wsSearch]);
-
-  // Re-search when columns change (debounced)
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [prevSearchKey, setPrevSearchKey] = useState("");
-  useEffect(() => {
-    if (phase !== "search") return;
-    const key = searchColumnKeys.join(",");
-    if (key === prevSearchKey || key === "") return;
-    clearTimeout(searchDebounceRef.current);
-    searchDebounceRef.current = setTimeout(() => {
-      setPrevSearchKey(key);
-      void runSearch();
-    }, 400);
-    return () => clearTimeout(searchDebounceRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchColumnKeys, phase]);
+  }, [
+    searchLoading,
+    searchColumnKeys,
+    unmatchedIndices,
+    csvRows,
+    columnMappings,
+    wsSearch,
+  ]);
 
   const confirmSearchMatch = useCallback(
     (rowIdx: number) => {
@@ -660,6 +686,9 @@ export function StepWorkspaceSync({
                     setSearchColumnKeys((prev) =>
                       checked ? [...prev, h] : prev.filter((k) => k !== h),
                     );
+                    // Column selection changed — previous results no longer
+                    // reflect the query that would now be built.
+                    setSearchResults({});
                   }}
                 />
                 <span className="font-mono text-xs">{h}</span>
@@ -668,10 +697,28 @@ export function StepWorkspaceSync({
           </div>
 
           {searchColumnKeys.length > 0 && (
+            <Button
+              size="sm"
+              onClick={() => void runSearch()}
+              disabled={searchLoading}
+              className="self-start"
+            >
+              {searchLoading ? (
+                <Loader2Icon data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <SearchIcon data-icon="inline-start" />
+              )}
+              {searchLoading ? "Searching…" : "Search"}
+            </Button>
+          )}
+
+          {searchColumnKeys.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Results (first {Math.min(10, unmatchedIndices.length)}{" "}
-                unmatched)
+                unmatched) — {Object.keys(searchResults).length > 0
+                  ? "showing last search"
+                  : "click Search to run the query below"}
               </p>
               <div className="overflow-hidden rounded-xl border">
                 <div className="grid grid-cols-[1fr_1fr_auto] gap-px bg-border text-xs font-medium text-muted-foreground">
@@ -682,7 +729,7 @@ export function StepWorkspaceSync({
                 <div className="divide-y">
                   {unmatchedIndices.slice(0, 10).map((rowIdx) => {
                     const row = csvRows[rowIdx]!;
-                    const query = buildWorkspaceQuery(row, searchColumnKeys);
+                    const query = buildWorkspaceQuery(row, searchColumnKeys, columnMappings);
                     const result = searchResults[`${rowIdx}`];
                     const alreadyMatched = workspaceMatches.has(rowIdx);
 

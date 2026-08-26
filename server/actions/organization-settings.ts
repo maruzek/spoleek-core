@@ -282,6 +282,25 @@ export const saveWorkspaceProvisionFieldsAction = orgAdminActionClient
           fieldKey: z.string(),
           enabled: z.boolean(),
           required: z.boolean(),
+          source: z
+            .discriminatedUnion("type", [
+              z.object({ type: z.literal("manual") }),
+              z.object({
+                type: z.literal("member_field"),
+                memberFieldKey: z.string(),
+              }),
+              z.object({ type: z.literal("org_unit_auto") }),
+              z.object({
+                type: z.literal("member_custom_field"),
+                customFieldKey: z.string(),
+              }),
+              z.object({
+                type: z.literal("group_category"),
+                categoryId: z.string(),
+                formatTemplate: z.string(),
+              }),
+            ])
+            .optional(),
         }),
       ),
     }),

@@ -18,9 +18,18 @@ export type WorkspaceFieldValues = Record<string, string | boolean>;
 
 export type FieldSource =
   | { type: "manual" }
+  | { type: "member_field"; memberFieldKey: MemberFieldKey }
   | { type: "member_custom_field"; customFieldKey: string }
   | { type: "group_category"; categoryId: string; formatTemplate: string }
   | { type: "org_unit_auto" };
+
+export const MEMBER_FIELD_OPTIONS = [
+  { key: "email", label: "Personal email" },
+  { key: "firstName", label: "First name" },
+  { key: "lastName", label: "Last name" },
+] as const;
+
+export type MemberFieldKey = (typeof MEMBER_FIELD_OPTIONS)[number]["key"];
 
 export type WorkspaceProvisionFieldConfig = {
   fieldKey: string;

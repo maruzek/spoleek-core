@@ -93,11 +93,12 @@ function ComboboxContent({
   align = "start",
   alignOffset = 0,
   anchor,
+  collisionBoundary,
   ...props
 }: ComboboxPrimitive.Popup.Props &
   Pick<
     ComboboxPrimitive.Positioner.Props,
-    "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
+    "side" | "align" | "sideOffset" | "alignOffset" | "anchor" | "collisionBoundary"
   >) {
   return (
     <ComboboxPrimitive.Portal>
@@ -107,6 +108,13 @@ function ComboboxContent({
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
+        // Default (clippingAncestors) treats any overflow-hidden ancestor of the
+        // trigger — e.g. a scrollable dialog body — as the available space, even
+        // though the popup itself portals to <body> and isn't actually clipped by it.
+        collisionBoundary={
+          collisionBoundary ??
+          (typeof document !== "undefined" ? document.body : undefined)
+        }
         className="isolate z-50"
       >
         <ComboboxPrimitive.Popup

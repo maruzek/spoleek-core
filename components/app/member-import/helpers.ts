@@ -2,6 +2,19 @@ import type { MemberCustomField } from "@/server/db/schema";
 
 import type { FieldTarget, ParsedRow } from "./types";
 
+// Normalizes text for loose header/label matching: case, whitespace (including
+// doubled/irregular internal spacing, not just leading/trailing), and Unicode
+// composition (a CSV's diacritics can arrive as decomposed code points — e.g.
+// "e" + combining caron — that look identical to a precomposed "ě" but aren't
+// string-equal even after lowercasing).
+export function normalizeForMatch(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 export function buildFieldOptions(
   customFields: MemberCustomField[],
   workspaceReady: boolean,
@@ -34,14 +47,34 @@ export function buildFieldOptions(
   return [...builtins, ...customs];
 }
 
+function escapeWorkspaceQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+// The Admin SDK Directory API's `query` param requires field-scoped operators
+// (e.g. `givenName:'John' familyName:'Doe'`) — a bare unstructured string like
+// "John Doe" isn't valid query syntax and silently matches nothing.
 export function buildWorkspaceQuery(
   row: ParsedRow,
   columnKeys: string[],
+  columnMappings: Record<string, FieldTarget | null> = {},
 ): string {
-  const parts: string[] = [];
+  const terms: string[] = [];
   for (const key of columnKeys) {
     const val = (row[key] ?? "").trim();
-    if (val) parts.push(val);
+    if (!val) continue;
+
+    const target = columnMappings[key];
+    const field =
+      target === "first_name"
+        ? "givenName"
+        : target === "last_name"
+          ? "familyName"
+          : target === "email" || target === "workspace_email"
+            ? "email"
+            : "name";
+
+    terms.push(`${field}:'${escapeWorkspaceQueryValue(val)}'`);
   }
-  return parts.join(" ");
+  return terms.join(" ");
 }

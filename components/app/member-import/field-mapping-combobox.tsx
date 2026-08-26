@@ -1,15 +1,19 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState } from "react";
+import { ChevronsUpDownIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 import type { FieldTarget } from "./types";
 
@@ -25,44 +29,75 @@ export function FieldMappingCombobox({
   usedTargets?: Set<FieldTarget>;
   onChange: (v: FieldTarget | null) => void;
 }) {
-  const selectedItem = useMemo(
-    () => options.find((o) => o.value === value) ?? null,
-    [options, value],
-  );
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value) ?? null;
 
   return (
-    <Combobox
-      items={options}
-      value={selectedItem}
-      onValueChange={(item) => {
-        onChange(item ? (item as typeof selectedItem)!.value : null);
-      }}
-    >
-      <ComboboxInput placeholder="Search mappings…" showClear />
-      <ComboboxContent>
-        <ComboboxEmpty>No match.</ComboboxEmpty>
-        <ComboboxList>
-          {(item: (typeof options)[number]) => {
-            const isUsed =
-              usedTargets?.has(item.value) && item.value !== value;
-            return (
-              <ComboboxItem
-                key={item.value}
-                value={item}
-                disabled={isUsed}
-                className={isUsed ? "opacity-50" : undefined}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-8 w-full justify-between px-2 font-normal"
+        >
+          <span
+            className={cn(
+              "truncate text-xs",
+              !selected && "text-muted-foreground",
+            )}
+          >
+            {selected ? selected.label : "— ignore —"}
+          </span>
+          <ChevronsUpDownIcon className="ml-2 size-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-(--radix-popover-trigger-width) p-0"
+        align="start"
+      >
+        <Command>
+          <CommandInput placeholder="Search mappings…" />
+          <CommandList>
+            <CommandEmpty>No match.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="— ignore —"
+                data-checked={value === null}
+                onSelect={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
               >
-                {item.label}
-                {isUsed && (
-                  <span className="ml-auto text-[10px] text-muted-foreground">
-                    already mapped
-                  </span>
-                )}
-              </ComboboxItem>
-            );
-          }}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
+                — ignore —
+              </CommandItem>
+              {options.map((item) => {
+                const isUsed =
+                  usedTargets?.has(item.value) && item.value !== value;
+                return (
+                  <CommandItem
+                    key={item.value}
+                    value={item.label}
+                    disabled={isUsed}
+                    data-checked={item.value === value}
+                    onSelect={() => {
+                      onChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="flex-1 truncate">{item.label}</span>
+                    {isUsed && (
+                      <span className="text-[10px] text-muted-foreground">
+                        already mapped
+                      </span>
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

@@ -223,6 +223,20 @@ export function StepGroups({
           )}
         </div>
       )}
+
+      {groupAssignment.mode === "column" && (
+        <MemberGroupAssignmentField
+          categories={manageableGroupCategories}
+          groupIds={groupAssignment.fixedGroupIds}
+          description="Additionally assign all imported members to these groups (e.g. for org unit or other categories not covered by the column mapping)."
+          onChange={(ids) =>
+            onGroupAssignmentChange({
+              ...groupAssignment,
+              fixedGroupIds: ids,
+            })
+          }
+        />
+      )}
     </div>
   );
 }
