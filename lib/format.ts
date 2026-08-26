@@ -8,3 +8,13 @@ export function formatDateTime(date: Date | string | null | undefined) {
     timeStyle: "short",
   }).format(new Date(date));
 }
+
+export function formatDate(date: Date | string | null | undefined) {
+  if (!date) {
+    return "Not set";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+  }).format(new Date(date));
+}

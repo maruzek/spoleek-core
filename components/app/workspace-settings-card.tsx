@@ -33,6 +33,7 @@ import {
   saveWorkspaceSettingsAction,
   setWorkspaceOrgUnitCategoryAction,
 } from "@/server/actions/organization-settings";
+import { formatDate } from "@/lib/format";
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
 import {
   MEMBER_FIELD_OPTIONS,
@@ -79,24 +80,8 @@ export function WorkspaceSettingsCard({
   );
   const [isConnecting, startConnecting] = useTransition();
 
-  const saveAction = useAction(saveWorkspaceSettingsAction, {
-    onSuccess() {
-      toast.success("Workspace settings saved.");
-      router.refresh();
-    },
-    onError({ error }) {
-      toast.error(error.serverError ?? "Could not save settings.");
-    },
-  });
-  const orgUnitCategoryAction = useAction(setWorkspaceOrgUnitCategoryAction, {
-    onSuccess() {
-      toast.success("Org unit category saved.");
-      router.refresh();
-    },
-    onError({ error }) {
-      toast.error(error.serverError ?? "Could not save org unit category.");
-    },
-  });
+  const saveAction = useAction(saveWorkspaceSettingsAction);
+  const orgUnitCategoryAction = useAction(setWorkspaceOrgUnitCategoryAction);
   const disconnectAction = useAction(disconnectWorkspaceAction, {
     onSuccess() {
       toast.success("Workspace disconnected.");
@@ -123,17 +108,42 @@ export function WorkspaceSettingsCard({
       prev.map((f) => (f.fieldKey === fieldKey ? { ...f, source } : f)),
     );
   };
-  const provisionFieldsAction = useAction(saveWorkspaceProvisionFieldsAction, {
-    onSuccess() {
-      toast.success("Account creation fields saved.");
+  const provisionFieldsAction = useAction(saveWorkspaceProvisionFieldsAction);
+
+  const [isSaving, startSaving] = useTransition();
+
+  const handleSaveAll = () => {
+    startSaving(async () => {
+      const results = await Promise.all([
+        saveAction.executeAsync({
+          moduleEnabled,
+          workspaceDomain: domain.trim() || null,
+          emailTemplate: template.trim() || null,
+          defaultEmailPreference,
+        }),
+        ...(state.connected
+          ? [
+              orgUnitCategoryAction.executeAsync({
+                categoryId:
+                  orgUnitCategoryId === NONE_SENTINEL ? null : orgUnitCategoryId,
+              }),
+              provisionFieldsAction.executeAsync({
+                fields: provisionFields.filter((f) => f.enabled),
+              }),
+            ]
+          : []),
+      ]);
+
+      const firstError = results.find((r) => r?.serverError)?.serverError;
+      if (firstError) {
+        toast.error(firstError);
+        return;
+      }
+
+      toast.success("Workspace settings saved.");
       router.refresh();
-    },
-    onError({ error }) {
-      toast.error(
-        error.serverError ?? "Could not save account creation fields.",
-      );
-    },
-  });
+    });
+  };
 
   const localPreview = useMemo(
     () =>
@@ -181,6 +191,70 @@ export function WorkspaceSettingsCard({
           aria-label="Enable Workspace module"
         />
       </div>
+
+      {state.connected ? (
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 px-4 py-3">
+          <div className="text-sm text-muted-foreground">
+            Connected as{" "}
+            <span className="font-medium text-foreground">
+              {state.adminEmail ?? "a super-admin"}
+            </span>
+            {state.connectedAt ? (
+              <>
+                {" "}
+                since{" "}
+                <span className="font-medium text-foreground">
+                  {formatDate(state.connectedAt)}
+                </span>
+              </>
+            ) : null}
+            .
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Disconnecting stops new Workspace account creation and org unit
+            syncing. Existing Workspace accounts and members keep working, but
+            you&apos;ll need to reconnect before approving members or managing
+            accounts here again.
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            className="self-start"
+            onClick={() => disconnectAction.execute({})}
+            disabled={disconnectAction.isPending}
+          >
+            <UnlinkIcon data-icon="inline-start" />
+            {disconnectAction.isPending ? "Disconnecting…" : "Disconnect"}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/40 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Connect as a Google Workspace super-admin. Spoleek needs the{" "}
+            <code>admin.directory.user</code> scope so it can create new user
+            accounts on your domain.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            disabled={!moduleEnabled || !canEnable || isConnecting}
+            onClick={() => {
+              startConnecting(() => {
+                window.location.href = "/api/workspace/oauth/start";
+              });
+            }}
+          >
+            {isConnecting ? (
+              <Loader2Icon className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <LinkIcon data-icon="inline-start" />
+            )}
+            Connect Google Workspace
+            <ExternalLinkIcon data-icon="inline-end" />
+          </Button>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
@@ -273,45 +347,29 @@ export function WorkspaceSettingsCard({
               org unit path.
             </p>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex min-w-[240px] flex-1 flex-col gap-2">
-              <Select
-                value={orgUnitCategoryId}
-                onValueChange={setOrgUnitCategoryId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="None — disable org unit sync" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_SENTINEL}>None</SelectItem>
-                  {state.groupCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {orgUnitCategoryId !== NONE_SENTINEL ? (
-                <p className="text-xs text-muted-foreground">
-                  Saving will enforce single selection, required, and admin-only
-                  join on this category.
-                </p>
-              ) : null}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                orgUnitCategoryAction.execute({
-                  categoryId: orgUnitCategoryId === NONE_SENTINEL ? null : orgUnitCategoryId,
-                })
-              }
-              disabled={orgUnitCategoryAction.isPending}
+          <div className="flex min-w-[240px] flex-col gap-2">
+            <Select
+              value={orgUnitCategoryId}
+              onValueChange={setOrgUnitCategoryId}
             >
-              {orgUnitCategoryAction.isPending
-                ? "Saving…"
-                : "Save org unit category"}
-            </Button>
+              <SelectTrigger>
+                <SelectValue placeholder="None — disable org unit sync" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_SENTINEL}>None</SelectItem>
+                {state.groupCategories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {orgUnitCategoryId !== NONE_SENTINEL ? (
+              <p className="text-xs text-muted-foreground">
+                Saving will enforce single selection, required, and admin-only
+                join on this category.
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -319,11 +377,11 @@ export function WorkspaceSettingsCard({
       {state.connected ? (
         <div className="flex flex-col gap-3 rounded-xl border p-4">
           <div className="flex flex-col gap-1">
-            <Label>Account creation fields</Label>
+            <Label>Provisioning fields</Label>
             <p className="text-xs text-muted-foreground">
-              Configure which additional fields are collected when provisioning
-              Workspace accounts. These apply during member approval, import,
-              and manual creation.
+              These fields are filled in automatically when a member&apos;s
+              Workspace account is created — during approval, import, or
+              manual creation.
             </p>
           </div>
 
@@ -515,97 +573,18 @@ export function WorkspaceSettingsCard({
               })}
             </div>
           </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="self-start"
-            onClick={() =>
-              provisionFieldsAction.execute({
-                fields: provisionFields.filter((f) => f.enabled),
-              })
-            }
-            disabled={provisionFieldsAction.isPending}
-          >
-            {provisionFieldsAction.isPending
-              ? "Saving…"
-              : "Save account creation fields"}
-          </Button>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="border-t pt-4">
         <Button
           type="button"
-          onClick={() =>
-            saveAction.execute({
-              moduleEnabled,
-              workspaceDomain: domain.trim() || null,
-              emailTemplate: template.trim() || null,
-              defaultEmailPreference,
-            })
-          }
-          disabled={saveAction.isPending || (moduleEnabled && !canEnable)}
+          onClick={handleSaveAll}
+          disabled={isSaving || (moduleEnabled && !canEnable)}
         >
-          {saveAction.isPending ? "Saving…" : "Save settings"}
+          {isSaving ? "Saving…" : "Save changes"}
         </Button>
-
-        {state.connected ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => disconnectAction.execute({})}
-            disabled={disconnectAction.isPending}
-          >
-            <UnlinkIcon data-icon="inline-start" />
-            {disconnectAction.isPending ? "Disconnecting…" : "Disconnect"}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!moduleEnabled || !canEnable || isConnecting}
-            onClick={() => {
-              startConnecting(() => {
-                window.location.href = "/api/workspace/oauth/start";
-              });
-            }}
-          >
-            {isConnecting ? (
-              <Loader2Icon className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <LinkIcon data-icon="inline-start" />
-            )}
-            Connect Google Workspace
-            <ExternalLinkIcon data-icon="inline-end" />
-          </Button>
-        )}
       </div>
-
-      {state.connected ? (
-        <div className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Connected as{" "}
-          <span className="font-medium text-foreground">
-            {state.adminEmail ?? "a super-admin"}
-          </span>
-          {state.connectedAt ? (
-            <>
-              {" "}
-              since{" "}
-              <span className="font-medium text-foreground">
-                {new Date(state.connectedAt).toLocaleDateString()}
-              </span>
-            </>
-          ) : null}
-          .
-        </div>
-      ) : moduleEnabled ? (
-        <div className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Connect as a Google Workspace super-admin. Spoleek needs the{" "}
-          <code>admin.directory.user</code> scope so it can create new user
-          accounts on your domain.
-        </div>
-      ) : null}
     </div>
   );
 }
