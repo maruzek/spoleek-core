@@ -68,10 +68,14 @@ type StepGate = {
 };
 ```
 
-The dialog holds `Record<WizardStep, StepGate>` in state; steps push changes
-through an `onGateChange` prop. The footer renders purely from the active
-step's gate, with no step-specific branching — the absence of that rule is
-what let the current footer drift.
+The dialog derives `Record<WizardStep, StepGate>` in one `useMemo`. It already
+owns every input a gate needs — `csvRows`, `columnMappings`, `groupAssignment`,
+`workspaceMatches` — so steps do not push gates upward. The single exception is
+Workspace, whose `busy` depends on async state private to the step; it reports
+that one flag through an `onBusyChange` prop and the dialog composes the rest.
+
+The footer renders purely from the active step's gate, with no step-specific
+branching — the absence of that rule is what let the current footer drift.
 
 | Gate | Footer right button |
 | --- | --- |
@@ -105,8 +109,12 @@ Steps that declare `pending`:
 - **groups** — `mode === "column"` and *every* column value maps to null.
   Partial mapping is a legitimate choice and stays silent; zero mapping is
   almost always a mistake.
-- **preview** — reassembly discarded prior cell edits (see D4).
-- No other step declares it.
+- No other step declares it. Preview was originally going to declare `pending`
+  when reassembly discarded cell edits, but that confirm would fire *after* the
+  loss rather than before it. The fingerprint guard now prevents the loss in the
+  only case where it was avoidable; when reassembly is genuinely correct
+  (mapping, groups, or links changed), preview shows an inline notice saying the
+  rows were rebuilt. Disclosure, not a confirm.
 
 ### 3. Workspace step rebuilt
 
@@ -114,10 +122,11 @@ Steps that declare `pending`:
 
 | File | Responsibility |
 | --- | --- |
-| `step-workspace-sync.tsx` | orchestration, server actions, gate reporting |
+| `step-workspace-sync.tsx` | orchestration, server actions, busy reporting |
 | `workspace-row-table.tsx` | the unified row table |
 | `workspace-row-fields.tsx` | expandable per-row provision fields (lifted unchanged) |
 | `workspace-actions-bar.tsx` | search and create-accounts batch actions |
+| `workspace-field-resolution.ts` | pure auto-fill resolution, lifted out of the component |
 
 The three phases are not parallel modes. They are a funnel over one dataset:
 auto-match by email, search the leftovers, create accounts for what remains.

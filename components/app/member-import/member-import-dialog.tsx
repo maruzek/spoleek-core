@@ -35,6 +35,7 @@ import { StepMapFields } from "./step-map-fields";
 import { StepPreview } from "./step-preview";
 import { StepUpload } from "./step-upload";
 import { StepWorkspaceSync } from "./step-workspace-sync";
+import { WizardFooter } from "./wizard-footer";
 import {
   STEP_LABELS,
   type FieldTarget,
@@ -42,6 +43,7 @@ import {
   type ImportDialogProps,
   type ImportResult,
   type ParsedRow,
+  type StepGate,
   type WizardStep,
   type WorkspaceMatch,
 } from "./types";
@@ -79,9 +81,9 @@ export function MemberImportDialog({
   );
   const [editableRows, setEditableRows] = useState<ImportMemberRow[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [prevAssembledStep, setPrevAssembledStep] = useState<WizardStep | null>(
-    null,
-  );
+  const [assembledFrom, setAssembledFrom] = useState<string | null>(null);
+  const [editsReset, setEditsReset] = useState(false);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
 
   const fieldOptions = useMemo(
     () => buildFieldOptions(customFields, workspaceReady),
@@ -134,7 +136,9 @@ export function MemberImportDialog({
       setImportStatus("active");
       setEditableRows([]);
       setImportResult(null);
-      setPrevAssembledStep(null);
+      setAssembledFrom(null);
+      setEditsReset(false);
+      setWorkspaceBusy(false);
     }
   }
 
@@ -257,14 +261,31 @@ export function MemberImportDialog({
     });
   }, [csvRows, columnMappings, groupAssignment, importStatus, workspaceMatches]);
 
+  // Everything upstream that feeds assembleRows(). Re-entering preview with an
+  // unchanged fingerprint keeps the user's cell edits; only a real upstream
+  // change discards them (and says so, via `editsReset`).
+  const assemblyFingerprint = useMemo(
+    () =>
+      JSON.stringify([
+        csvRows.length,
+        columnMappings,
+        groupAssignment,
+        importStatus,
+        [...workspaceMatches.entries()].map(([i, m]) => [
+          i,
+          m.workspaceUserId,
+        ]),
+      ]),
+    [csvRows, columnMappings, groupAssignment, importStatus, workspaceMatches],
+  );
+
   // Assemble rows synchronously the moment we enter preview, before it renders —
   // a useEffect here would run one tick too late, mounting StepPreview with
   // stale/empty data first (it only seeds its state from props once, on mount).
-  if (activeStep === "preview" && prevAssembledStep !== "preview") {
+  if (activeStep === "preview" && assembledFrom !== assemblyFingerprint) {
     setEditableRows(assembleRows());
-    setPrevAssembledStep("preview");
-  } else if (activeStep !== "preview" && prevAssembledStep === "preview") {
-    setPrevAssembledStep(null);
+    setEditsReset(assembledFrom !== null);
+    setAssembledFrom(assemblyFingerprint);
   }
 
   // ── Import action ──
@@ -285,29 +306,79 @@ export function MemberImportDialog({
     await importAction.executeAsync({ rows: editableRows });
   }, [editableRows, importAction]);
 
-  // ── Step navigation ──
-  const canAdvanceFrom = useCallback(
-    (step: WizardStep): boolean => {
-      if (step === "upload") return csvRows.length > 0;
-      if (step === "map") {
-        const mapped = Object.values(columnMappings);
-        return mapped.includes("first_name") || mapped.includes("last_name");
-      }
-      return true;
-    },
-    [csvRows, columnMappings],
-  );
+  // ── Step gates ──
+  // Each step's constraints in one place; the footer reads nothing else.
+  const unlinkedCount = csvRows.length - workspaceMatches.size;
 
+  const gates = useMemo<Partial<Record<WizardStep, StepGate>>>(() => {
+    const mapped = Object.values(columnMappings);
+    const hasName =
+      mapped.includes("first_name") || mapped.includes("last_name");
+
+    const groupColumnUnmapped =
+      groupAssignment.mode === "column" &&
+      groupAssignment.columnMapping != null &&
+      Object.keys(groupAssignment.columnMapping.valueToGroupId).length > 0 &&
+      Object.values(groupAssignment.columnMapping.valueToGroupId).every(
+        (id) => id == null,
+      ) &&
+      groupAssignment.fixedGroupIds.length === 0;
+
+    return {
+      upload:
+        csvRows.length === 0
+          ? { blocked: { reason: "Upload a CSV file to continue" } }
+          : {},
+      map: hasName
+        ? {}
+        : {
+            blocked: {
+              reason: "Map a First Name or Last Name column to continue",
+            },
+          },
+      groups: groupColumnUnmapped
+        ? {
+            pending: {
+              summary: "No group mapping set",
+              detail:
+                "You picked a CSV column for groups but none of its values are mapped to a Spoleek group, so no member will be added to any group.",
+            },
+          }
+        : {},
+      workspace: {
+        busy: workspaceBusy,
+        ...(unlinkedCount > 0
+          ? {
+              pending: {
+                summary: `${unlinkedCount} row${unlinkedCount !== 1 ? "s" : ""} have no Workspace account`,
+                detail:
+                  "They will be imported as members without a linked Google account. You can link them later from the member list.",
+              },
+            }
+          : {}),
+      },
+    };
+  }, [
+    csvRows,
+    columnMappings,
+    groupAssignment,
+    workspaceBusy,
+    unlinkedCount,
+  ]);
+
+  const activeGate = gates[activeStep] ?? {};
+
+  // ── Step navigation ──
   const goToStep = useCallback(
     (next: WizardStep) => {
       if (
         activeSteps.indexOf(next) > activeSteps.indexOf(activeStep) &&
-        !canAdvanceFrom(activeStep)
+        gates[activeStep]?.blocked
       )
         return;
       setActiveStep(next);
     },
-    [activeStep, activeSteps, canAdvanceFrom],
+    [activeStep, activeSteps, gates],
   );
 
   const goNext = useCallback(() => {
@@ -356,20 +427,29 @@ export function MemberImportDialog({
 
         {/* Stepper header */}
         <div className="shrink-0 border-b px-6 py-3">
-          <Stepper value={activeStep} nonInteractive className="gap-0">
+          {/* `importing` and `done` are not rendered as steps, so the stepper
+              is parked on the last visible one rather than losing its place. */}
+          <Stepper
+            value={
+              activeStep === "importing" || activeStep === "done"
+                ? "preview"
+                : activeStep
+            }
+            nonInteractive
+            className="gap-0"
+          >
             <StepperList className="gap-1">
               {activeSteps
                 .filter((s) => s !== "importing" && s !== "done")
                 .map((step, idx, arr) => (
-                  <StepperItem
-                    key={step}
-                    value={step}
-                    completed={
-                      activeSteps.indexOf(activeStep) >
-                      activeSteps.indexOf(step)
-                    }
-                    className="shrink"
-                  >
+                  // No `completed` prop on purpose: StepperItem re-registers
+                  // itself whenever `completed` changes, and registration is a
+                  // Map.set that moves the step to the end of the insertion
+                  // order. That scrambles every index the stepper derives —
+                  // indicator numbers and which separator counts as last.
+                  // getDataState already marks earlier steps completed from
+                  // the active value alone, so the prop is redundant here.
+                  <StepperItem key={step} value={step} className="shrink">
                     <StepperTrigger className="flex items-center gap-1.5 px-2 py-1">
                       <StepperIndicator className="size-5 rounded-full text-[10px]" />
                       <StepperTitle className="hidden text-xs sm:block">
@@ -429,7 +509,7 @@ export function MemberImportDialog({
                 groupAssignment={groupAssignment}
                 workspaceMatches={workspaceMatches}
                 onWorkspaceMatchesChange={setWorkspaceMatches}
-                onSkip={goNext}
+                onBusyChange={setWorkspaceBusy}
                 provisionFields={workspaceProvisionFields}
                 groupsById={groupsById}
                 orgUnitCategoryId={orgUnitCategoryId}
@@ -443,6 +523,7 @@ export function MemberImportDialog({
                 importStatus={importStatus}
                 onImportStatusChange={setImportStatus}
                 duplicateEmails={duplicateEmails}
+                editsReset={editsReset}
               />
             )}
 
@@ -467,56 +548,47 @@ export function MemberImportDialog({
         </div>
 
         {/* Footer nav */}
-        <div className="flex shrink-0 items-center justify-between border-t px-6 py-4">
-          {activeStep === "done" ? (
-            <div className="flex w-full justify-end">
-              <Button
-                onClick={() => {
-                  onOpenChange(false);
-                  onDone();
-                }}
-              >
-                Close &amp; Refresh
-              </Button>
-            </div>
-          ) : activeStep === "importing" ? (
-            <div className="w-full" />
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                onClick={goPrev}
-                disabled={activeStep === "upload"}
-              >
-                Back
-              </Button>
-              <div className="flex items-center gap-2">
-                {activeStep === "preview" ? (
-                  <Button
-                    onClick={() => void triggerImport()}
-                    disabled={importAction.isPending}
-                  >
-                    {importAction.isPending ? (
-                      <Spinner data-icon="inline-start" />
-                    ) : (
-                      <UploadIcon data-icon="inline-start" />
-                    )}
-                    {importAction.isPending
-                      ? "Importing…"
-                      : `Import ${editableRows.length} member${editableRows.length !== 1 ? "s" : ""}`}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={goNext}
-                    disabled={!canAdvanceFrom(activeStep)}
-                  >
-                    Continue
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+        {activeStep === "done" ? (
+          <div className="flex shrink-0 justify-end border-t px-6 py-4">
+            <Button
+              onClick={() => {
+                onOpenChange(false);
+                onDone();
+              }}
+            >
+              Close &amp; Refresh
+            </Button>
+          </div>
+        ) : activeStep === "importing" ? (
+          <div className="shrink-0 border-t px-6 py-4" />
+        ) : activeStep === "preview" ? (
+          <WizardFooter
+            gate={{ busy: importAction.isPending }}
+            nextLabel={
+              importAction.isPending
+                ? "Importing…"
+                : `Import ${editableRows.length} member${editableRows.length !== 1 ? "s" : ""}`
+            }
+            nextIcon={
+              importAction.isPending ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <UploadIcon data-icon="inline-start" />
+              )
+            }
+            onBack={goPrev}
+            backDisabled={false}
+            onNext={() => void triggerImport()}
+          />
+        ) : (
+          <WizardFooter
+            gate={activeGate}
+            nextLabel="Continue"
+            onBack={goPrev}
+            backDisabled={activeStep === "upload"}
+            onNext={goNext}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

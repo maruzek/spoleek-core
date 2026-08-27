@@ -22,10 +22,6 @@ export function StepMapFields({
   fieldOptions: { value: FieldTarget; label: string }[];
   onMappingChange: (header: string, value: FieldTarget | null) => void;
 }) {
-  const hasName = Object.values(columnMappings).some(
-    (v) => v === "first_name" || v === "last_name",
-  );
-
   const usedTargets = useMemo(() => {
     const targets = Object.values(columnMappings).filter(
       (v): v is FieldTarget => v != null,
@@ -40,6 +36,9 @@ export function StepMapFields({
     return new Set(targets).size < targets.length;
   }, [columnMappings]);
 
+  const mappedCount = Object.values(columnMappings).filter(Boolean).length;
+  const ignoredCount = csvHeaders.length - mappedCount;
+
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -48,7 +47,27 @@ export function StepMapFields({
           Assign each column in your file to a Spoleek field. At least one name
           field (First Name or Last Name) must be mapped.
         </p>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          <strong className="text-foreground">
+            {mappedCount} of {csvHeaders.length}
+          </strong>{" "}
+          column{csvHeaders.length !== 1 ? "s" : ""} mapped
+          {ignoredCount > 0 && ` · ${ignoredCount} ignored`}
+        </p>
       </div>
+
+      {/* Warnings sit above the table so they are seen before the work, not
+          after scrolling past it. The "map a name column" case is not repeated
+          here — the footer states it next to the disabled Continue button. */}
+      {hasDuplicates && (
+        <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+          <AlertTriangleIcon className="text-amber-600" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            Some fields are mapped to multiple columns. Only the last column for
+            each field will take effect.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="overflow-hidden rounded-xl border">
         <div className="grid grid-cols-2 gap-px bg-border text-xs font-medium text-muted-foreground">
@@ -85,24 +104,6 @@ export function StepMapFields({
         </div>
       </div>
 
-      {hasDuplicates && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          <AlertTriangleIcon className="text-amber-600" />
-          <AlertDescription className="text-amber-800 dark:text-amber-200">
-            Some fields are mapped to multiple columns. Only the last column for
-            each field will take effect.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {!hasName && (
-        <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
-          <AlertTriangleIcon className="text-amber-600" />
-          <AlertDescription className="text-amber-800 dark:text-amber-200">
-            Map at least one name column (First Name or Last Name) to continue.
-          </AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }

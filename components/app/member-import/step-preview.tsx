@@ -2,10 +2,9 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { AlertTriangleIcon, InfoIcon, UsersIcon } from "lucide-react";
+import { AlertTriangleIcon, InfoIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -136,12 +135,14 @@ export function StepPreview({
   importStatus,
   onImportStatusChange,
   duplicateEmails,
+  editsReset,
 }: {
   editableRows: ImportMemberRow[];
   onRowsChange: (rows: ImportMemberRow[]) => void;
   importStatus: "active" | "pending";
   onImportStatusChange: (status: "active" | "pending") => void;
   duplicateEmails: string[];
+  editsReset: boolean;
 }) {
   const [rows, setRows] = useState(initialRows);
   const rowsRef = useRef(rows);
@@ -231,19 +232,23 @@ export function StepPreview({
       <div>
         <h2 className="text-base font-semibold">Review & Confirm</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Check and edit the import data before proceeding.
+          Check and edit the import data before proceeding. Nothing is ever
+          deleted — rows matching an existing member by email update that
+          member, everything else creates a new one.
         </p>
       </div>
 
-      <Alert>
-        <InfoIcon />
-        <AlertTitle>Additive import only</AlertTitle>
-        <AlertDescription>
-          This import will never delete members. Existing members matched by
-          email address will be <strong>updated</strong> with the new data. All
-          other rows will create new member records.
-        </AlertDescription>
-      </Alert>
+      {editsReset && (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>Rows rebuilt from your changes</AlertTitle>
+          <AlertDescription>
+            You changed the mapping, groups, or Workspace links after editing
+            this table, so the rows were regenerated and any cell edits were
+            replaced.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {duplicateEmails.length > 0 && (
         <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
@@ -276,20 +281,6 @@ export function StepPreview({
           />
           <span className="text-xs text-muted-foreground">Active</span>
         </div>
-      </div>
-
-      <div className="flex items-center gap-2 rounded-lg border px-4 py-3">
-        <UsersIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm">
-          <strong>{rows.length}</strong> row
-          {rows.length !== 1 ? "s" : ""} will be imported with status{" "}
-          <Badge
-            variant={importStatus === "active" ? "default" : "secondary"}
-            className="text-xs"
-          >
-            {importStatus}
-          </Badge>
-        </span>
       </div>
 
       {/* Virtualized editable table */}
