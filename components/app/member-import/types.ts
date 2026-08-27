@@ -103,6 +103,8 @@ export type WorkspaceRowView = {
   expanded: boolean;
   fieldValues: WorkspaceFieldValues;
   requiredMissing: boolean;
+  /** Field key → format error (e.g. a phone that is not E.164). */
+  fieldErrors: Record<string, string>;
 };
 
 export interface ImportDialogProps {
@@ -114,6 +116,8 @@ export interface ImportDialogProps {
   workspaceProvisionFields?: EnabledProvisionField[];
   groupsById?: Map<string, ImportGroupInfo>;
   orgUnitCategoryId?: string | null;
+  /** Org country (ISO-3166 alpha-2) used to complete local phone numbers. */
+  defaultPhoneCountry?: string;
   onDone: () => void;
 }
 

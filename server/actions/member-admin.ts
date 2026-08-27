@@ -1108,7 +1108,15 @@ export const createWorkspaceAccountAction = authActionClient
       };
     }
 
-    if (parsedInput.sendWelcomeEmail) {
+    // The welcome email carries the temporary password, so it is only useful
+    // in an inbox the member can already open. Sending it to `primaryEmail`
+    // (the Workspace mailbox we just created) locks the credentials inside the
+    // account they unlock.
+    const notifyEmail = parsedInput.notifyEmail?.trim().toLowerCase();
+    const canNotify = Boolean(notifyEmail) && notifyEmail !== primaryEmail.toLowerCase();
+    let welcomeEmailSent = false;
+
+    if (parsedInput.sendWelcomeEmail && canNotify) {
       const [org] = await db
         .select({ name: organizations.name })
         .from(organizations)
@@ -1125,18 +1133,25 @@ export const createWorkspaceAccountAction = authActionClient
       try {
         const resend = getResendClient();
         const from = getResendFromEmail();
-        await resend.emails.send({
-          from,
-          to: [primaryEmail],
-          subject: `Your ${organizationName} account is ready`,
-          react: WorkspaceWelcomeEmail({
-            organizationName,
-            memberName,
-            workspaceEmail: primaryEmail,
-            temporaryPassword: password,
-            signInUrl,
-          }),
-        });
+        const { error } = await resend.emails.send(
+          {
+            from,
+            to: [notifyEmail!],
+            subject: `Your ${organizationName} account is ready`,
+            react: WorkspaceWelcomeEmail({
+              organizationName,
+              memberName,
+              workspaceEmail: primaryEmail,
+              temporaryPassword: password,
+              signInUrl,
+            }),
+          },
+          {
+            idempotencyKey: `workspace-welcome/${workspaceUserId}`,
+          },
+        );
+        if (error) throw new Error(error.message);
+        welcomeEmailSent = true;
       } catch {
         // Account created successfully, email failed — still a success
       }
@@ -1146,6 +1161,9 @@ export const createWorkspaceAccountAction = authActionClient
       success: true as const,
       workspaceUserId,
       primaryEmail,
+      welcomeEmailSent,
+      /** Set when the caller asked for a welcome email we could not address. */
+      welcomeEmailSkipped: parsedInput.sendWelcomeEmail && !canNotify,
     };
   });
 

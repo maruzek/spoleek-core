@@ -86,6 +86,13 @@ export const createWorkspaceAccountSchema = z.object({
   firstName: z.string().min(1),
   lastName: z.string().min(1),
   primaryEmail: z.email(),
+  /**
+   * Personal inbox the welcome email (with the temporary password) goes to.
+   * Never `primaryEmail` — that mailbox cannot be opened without the very
+   * password the email carries. Omitted means "no reachable inbox", and the
+   * welcome email is skipped rather than sent somewhere useless.
+   */
+  notifyEmail: z.email().optional(),
   sendWelcomeEmail: z.boolean().default(true),
   extraFields: z
     .record(z.string(), z.union([z.string(), z.boolean()]))

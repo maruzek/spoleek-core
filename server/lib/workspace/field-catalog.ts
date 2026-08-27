@@ -1,3 +1,5 @@
+import { E164_HINT, isE164, normalizeToE164 } from "@/lib/phone";
+
 export type WorkspaceFieldType = "string" | "boolean" | "email" | "phone";
 
 export type WorkspaceFieldDefinition = {
@@ -59,6 +61,15 @@ export const WORKSPACE_FIELD_CATALOG: WorkspaceFieldDefinition[] = [
     placeholder: "user@personal.com",
     description: "Personal email for account recovery.",
     apiPath: "recoveryEmail",
+  },
+  {
+    key: "secondaryEmail",
+    label: "Secondary Email",
+    type: "email",
+    placeholder: "user@personal.com",
+    description:
+      "Additional non-primary address listed on the Workspace account.",
+    apiPath: "emails[0].address",
   },
   {
     key: "recoveryPhone",
@@ -200,6 +211,15 @@ export function buildGoogleApiExtraFields(
         value,
         type: "manager",
       });
+    } else if (def.apiPath === "emails[0].address") {
+      // Google keeps the primary address in `primaryEmail`; anything in the
+      // `emails` array is a secondary address. "home" is what the Admin
+      // console renders as the user's personal/secondary email.
+      setNestedPath(body, "emails[0]", {
+        address: value,
+        type: "home",
+        primary: false,
+      });
     } else if (def.apiPath === "phones[0].value") {
       setNestedPath(body, "phones[0]", {
         value,
@@ -220,7 +240,85 @@ export function buildGoogleApiExtraFields(
   return body;
 }
 
+// --- Normalization ---
+
+/**
+ * Bring raw values into the shape the Google Directory API expects.
+ *
+ * Phone-typed fields (Recovery Phone, Phone Number) must be strictly E.164 —
+ * Google rejects anything else — so a number written the way people actually
+ * write it is converted here, using `defaultCountry` to complete a number
+ * given in local form. Anything that cannot be completed is left as-is and
+ * caught by `validateWorkspaceFieldValues`.
+ */
+export function normalizeWorkspaceFieldValues(
+  values: WorkspaceFieldValues,
+  defaultCountry?: string | null,
+): WorkspaceFieldValues {
+  const normalized: WorkspaceFieldValues = {};
+
+  for (const [key, value] of Object.entries(values)) {
+    const def = WORKSPACE_FIELD_MAP.get(key);
+
+    if (typeof value !== "string" || !def) {
+      normalized[key] = value;
+      continue;
+    }
+
+    if (def.type === "phone") {
+      normalized[key] = normalizeToE164(value, defaultCountry);
+    } else if (def.type === "email") {
+      normalized[key] = value.trim().toLowerCase();
+    } else {
+      normalized[key] = value.trim();
+    }
+  }
+
+  return normalized;
+}
+
 // --- Validation ---
+
+/**
+ * Format-check one value. Returns the error message, or null when the value is
+ * acceptable (an empty value is "acceptable" here — required-ness is a
+ * separate, config-driven concern handled by `validateWorkspaceFieldValues`).
+ *
+ * Shared by the server actions and the provisioning UIs so an admin sees the
+ * same message inline that the server would have rejected the row with.
+ */
+export function getWorkspaceFieldFormatError(
+  fieldKey: string,
+  value: string | boolean | undefined,
+): string | null {
+  const def = WORKSPACE_FIELD_MAP.get(fieldKey);
+  if (!def || typeof value !== "string" || value === "") return null;
+
+  if (def.validation?.pattern) {
+    if (!new RegExp(def.validation.pattern).test(value)) {
+      return (
+        def.validation.patternMessage ?? `${def.label} has an invalid format.`
+      );
+    }
+  }
+
+  if (def.validation?.maxLength && value.length > def.validation.maxLength) {
+    return `${def.label} must be at most ${def.validation.maxLength} characters.`;
+  }
+
+  if (def.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+    return `${def.label} must be a valid email address.`;
+  }
+
+  // Google's Directory API only accepts E.164 phone numbers, so this is a
+  // hard requirement of the type rather than a per-field pattern that an
+  // admin could configure away.
+  if (def.type === "phone" && !isE164(value)) {
+    return `${def.label} must be in E.164 format. ${E164_HINT}`;
+  }
+
+  return null;
+}
 
 export function validateWorkspaceFieldValues(
   config: WorkspaceProvisionFieldConfig[],
@@ -228,43 +326,32 @@ export function validateWorkspaceFieldValues(
 ): { valid: true } | { valid: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
-  for (const field of config) {
-    if (!field.enabled) continue;
-    const def = WORKSPACE_FIELD_MAP.get(field.fieldKey);
+  // Anything with a value gets format-checked, even when it is not in the
+  // enabled config — a stray value still reaches Google and still has to be
+  // valid there.
+  const enabled = new Map(
+    config.filter((f) => f.enabled).map((f) => [f.fieldKey, f]),
+  );
+  const fieldKeys = new Set([...enabled.keys(), ...Object.keys(values)]);
+
+  for (const fieldKey of fieldKeys) {
+    const field = enabled.get(fieldKey);
+    const def = WORKSPACE_FIELD_MAP.get(fieldKey);
     if (!def) continue;
 
-    const val = values[field.fieldKey];
+    const val = values[fieldKey];
 
-    if (field.required) {
+    if (field?.required) {
       if (val === undefined || val === null || val === "") {
-        errors[field.fieldKey] = `${def.label} is required.`;
+        errors[fieldKey] = `${def.label} is required.`;
         continue;
       }
     }
 
     if (val === undefined || val === null || val === "") continue;
 
-    if (typeof val === "string" && def.validation?.pattern) {
-      const re = new RegExp(def.validation.pattern);
-      if (!re.test(val)) {
-        errors[field.fieldKey] =
-          def.validation.patternMessage ?? `${def.label} has an invalid format.`;
-      }
-    }
-
-    if (
-      typeof val === "string" &&
-      def.validation?.maxLength &&
-      val.length > def.validation.maxLength
-    ) {
-      errors[field.fieldKey] = `${def.label} must be at most ${def.validation.maxLength} characters.`;
-    }
-
-    if (def.type === "email" && typeof val === "string") {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(val)) {
-        errors[field.fieldKey] = `${def.label} must be a valid email address.`;
-      }
-    }
+    const formatError = getWorkspaceFieldFormatError(fieldKey, val);
+    if (formatError) errors[fieldKey] = formatError;
   }
 
   if (Object.keys(errors).length > 0) return { valid: false, errors };

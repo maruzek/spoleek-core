@@ -71,6 +71,7 @@ function SkeletonRows({
 export function WorkspaceRowTable({
   rows,
   provisionFields,
+  defaultPhoneCountry,
   loading,
   searching,
   onToggleExpanded,
@@ -84,6 +85,7 @@ export function WorkspaceRowTable({
 }: {
   rows: WorkspaceRowView[];
   provisionFields: EnabledProvisionField[];
+  defaultPhoneCountry?: string;
   /** Initial email lookup is running; row states are not yet meaningful. */
   loading: boolean;
   searching: boolean;
@@ -173,10 +175,16 @@ export function WorkspaceRowTable({
                             <ChevronRightIcon
                               className={`size-3 transition-transform ${row.expanded ? "rotate-90" : ""}`}
                             />
-                            {!row.expanded && row.requiredMissing ? (
+                            {!row.expanded &&
+                            (row.requiredMissing ||
+                              Object.keys(row.fieldErrors).length > 0) ? (
                               <span
                                 className="size-1.5 rounded-full bg-destructive"
-                                aria-label="A required account field is empty"
+                                aria-label={
+                                  row.requiredMissing
+                                    ? "A required account field is empty"
+                                    : "An account field has an invalid value"
+                                }
                               />
                             ) : null}
                           </button>
@@ -301,6 +309,8 @@ export function WorkspaceRowTable({
                         <WorkspaceRowFields
                           fields={provisionFields}
                           values={row.fieldValues}
+                          errors={row.fieldErrors}
+                          defaultPhoneCountry={defaultPhoneCountry}
                           onChange={(fieldKey, value) =>
                             onFieldChange(row.rowIdx, fieldKey, value)
                           }

@@ -2,9 +2,11 @@ import { and, eq, isNull } from "drizzle-orm";
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { db } from "@/server/db";
-import { workspaceConnections } from "@/server/db/schema";
+import { organizations, workspaceConnections } from "@/server/db/schema";
 import {
   buildGoogleApiExtraFields,
+  normalizeWorkspaceFieldValues,
+  validateWorkspaceFieldValues,
   type WorkspaceFieldValues,
 } from "@/server/lib/workspace/field-catalog";
 import { refreshWorkspaceAccessToken } from "@/server/lib/workspace/oauth";
@@ -16,6 +18,20 @@ export class WorkspaceNotConnectedError extends Error {
   constructor() {
     super("Google Workspace is not connected for this organization.");
     this.name = "WorkspaceNotConnectedError";
+  }
+}
+
+/**
+ * A provisioning field would be rejected by Google (a phone that is not
+ * E.164, a malformed email, …). Thrown before the request is sent so the
+ * caller gets a field-level message instead of an opaque Google 400.
+ */
+export class WorkspaceFieldValidationError extends Error {
+  errors: Record<string, string>;
+  constructor(errors: Record<string, string>) {
+    super(Object.values(errors).join(" "));
+    this.name = "WorkspaceFieldValidationError";
+    this.errors = errors;
   }
 }
 
@@ -207,8 +223,25 @@ export async function createWorkspaceUser(
   };
 
   if (input.extraFields && Object.keys(input.extraFields).length > 0) {
-    const extra = buildGoogleApiExtraFields(input.extraFields);
-    Object.assign(base, extra);
+    // Last line of defence, shared by every provisioning path: whatever the
+    // UI sent, the values that reach Google are normalized (E.164 phones in
+    // particular) and format-checked first.
+    const [org] = await db
+      .select({ countryCode: organizations.countryCode })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const extraFields = normalizeWorkspaceFieldValues(
+      input.extraFields,
+      org?.countryCode,
+    );
+    const validation = validateWorkspaceFieldValues([], extraFields);
+    if (!validation.valid) {
+      throw new WorkspaceFieldValidationError(validation.errors);
+    }
+
+    Object.assign(base, buildGoogleApiExtraFields(extraFields));
   }
 
   const response = await directoryFetch(orgId, "/users", {

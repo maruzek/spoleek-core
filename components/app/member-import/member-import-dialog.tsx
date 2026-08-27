@@ -57,6 +57,7 @@ export function MemberImportDialog({
   workspaceProvisionFields,
   groupsById,
   orgUnitCategoryId,
+  defaultPhoneCountry,
   onDone,
 }: ImportDialogProps) {
   // ── Wizard state ──
@@ -511,6 +512,7 @@ export function MemberImportDialog({
                 onWorkspaceMatchesChange={setWorkspaceMatches}
                 onBusyChange={setWorkspaceBusy}
                 provisionFields={workspaceProvisionFields}
+                defaultPhoneCountry={defaultPhoneCountry}
                 groupsById={groupsById}
                 orgUnitCategoryId={orgUnitCategoryId}
               />

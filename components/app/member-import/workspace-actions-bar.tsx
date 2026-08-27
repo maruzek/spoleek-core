@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  AlertTriangleIcon,
   LinkIcon,
   Loader2Icon,
   SearchIcon,
@@ -42,6 +43,7 @@ export function WorkspaceActionsBar({
   searchProgress,
   sendWelcomeEmail,
   onSendWelcomeEmailChange,
+  unnotifiableCount,
   onProvision,
   provisioning,
 }: {
@@ -58,6 +60,8 @@ export function WorkspaceActionsBar({
   searchProgress: { done: number; total: number } | null;
   sendWelcomeEmail: boolean;
   onSendWelcomeEmailChange: (value: boolean) => void;
+  /** Selected rows with no personal email — they cannot be sent a password. */
+  unnotifiableCount: number;
   onProvision: () => void;
   provisioning: boolean;
 }) {
@@ -197,10 +201,23 @@ export function WorkspaceActionsBar({
             <span>
               <span className="font-medium">Send a welcome email</span>
               <span className="mt-0.5 block text-muted-foreground">
-                Each new account is emailed its temporary password.
+                The temporary password goes to each member&apos;s personal
+                email — not to the new Google mailbox.
               </span>
             </span>
           </Label>
+
+          {sendWelcomeEmail && unnotifiableCount > 0 && (
+            <p className="mt-2 flex items-start gap-2 text-xs text-amber-700 dark:text-amber-500">
+              <AlertTriangleIcon className="mt-px size-3.5 shrink-0" />
+              <span>
+                {unnotifiableCount} selected row
+                {unnotifiableCount !== 1 ? "s have" : " has"} no personal email,
+                so no password will be sent. Map an{" "}
+                <strong>Email</strong> column to reach them.
+              </span>
+            </p>
+          )}
 
           <div className="mt-4 flex justify-end gap-2">
             <Button

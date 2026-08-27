@@ -70,6 +70,8 @@ type WorkspaceModuleProp = {
   enabled: boolean;
   connected: boolean;
   domain: string | null;
+  /** Org country, used to complete phone numbers written in local form. */
+  countryCode?: string;
 };
 
 type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
@@ -844,6 +846,7 @@ export function MemberAdmin({
         workspaceProvisionFields={workspaceProvisionFields}
         groupsById={groupsById}
         orgUnitCategoryId={orgUnitCategoryId}
+        defaultPhoneCountry={workspace.countryCode}
         onDone={() => router.refresh()}
       />
 
@@ -857,6 +860,7 @@ export function MemberAdmin({
         }}
         member={workspaceApproveMember}
         workspaceDomain={workspace.domain ?? ""}
+        defaultPhoneCountry={workspace.countryCode}
         isPending={approveAction.isPending}
         submitError={workspaceApproveError}
         provisionFields={workspaceProvisionFields}

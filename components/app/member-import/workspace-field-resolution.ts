@@ -1,4 +1,7 @@
-import { applyFormatTemplate } from "@/server/lib/workspace/field-catalog";
+import {
+  applyFormatTemplate,
+  normalizeWorkspaceFieldValues,
+} from "@/server/lib/workspace/field-catalog";
 import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 
@@ -69,6 +72,7 @@ export function resolveRowFieldValues(
   groupAssignment: GroupAssignmentConfig,
   groupsById: Map<string, ImportGroupInfo> | undefined,
   orgUnitCategoryId: string | null | undefined,
+  defaultPhoneCountry?: string | null,
 ): WorkspaceFieldValues {
   const result: WorkspaceFieldValues = {};
 
@@ -142,7 +146,13 @@ export function resolveRowFieldValues(
     }
 
     // 2. Smart fallback: derive from CSV mappings / group assignment
-    if (field.fieldKey === "recoveryEmail" && memberEmail) {
+    if (
+      (field.fieldKey === "recoveryEmail" ||
+        field.fieldKey === "secondaryEmail") &&
+      memberEmail
+    ) {
+      // Both default to the member's personal address from the CSV — it is
+      // the only email a brand-new account has besides the one being created.
       result[field.fieldKey] = memberEmail;
     } else if (field.fieldKey === "orgUnitPath") {
       // Prefer the group matching the org-unit category (if configured),
@@ -170,5 +180,8 @@ export function resolveRowFieldValues(
     }
   }
 
-  return result;
+  // CSV phone columns arrive as people type them ("+420 777 123 456",
+  // "777123456"); Google only accepts E.164, so the value an admin reviews in
+  // the table is already the value that will be sent.
+  return normalizeWorkspaceFieldValues(result, defaultPhoneCountry);
 }

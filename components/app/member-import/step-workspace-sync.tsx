@@ -11,7 +11,11 @@ import {
   searchWorkspaceUsersAction,
 } from "@/server/actions/member-admin";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
-import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
+import {
+  getWorkspaceFieldFormatError,
+  normalizeWorkspaceFieldValues,
+  type WorkspaceFieldValues,
+} from "@/server/lib/workspace/field-catalog";
 
 import { buildWorkspaceQuery } from "./helpers";
 import { resolveRowFieldValues } from "./workspace-field-resolution";
@@ -43,6 +47,7 @@ export function StepWorkspaceSync({
   onWorkspaceMatchesChange,
   onBusyChange,
   provisionFields = [],
+  defaultPhoneCountry,
   groupsById,
   orgUnitCategoryId,
 }: {
@@ -54,6 +59,7 @@ export function StepWorkspaceSync({
   onWorkspaceMatchesChange: (matches: Map<number, WorkspaceMatch>) => void;
   onBusyChange: (busy: boolean) => void;
   provisionFields?: EnabledProvisionField[];
+  defaultPhoneCountry?: string;
   groupsById?: Map<string, ImportGroupInfo>;
   orgUnitCategoryId?: string | null;
 }) {
@@ -221,6 +227,7 @@ export function StepWorkspaceSync({
           groupAssignment,
           groupsById,
           orgUnitCategoryId,
+          defaultPhoneCountry,
         );
         if (Object.keys(resolved).length > 0) resolvedByRow.set(rowIdx, resolved);
       }
@@ -352,11 +359,40 @@ export function StepWorkspaceSync({
           continue;
         }
 
-        const rowExtraFields = perRowExtraFields.get(rowIdx) ?? {};
+        // Normalize once more at the point of submission: an admin may have
+        // typed "+420 777 123 456" and never left the field.
+        const rowExtraFields = normalizeWorkspaceFieldValues(
+          perRowExtraFields.get(rowIdx) ?? {},
+          defaultPhoneCountry,
+        );
+
+        const invalid = Object.keys(rowExtraFields)
+          .map((key) =>
+            getWorkspaceFieldFormatError(key, rowExtraFields[key]),
+          )
+          .filter((error): error is string => Boolean(error));
+
+        if (invalid.length > 0) {
+          setPerRowExtraFields((prev) =>
+            new Map(prev).set(rowIdx, rowExtraFields),
+          );
+          setProvisioningStatus((prev) => ({ ...prev, [rowIdx]: "error" }));
+          setProvisionErrors((prev) => ({ ...prev, [rowIdx]: invalid[0]! }));
+          continue;
+        }
+
+        // The member's own inbox — deliberately `emailCol`, not `lookupCol`:
+        // lookupCol prefers the Workspace column, which is exactly the mailbox
+        // the welcome email must not be sent to.
+        const notifyEmail = emailCol
+          ? (csvRows[rowIdx]![emailCol] ?? "").trim().toLowerCase()
+          : "";
+
         const result = await createAccount.executeAsync({
           firstName,
           lastName,
           primaryEmail,
+          notifyEmail: notifyEmail || undefined,
           sendWelcomeEmail,
           extraFields:
             Object.keys(rowExtraFields).length > 0 ? rowExtraFields : undefined,
@@ -393,8 +429,10 @@ export function StepWorkspaceSync({
       csvRows,
       firstNameCol,
       lastNameCol,
+      emailCol,
       targetEmails,
       perRowExtraFields,
+      defaultPhoneCountry,
       sendWelcomeEmail,
       createAccount,
       onWorkspaceMatchesChange,
@@ -406,6 +444,14 @@ export function StepWorkspaceSync({
     () =>
       csvRows.map((row, rowIdx) => {
         const fieldValues = perRowExtraFields.get(rowIdx) ?? {};
+        const fieldErrors: Record<string, string> = {};
+        for (const field of provisionFields) {
+          const error = getWorkspaceFieldFormatError(
+            field.fieldKey,
+            fieldValues[field.fieldKey],
+          );
+          if (error) fieldErrors[field.fieldKey] = error;
+        }
         return {
           rowIdx,
           name: `${(row[firstNameCol ?? ""] ?? "").trim()} ${(row[lastNameCol ?? ""] ?? "").trim()}`.trim(),
@@ -422,6 +468,7 @@ export function StepWorkspaceSync({
             (f) =>
               f.required && f.type !== "boolean" && !(fieldValues[f.fieldKey] ?? ""),
           ),
+          fieldErrors,
         };
       }),
     [
@@ -443,6 +490,19 @@ export function StepWorkspaceSync({
 
   const selectedUnresolved = unresolvedIndices.filter((i) =>
     provisionSelection.has(i),
+  );
+
+  /**
+   * Selected rows we could create an account for but not tell anyone about:
+   * with no personal email there is no inbox to send the temporary password
+   * to, since the new Workspace mailbox needs that password to be opened.
+   */
+  const unnotifiableCount = useMemo(
+    () =>
+      selectedUnresolved.filter(
+        (i) => !emailCol || !(csvRows[i]![emailCol] ?? "").trim(),
+      ).length,
+    [selectedUnresolved, emailCol, csvRows],
   );
 
   // ── Bulk defaults for the yes/no account settings ──
@@ -556,6 +616,7 @@ export function StepWorkspaceSync({
           searchProgress={searchProgress}
           sendWelcomeEmail={sendWelcomeEmail}
           onSendWelcomeEmailChange={setSendWelcomeEmail}
+          unnotifiableCount={unnotifiableCount}
           onProvision={() => void provisionRows(selectedUnresolved)}
           provisioning={provisioning}
         />
@@ -572,6 +633,7 @@ export function StepWorkspaceSync({
       <WorkspaceRowTable
         rows={rows}
         provisionFields={provisionFields}
+        defaultPhoneCountry={defaultPhoneCountry}
         loading={lookupLoading}
         searching={searching}
         onToggleExpanded={(rowIdx) =>

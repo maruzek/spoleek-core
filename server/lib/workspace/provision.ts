@@ -10,6 +10,7 @@ import { logMemberAuthEvent } from "@/server/lib/member-invites";
 import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 import {
   WorkspaceApiError,
+  WorkspaceFieldValidationError,
   WorkspaceNotConnectedError,
   createWorkspaceUser,
 } from "@/server/lib/workspace/client";
@@ -30,6 +31,9 @@ export type ProvisionWorkspaceAccountResult =
   | { success: false; error: string; reason?: string };
 
 function classifyError(error: unknown): { message: string; reason?: string } {
+  if (error instanceof WorkspaceFieldValidationError) {
+    return { message: error.message, reason: "invalid_field" };
+  }
   if (error instanceof WorkspaceApiError) {
     if (error.status === 409 || error.reason === "duplicate") {
       return {

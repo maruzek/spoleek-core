@@ -4,6 +4,7 @@ import {
   buildMemberCustomFieldDisplayItems,
   extractAnswerValue,
 } from "@/lib/member-custom-fields";
+import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
 import type { CustomFieldValue } from "@/server/db/schema";
 import { db } from "@/server/db";
 import {
@@ -94,6 +95,8 @@ export type WorkspaceModuleState = {
   domain: string | null;
   emailTemplate: string;
   orgUnitCategoryId: string | null;
+  /** Org country (ISO-3166 alpha-2), used to complete local phone numbers. */
+  countryCode: string;
   provisionFields: import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[];
 };
 
@@ -709,6 +712,7 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
           workspaceDomain: organizationsTable.workspaceDomain,
           workspaceEmailTemplate: organizationsTable.workspaceEmailTemplate,
           workspaceProvisionFields: organizationsTable.workspaceProvisionFields,
+          countryCode: organizationsTable.countryCode,
         })
         .from(organizationsTable)
         .where(eq(organizationsTable.id, scope.organizationId))
@@ -746,6 +750,7 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
       emailTemplate:
         organization?.workspaceEmailTemplate ?? "{first}.{last}",
       orgUnitCategoryId: ouCategory?.id ?? null,
+      countryCode: organization?.countryCode ?? DEFAULT_PHONE_COUNTRY,
       provisionFields: (organization?.workspaceProvisionFields ?? []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[],
     },
   } satisfies MembersAdminPageData;
