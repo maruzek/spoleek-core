@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BellIcon, FileTextIcon, GlobeIcon, UsersIcon } from "lucide-react";
+import {
+  BellIcon,
+  FileTextIcon,
+  GlobeIcon,
+  Link2Icon,
+  UsersIcon,
+} from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { JoinPageSettingsForm } from "@/components/app/join-page-settings-form";
@@ -18,6 +24,8 @@ import {
   WorkspaceSettingsCard,
   type WorkspaceSettingsState,
 } from "@/components/app/workspace-settings-card";
+import { GroupLinksSettingsCard } from "@/components/app/group-links-settings-card";
+import type { GroupWorkspaceLinkRow } from "@/server/queries/workspace-group-links";
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 
 type AdminSettingsTabsProps = {
@@ -34,10 +42,17 @@ type AdminSettingsTabsProps = {
   membershipState: MembershipSettingsState;
   emailNotificationState: EmailNotificationSettingsState;
   workspaceState: WorkspaceSettingsState;
+  workspaceLinks: GroupWorkspaceLinkRow[];
   defaultTab?: string;
 };
 
-const VALID_TABS = ["join", "membership", "notifications", "workspace"] as const;
+const VALID_TABS = [
+  "join",
+  "membership",
+  "notifications",
+  "groups",
+  "workspace",
+] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 function toValidTab(tab: string | undefined): TabValue {
@@ -50,6 +65,7 @@ export function AdminSettingsTabs({
   membershipState,
   emailNotificationState,
   workspaceState,
+  workspaceLinks,
   defaultTab,
 }: AdminSettingsTabsProps) {
   const router = useRouter();
@@ -76,6 +92,10 @@ export function AdminSettingsTabs({
           <BellIcon data-icon="inline-start" />
           Notifications
         </TabsTrigger>
+        <TabsTrigger value="groups">
+          <Link2Icon data-icon="inline-start" />
+          Groups
+        </TabsTrigger>
         <TabsTrigger value="workspace">
           <GlobeIcon data-icon="inline-start" />
           Workspace
@@ -97,6 +117,15 @@ export function AdminSettingsTabs({
       <TabsContent value="notifications">
         <div className="max-w-2xl pt-6">
           <EmailNotificationSettingsCard state={emailNotificationState} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="groups">
+        <div className="pt-6">
+          <GroupLinksSettingsCard
+            links={workspaceLinks}
+            workspaceConnected={workspaceState.connected}
+          />
         </div>
       </TabsContent>
 

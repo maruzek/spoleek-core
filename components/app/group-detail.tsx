@@ -9,6 +9,7 @@ import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { GroupForm } from "@/components/app/group-form";
+import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { formatDateTime } from "@/lib/format";
@@ -43,6 +44,7 @@ import {
   removeGroupMemberAction,
   saveGroupAction,
 } from "@/server/actions/groups";
+import type { GroupWorkspaceLinkRow } from "@/server/queries/workspace-group-links";
 
 type GroupDetailProps = {
   group: {
@@ -60,7 +62,6 @@ type GroupDetailProps = {
     feeAmount: number | null;
     feeCurrency: string | null;
     feeBankAccount: string | null;
-    workspaceGroupEmail: string | null;
     workspaceOrgUnitPath: string | null;
     categorySpecialCapability: string | null;
     createdAt: Date;
@@ -106,6 +107,7 @@ type GroupDetailProps = {
     linkedUserName: string | null;
     createdAt: Date;
   }>;
+  workspaceLinks: GroupWorkspaceLinkRow[];
   workspaceConnected: boolean;
   canManageWorkspaceIntegration: boolean;
 };
@@ -131,6 +133,7 @@ export function GroupDetail({
   members,
   admins,
   assignableMembers,
+  workspaceLinks,
   workspaceConnected,
   canManageWorkspaceIntegration,
 }: GroupDetailProps) {
@@ -417,8 +420,8 @@ export function GroupDetail({
           />
         </TabsContent>
 
-        <TabsContent value="settings" className="pt-4">
-          <Card className="overflow-hidden max-w-2xl mx-auto">
+        <TabsContent value="settings" className="flex flex-col gap-6 pt-4">
+          <Card className="overflow-hidden max-w-2xl mx-auto w-full">
             <CardHeader>
               <CardTitle>Group settings</CardTitle>
               <CardDescription>
@@ -458,6 +461,15 @@ export function GroupDetail({
               />
             </CardContent>
           </Card>
+
+          <div className="max-w-2xl mx-auto w-full">
+            <GroupWorkspaceLinksCard
+              groupId={group.id}
+              links={workspaceLinks}
+              workspaceConnected={workspaceConnected}
+              canManage={canManageWorkspaceIntegration}
+            />
+          </div>
         </TabsContent>
       </Tabs>
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireAdminAccess } from "@/server/queries/access";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listGroupCategories } from "@/server/queries/groups";
+import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
 import { db } from "@/server/db";
 import { memberCustomFields, workspaceConnections } from "@/server/db/schema";
 import type { EmailNotificationSettingsState } from "@/components/app/email-notification-settings-card";
@@ -38,7 +39,7 @@ export default async function AdminSettingsPage({
     throw new Error("Organization policy setup is incomplete.");
   }
 
-  const [categories, connections, customFields] = await Promise.all([
+  const [categories, connections, customFields, workspaceLinks] = await Promise.all([
     listGroupCategories(organization.id),
     db
       .select({
@@ -62,6 +63,7 @@ export default async function AdminSettingsPage({
           eq(memberCustomFields.isActive, true),
         ),
       ),
+    listGroupWorkspaceLinks(organization.id),
   ]);
   const [connection] = connections;
 
@@ -125,6 +127,7 @@ export default async function AdminSettingsPage({
         membershipState={membershipState}
         emailNotificationState={emailNotificationState}
         workspaceState={workspaceState}
+        workspaceLinks={workspaceLinks}
         defaultTab={tab}
       />
     </AppPage>

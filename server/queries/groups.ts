@@ -259,7 +259,6 @@ export async function getGroupById(orgId: string, groupId: string) {
       feeAmount: groups.feeAmount,
       feeCurrency: groups.feeCurrency,
       feeBankAccount: groups.feeBankAccount,
-      workspaceGroupEmail: groups.workspaceGroupEmail,
       workspaceOrgUnitPath: groups.workspaceOrgUnitPath,
       createdAt: groups.createdAt,
       updatedAt: groups.updatedAt,

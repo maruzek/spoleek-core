@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
 import { Loader2Icon } from "lucide-react";
@@ -14,14 +14,6 @@ import { feeCurrencyOptions } from "@/lib/membership";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
 import {
   Field,
   FieldContent,
@@ -45,13 +37,15 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  getWorkspaceOrgUnitsAction,
-  searchWorkspaceGroupsAction,
-} from "@/server/actions/workspace";
-import type {
-  WorkspaceGroup,
-  WorkspaceOrgUnit,
-} from "@/server/lib/workspace/client";
+  defaultWorkspaceLinkSettings,
+  type WorkspaceLinkSettings,
+} from "@/lib/workspace-group-links";
+import {
+  WorkspaceGroupPicker,
+  WorkspaceLinkSettingsFields,
+} from "@/components/app/workspace-link-fields";
+import { getWorkspaceOrgUnitsAction } from "@/server/actions/workspace";
+import type { WorkspaceOrgUnit } from "@/server/lib/workspace/client";
 
 export type GroupValidationErrors = Partial<
   Record<keyof GroupFormValues, { _errors?: string[] }>
@@ -75,8 +69,8 @@ function toDefaultValues(
     feeAmount: group?.feeAmount ?? null,
     feeCurrency: group?.feeCurrency ?? null,
     feeBankAccount: group?.feeBankAccount ?? null,
-    workspaceGroupEmail: group?.workspaceGroupEmail ?? null,
     workspaceOrgUnitPath: group?.workspaceOrgUnitPath ?? null,
+    workspaceLink: group?.workspaceLink ?? null,
   };
 }
 
@@ -154,28 +148,6 @@ export function GroupForm({
           (message): message is string => typeof message === "string",
         )
       : [];
-
-  // ── Workspace: group search ──
-  const searchGroupsAction = useAction(searchWorkspaceGroupsAction);
-  const [groupSearchQuery, setGroupSearchQuery] = useState("");
-  const [wsGroups, setWsGroups] = useState<WorkspaceGroup[]>([]);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const triggerGroupSearch = useCallback(
-    (query: string) => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-      searchDebounceRef.current = setTimeout(async () => {
-        const result = await searchGroupsAction.executeAsync({ query });
-        setWsGroups(result?.data ?? []);
-      }, 300);
-    },
-    [searchGroupsAction],
-  );
-
-  useEffect(() => {
-    if (workspaceConnected) triggerGroupSearch(groupSearchQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceConnected]);
 
   // ── Workspace: org units ──
   const getOrgUnitsAction = useAction(getWorkspaceOrgUnitsAction);
@@ -377,73 +349,64 @@ export function GroupForm({
           </form.Field>
         </div>
       </FieldGroup>
-      {workspaceConnected ? (
+      {workspaceConnected && canManageWorkspaceIntegration && !group?.id ? (
+        <FieldSet>
+          <FieldLegend>Linked Google group</FieldLegend>
+          <FieldDescription>
+            Optional. Members you add to this group are kept in step with a
+            Google group. You can change or remove this later in the
+            group&apos;s settings.
+          </FieldDescription>
+
+          <form.Field name="workspaceLink">
+            {(formField) => {
+              const value = formField.state.value;
+
+              return (
+                <div className="flex min-w-0 flex-col gap-6">
+                  <WorkspaceGroupPicker
+                    id="group-create-workspace-link"
+                    value={value?.workspaceGroupKey ?? null}
+                    onValueChange={(next) =>
+                      formField.handleChange(
+                        next
+                          ? {
+                              ...defaultWorkspaceLinkSettings,
+                              ...(value ?? {}),
+                              workspaceGroupKey: next,
+                            }
+                          : null,
+                      )
+                    }
+                  />
+
+                  {value ? (
+                    <WorkspaceLinkSettingsFields
+                      value={value}
+                      onChange={(next: WorkspaceLinkSettings) =>
+                        formField.handleChange({
+                          ...next,
+                          workspaceGroupKey: value.workspaceGroupKey,
+                        })
+                      }
+                      groupEmail={value.workspaceGroupKey}
+                    />
+                  ) : null}
+                </div>
+              );
+            }}
+          </form.Field>
+        </FieldSet>
+      ) : null}
+
+      {workspaceConnected && isWorkspaceOrgUnitCategory ? (
         <FieldSet>
           <FieldLegend>Workspace integration</FieldLegend>
           <FieldDescription>
-            Link this group to Google Workspace resources. Changes take effect
-            when members are next assigned or synced.
+            Members of this group are moved into the org unit below when they
+            are assigned. Google group membership is managed separately, under
+            Linked Google groups.
           </FieldDescription>
-
-          <form.Field name="workspaceGroupEmail">
-            {(formField) => (
-              <Field>
-                <FieldLabel htmlFor="group-workspace-group">
-                  Workspace group email
-                </FieldLabel>
-                <FieldContent>
-                  <Combobox
-                    value={formField.state.value ?? null}
-                    onValueChange={(v) => formField.handleChange(v)}
-                    filter={() => true}
-                    disabled={!canManageWorkspaceIntegration}
-                  >
-                    <ComboboxInput
-                      id="group-workspace-group"
-                      placeholder="Search Google groups…"
-                      showClear={!!formField.state.value}
-                      value={groupSearchQuery}
-                      onChange={(e) => {
-                        setGroupSearchQuery(e.target.value);
-                        triggerGroupSearch(e.target.value);
-                      }}
-                    />
-                    <ComboboxContent>
-                      <ComboboxList>
-                        {searchGroupsAction.isPending ? (
-                          <div className="flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground">
-                            <Loader2Icon className="size-4 animate-spin" />
-                            Searching…
-                          </div>
-                        ) : (
-                          <>
-                            <ComboboxEmpty>No groups found.</ComboboxEmpty>
-                            {wsGroups.map((g) => (
-                              <ComboboxItem key={g.id} value={g.email}>
-                                <span className="font-medium">{g.name}</span>
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  {g.email}
-                                </span>
-                              </ComboboxItem>
-                            ))}
-                          </>
-                        )}
-                      </ComboboxList>
-                    </ComboboxContent>
-                  </Combobox>
-                  {formField.state.value ? (
-                    <FieldDescription>
-                      Members assigned to this group will be added to{" "}
-                      <span className="font-mono text-foreground">
-                        {formField.state.value}
-                      </span>
-                      .
-                    </FieldDescription>
-                  ) : null}
-                </FieldContent>
-              </Field>
-            )}
-          </form.Field>
 
           {isWorkspaceOrgUnitCategory ? (
             <form.Field name="workspaceOrgUnitPath">

@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
@@ -31,11 +32,12 @@ import {
 import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
 import { getGroupCategoryById, getGroupById } from "@/server/queries/groups";
 import { getMemberById } from "@/server/queries/members";
+import { updateWorkspaceUserOrgUnit } from "@/server/lib/workspace/client";
 import {
-  addWorkspaceGroupMember,
-  removeWorkspaceGroupMember,
-  updateWorkspaceUserOrgUnit,
-} from "@/server/lib/workspace/client";
+  createLinkForGroup,
+  enqueueMemberSyncForGroup,
+} from "@/server/lib/workspace/group-links";
+import { drainWorkspaceSyncOperations } from "@/server/lib/workspace/sync-queue";
 
 async function ensureUniqueCategorySlug(orgId: string, slug: string, categoryId?: string) {
   const conditions = [eq(groupCategories.orgId, orgId), eq(groupCategories.slug, slug)];
@@ -67,6 +69,21 @@ async function ensureUniqueGroupSlug(orgId: string, slug: string, groupId?: stri
     .limit(1);
 
   return existing == null;
+}
+
+/**
+ * Queue Workspace writes for a membership change instead of calling Google in
+ * the request. The queue is drained after the response, so a Google outage
+ * delays the sync rather than failing the action and leaving the two systems
+ * divergent with nothing to retry.
+ */
+async function syncGroupMembership(
+  orgId: string,
+  groupId: string,
+  memberIds: string[],
+) {
+  await enqueueMemberSyncForGroup(orgId, groupId, memberIds);
+  after(() => drainWorkspaceSyncOperations({ orgId }));
 }
 
 async function requireOrgMemberInOrganization(orgId: string, memberId: string) {
@@ -259,32 +276,42 @@ export const saveGroupAction = authActionClient
           isActive: parsedInput.isActive,
           sortOrder: parsedInput.sortOrder,
           ...feeFields,
-          workspaceGroupEmail: parsedInput.workspaceGroupEmail,
           workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
           updatedAt: new Date(),
         })
         .where(and(eq(groups.id, parsedInput.id), eq(groups.orgId, organization.id)));
     } else {
-      await requireCategoryManagementAccess(parsedInput.categoryId);
+      const context = await requireCategoryManagementAccess(parsedInput.categoryId);
 
       if (!category) {
         throw new Error("The selected category could not be found.");
       }
 
-      await db.insert(groups).values({
+      const [created] = await db
+        .insert(groups)
+        .values({
+          orgId: organization.id,
+          categoryId: parsedInput.categoryId,
+          name: parsedInput.name.trim(),
+          slug: parsedInput.slug.trim(),
+          description: parsedInput.description,
+          joinPolicy: parsedInput.joinPolicy,
+          isActive: parsedInput.isActive,
+          sortOrder: parsedInput.sortOrder,
+          ...feeFields,
+          workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
+        })
+        .returning({ id: groups.id });
 
-        orgId: organization.id,
-        categoryId: parsedInput.categoryId,
-        name: parsedInput.name.trim(),
-        slug: parsedInput.slug.trim(),
-        description: parsedInput.description,
-        joinPolicy: parsedInput.joinPolicy,
-        isActive: parsedInput.isActive,
-        sortOrder: parsedInput.sortOrder,
-        ...feeFields,
-        workspaceGroupEmail: parsedInput.workspaceGroupEmail,
-        workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
-      });
+      // A link changes Workspace state, so it stays behind the org-admin gate
+      // even where group admins may otherwise create groups.
+      const canLink =
+        context.adminAccessLevel === "full" || context.member?.role === "leader";
+
+      if (created && parsedInput.workspaceLink && canLink) {
+        await createLinkForGroup(organization.id, created.id, parsedInput.workspaceLink);
+        after(() => drainWorkspaceSyncOperations({ orgId: organization.id }));
+      }
     }
 
     return { success: true };
@@ -360,13 +387,20 @@ export const assignGroupMemberAction = authActionClient
       })
       .onConflictDoNothing();
 
-    if (member.workspaceUserEmail) {
-      if (group.workspaceGroupEmail) {
-        await addWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
-      }
-      if (group.categorySpecialCapability === "workspace_org_unit" && group.workspaceOrgUnitPath) {
-        await updateWorkspaceUserOrgUnit(organization.id, member.workspaceUserEmail, group.workspaceOrgUnitPath);
-      }
+    await syncGroupMembership(organization.id, parsedInput.groupId, [
+      parsedInput.memberId,
+    ]);
+
+    if (
+      member.workspaceUserEmail &&
+      group.categorySpecialCapability === "workspace_org_unit" &&
+      group.workspaceOrgUnitPath
+    ) {
+      await updateWorkspaceUserOrgUnit(
+        organization.id,
+        member.workspaceUserEmail,
+        group.workspaceOrgUnitPath,
+      );
     }
 
     return { success: true };
@@ -405,14 +439,19 @@ export const assignGroupMembersAction = authActionClient
       )
       .onConflictDoNothing();
 
-    for (const member of members) {
-      if (member.workspaceUserEmail) {
-        if (group.workspaceGroupEmail) {
-          await addWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
-        }
-        if (group.categorySpecialCapability === "workspace_org_unit" && group.workspaceOrgUnitPath) {
-          await updateWorkspaceUserOrgUnit(organization.id, member.workspaceUserEmail, group.workspaceOrgUnitPath);
-        }
+    await syncGroupMembership(organization.id, parsedInput.groupId, uniqueMemberIds);
+
+    if (
+      group.categorySpecialCapability === "workspace_org_unit" &&
+      group.workspaceOrgUnitPath
+    ) {
+      for (const member of members) {
+        if (!member.workspaceUserEmail) continue;
+        await updateWorkspaceUserOrgUnit(
+          organization.id,
+          member.workspaceUserEmail,
+          group.workspaceOrgUnitPath,
+        );
       }
     }
 
@@ -446,9 +485,7 @@ export const removeGroupMemberAction = authActionClient
         ),
       );
 
-    if (member.workspaceUserEmail && group.workspaceGroupEmail) {
-      await removeWorkspaceGroupMember(organization.id, group.workspaceGroupEmail, member.workspaceUserEmail);
-    }
+    await syncGroupMembership(organization.id, parsedInput.groupId, [member.id]);
 
     return { success: true };
   });
@@ -492,6 +529,10 @@ export const assignGroupAdminAction = authActionClient
       });
     }
 
+    await syncGroupMembership(organization.id, parsedInput.groupId, [
+      parsedInput.memberId,
+    ]);
+
     return { success: true };
   });
 
@@ -516,6 +557,10 @@ export const removeGroupAdminAction = authActionClient
           eq(groupMemberships.memberId, parsedInput.memberId),
         ),
       );
+
+    await syncGroupMembership(organization.id, parsedInput.groupId, [
+      parsedInput.memberId,
+    ]);
 
     return { success: true };
   });

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { parseBankAccount } from "@/lib/iban";
+import { workspaceLinkSettingsSchema } from "@/lib/workspace-group-links";
 import type {
   GroupCategorySelectionMode,
   GroupJoinPolicy,
@@ -137,8 +138,15 @@ export const groupSchema = z
           return trimmed;
         }
       }),
-    workspaceGroupEmail: nullableTrimmedString,
     workspaceOrgUnitPath: nullableTrimmedString,
+    /**
+     * Only used when creating a group — an existing group's links are managed
+     * from its own settings, where a preview is available first.
+     */
+    workspaceLink: workspaceLinkSettingsSchema
+      .extend({ workspaceGroupKey: z.string().trim().min(3) })
+      .nullable()
+      .default(null),
   })
   .superRefine((value, ctx) => {
     if (

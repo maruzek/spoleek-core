@@ -87,6 +87,8 @@ type CategoryDetailProps = {
   }>;
   canManageCategoryAdmins: boolean;
   canCreateGroups: boolean;
+  workspaceConnected?: boolean;
+  canManageWorkspaceIntegration?: boolean;
 };
 
 const columnHelper = createColumnHelper<CategoryDetailProps["groups"][number]>();
@@ -98,6 +100,8 @@ export function GroupCategoryDetail({
   assignableMembers,
   canManageCategoryAdmins,
   canCreateGroups,
+  workspaceConnected,
+  canManageWorkspaceIntegration,
 }: CategoryDetailProps) {
   const router = useRouter();
   const [groupSheetState, setGroupSheetState] = useState<{
@@ -345,6 +349,8 @@ export function GroupCategoryDetail({
         isPending={saveGroup.isPending}
         validationErrors={saveGroup.result.validationErrors}
         categoryManagesFees={category.managesMembershipFees}
+        workspaceConnected={workspaceConnected}
+        canManageWorkspaceIntegration={canManageWorkspaceIntegration}
         onOpenChange={(open) => setGroupSheetState((current) => ({ ...current, open }))}
         onSubmit={async (value: GroupFormValues) => {
           const result = await saveGroup.executeAsync(value);

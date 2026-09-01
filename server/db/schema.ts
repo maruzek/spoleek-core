@@ -156,6 +156,51 @@ export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
   "cancelled",
 ]);
 
+// ─── Workspace group link ───────────────────────────────────────────────────
+
+/**
+ * Which system decides membership for a linked Google group. There is
+ * deliberately no two-way mode: without a shared clock "both ways" degrades to
+ * "last writer silently wins", and a member quietly reappearing after being
+ * removed is a worse failure than making the admin pick a master.
+ */
+export const workspaceLinkDirectionEnum = pgEnum("workspace_link_direction", [
+  "push",
+  "observe",
+]);
+
+export const workspaceGroupRoleEnum = pgEnum("workspace_group_role", [
+  "member",
+  "manager",
+  "owner",
+]);
+
+/**
+ * `remove_owned` only removes addresses this ledger says Spoleek added, so an
+ * address a Workspace admin added by hand (or an external subscriber) is
+ * reported as drift instead of being deleted.
+ */
+export const workspaceLinkRemovalPolicyEnum = pgEnum(
+  "workspace_link_removal_policy",
+  ["remove_owned", "remove_all", "keep"],
+);
+
+export const workspaceLinkSyncStatusEnum = pgEnum("workspace_link_sync_status", [
+  "never",
+  "ok",
+  "error",
+]);
+
+export const workspaceSyncOperationKindEnum = pgEnum(
+  "workspace_sync_operation_kind",
+  ["add_member", "remove_member", "update_role"],
+);
+
+export const workspaceSyncOperationStatusEnum = pgEnum(
+  "workspace_sync_operation_status",
+  ["pending", "succeeded", "failed"],
+);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -463,7 +508,6 @@ export const groups = pgTable(
     feeCurrency: text("fee_currency"),
     feeBankAccount: text("fee_bank_account"),
     feePaymentWindowDays: integer("fee_payment_window_days"),
-    workspaceGroupEmail: text("workspace_group_email"),
     workspaceOrgUnitPath: text("workspace_org_unit_path"),
     ...timestamps,
   },
@@ -720,6 +764,128 @@ export const workspaceConnections = pgTable(
   ],
 );
 
+/**
+ * A link between a Spoleek group and a Google group. Keyed on the immutable
+ * Google group id — the email is cached for display and refreshed on each sync,
+ * so renaming the group in the Admin console does not break the link.
+ *
+ * Several Spoleek groups may point at the same Google group; the desired
+ * membership is the union across every enabled link.
+ */
+export const groupWorkspaceLinks = pgTable(
+  "group_workspace_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    workspaceGroupId: text("workspace_group_id").notNull(),
+    workspaceGroupEmail: text("workspace_group_email").notNull(),
+    workspaceGroupName: text("workspace_group_name"),
+    direction: workspaceLinkDirectionEnum("direction").notNull().default("push"),
+    memberRole: workspaceGroupRoleEnum("member_role").notNull().default("member"),
+    adminRole: workspaceGroupRoleEnum("admin_role").notNull().default("manager"),
+    removalPolicy: workspaceLinkRemovalPolicyEnum("removal_policy")
+      .notNull()
+      .default("remove_owned"),
+    includeExternal: boolean("include_external").notNull().default(false),
+    isEnabled: boolean("is_enabled").notNull().default(true),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastSyncStatus: workspaceLinkSyncStatusEnum("last_sync_status")
+      .notNull()
+      .default("never"),
+    lastSyncError: text("last_sync_error"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("group_workspace_links_group_target_idx").on(
+      table.groupId,
+      table.workspaceGroupId,
+    ),
+    index("group_workspace_links_org_target_idx").on(
+      table.orgId,
+      table.workspaceGroupId,
+    ),
+    index("group_workspace_links_org_group_idx").on(table.orgId, table.groupId),
+  ],
+);
+
+/**
+ * Provenance ledger: one row per Google group membership Spoleek created. This
+ * is what makes `remove_owned` and a truthful unlink dialog possible.
+ */
+export const workspaceGroupMemberLinks = pgTable(
+  "workspace_group_member_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    linkId: uuid("link_id")
+      .notNull()
+      .references(() => groupWorkspaceLinks.id, { onDelete: "cascade" }),
+    workspaceGroupId: text("workspace_group_id").notNull(),
+    address: text("address").notNull(),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_group_member_links_link_address_idx").on(
+      table.linkId,
+      table.address,
+    ),
+    index("workspace_group_member_links_org_target_idx").on(
+      table.orgId,
+      table.workspaceGroupId,
+    ),
+  ],
+);
+
+/**
+ * Outbox. Membership mutations enqueue here inside the same transaction as the
+ * `group_memberships` write, so a Google outage can never leave the two systems
+ * permanently divergent, and assigning 200 members does not mean 200 serial API
+ * calls inside one request.
+ */
+export const workspaceSyncOperations = pgTable(
+  "workspace_sync_operations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    linkId: uuid("link_id")
+      .notNull()
+      .references(() => groupWorkspaceLinks.id, { onDelete: "cascade" }),
+    kind: workspaceSyncOperationKindEnum("kind").notNull(),
+    address: text("address").notNull(),
+    role: workspaceGroupRoleEnum("role"),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "set null",
+    }),
+    status: workspaceSyncOperationStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastError: text("last_error"),
+    ...timestamps,
+  },
+  (table) => [
+    index("workspace_sync_operations_due_idx").on(
+      table.status,
+      table.nextAttemptAt,
+    ),
+    index("workspace_sync_operations_link_idx").on(table.linkId, table.status),
+    index("workspace_sync_operations_org_idx").on(table.orgId, table.status),
+  ],
+);
+
 export const emailActivities = pgTable(
   "email_activities",
   {
@@ -867,6 +1033,9 @@ export const schema = {
   memberInvites,
   memberAuthEvents,
   workspaceConnections,
+  groupWorkspaceLinks,
+  workspaceGroupMemberLinks,
+  workspaceSyncOperations,
   emailActivities,
   emailActivityEvents,
   memberPayments,
@@ -909,5 +1078,16 @@ export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect
 export type MemberInvite = typeof memberInvites.$inferSelect;
 export type MemberAuthEvent = typeof memberAuthEvents.$inferSelect;
 export type WorkspaceConnection = typeof workspaceConnections.$inferSelect;
+export type WorkspaceLinkDirection = typeof workspaceLinkDirectionEnum.enumValues[number];
+export type WorkspaceGroupRole = typeof workspaceGroupRoleEnum.enumValues[number];
+export type WorkspaceLinkRemovalPolicy =
+  typeof workspaceLinkRemovalPolicyEnum.enumValues[number];
+export type WorkspaceLinkSyncStatus =
+  typeof workspaceLinkSyncStatusEnum.enumValues[number];
+export type WorkspaceSyncOperationKind =
+  typeof workspaceSyncOperationKindEnum.enumValues[number];
+export type GroupWorkspaceLink = typeof groupWorkspaceLinks.$inferSelect;
+export type WorkspaceGroupMemberLink = typeof workspaceGroupMemberLinks.$inferSelect;
+export type WorkspaceSyncOperation = typeof workspaceSyncOperations.$inferSelect;
 export type EmailActivity = typeof emailActivities.$inferSelect;
 export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;

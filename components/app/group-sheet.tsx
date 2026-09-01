@@ -17,6 +17,8 @@ export function GroupSheet({
   isPending,
   validationErrors,
   categoryManagesFees,
+  workspaceConnected,
+  canManageWorkspaceIntegration,
   onOpenChange,
   onSubmit,
 }: {
@@ -26,6 +28,8 @@ export function GroupSheet({
   isPending: boolean;
   validationErrors?: GroupValidationErrors;
   categoryManagesFees?: boolean;
+  workspaceConnected?: boolean;
+  canManageWorkspaceIntegration?: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: GroupFormValues) => Promise<void>;
 }) {
@@ -47,6 +51,8 @@ export function GroupSheet({
             isPending={isPending}
             validationErrors={validationErrors}
             categoryManagesFees={categoryManagesFees}
+            workspaceConnected={workspaceConnected}
+            canManageWorkspaceIntegration={canManageWorkspaceIntegration}
             onCancel={() => onOpenChange(false)}
             onSubmit={onSubmit}
           />

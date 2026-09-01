@@ -367,22 +367,150 @@ export async function searchWorkspaceOrgUnits(
   return body.organizationUnits ?? [];
 }
 
+/**
+ * Google group memberships carry a role. Spoleek stores them lowercase; the
+ * Directory API wants them upper.
+ */
+export type WorkspaceGroupMemberRole = "member" | "manager" | "owner";
+
+export type WorkspaceGroupMember = {
+  address: string;
+  role: WorkspaceGroupMemberRole;
+  type: string;
+  status: string | null;
+};
+
+function toApiRole(role: WorkspaceGroupMemberRole) {
+  return role.toUpperCase();
+}
+
+function fromApiRole(role: string | undefined): WorkspaceGroupMemberRole {
+  const lowered = (role ?? "member").toLowerCase();
+  return lowered === "owner" || lowered === "manager" ? lowered : "member";
+}
+
+/**
+ * Every group endpoint accepts either the group's email or its immutable id in
+ * the path. Links are keyed on the id so a rename in the Admin console does not
+ * silently break the link.
+ */
+export async function getWorkspaceGroup(
+  orgId: string,
+  groupKey: string,
+): Promise<WorkspaceGroup | null> {
+  const response = await directoryFetch(
+    orgId,
+    `/groups/${encodeURIComponent(groupKey)}`,
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  const body = (await response.json()) as {
+    id: string;
+    email: string;
+    name?: string;
+  };
+
+  return { id: body.id, email: body.email, name: body.name ?? body.email };
+}
+
+export async function listWorkspaceGroupMembers(
+  orgId: string,
+  groupKey: string,
+): Promise<WorkspaceGroupMember[]> {
+  const members: WorkspaceGroupMember[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ maxResults: "200" });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await directoryFetch(
+      orgId,
+      `/groups/${encodeURIComponent(groupKey)}/members?${params.toString()}`,
+    );
+
+    if (response.status === 404) {
+      return members;
+    }
+    if (!response.ok) {
+      throw await parseError(response);
+    }
+
+    const body = (await response.json()) as {
+      members?: {
+        email?: string;
+        role?: string;
+        type?: string;
+        status?: string;
+      }[];
+      nextPageToken?: string;
+    };
+
+    for (const raw of body.members ?? []) {
+      // Members added by id without an address (rare, e.g. a deleted user)
+      // cannot be reconciled by address, so they are skipped rather than
+      // reported as drift the admin cannot act on.
+      if (!raw.email) continue;
+      members.push({
+        address: raw.email.toLowerCase(),
+        role: fromApiRole(raw.role),
+        type: raw.type ?? "USER",
+        status: raw.status ?? null,
+      });
+    }
+
+    pageToken = body.nextPageToken;
+  } while (pageToken);
+
+  return members;
+}
+
 export async function addWorkspaceGroupMember(
   orgId: string,
-  groupEmail: string,
+  groupKey: string,
   userEmail: string,
+  role: WorkspaceGroupMemberRole = "member",
 ): Promise<void> {
   const response = await directoryFetch(
     orgId,
-    `/groups/${encodeURIComponent(groupEmail)}/members`,
+    `/groups/${encodeURIComponent(groupKey)}/members`,
     {
       method: "POST",
-      body: JSON.stringify({ email: userEmail, role: "MEMBER" }),
+      body: JSON.stringify({ email: userEmail, role: toApiRole(role) }),
     },
   );
 
-  // Ignore if already a member
+  // Already a member — the desired end state, so treat as success.
   if (response.status === 409) {
+    return;
+  }
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+}
+
+export async function updateWorkspaceGroupMemberRole(
+  orgId: string,
+  groupKey: string,
+  userEmail: string,
+  role: WorkspaceGroupMemberRole,
+): Promise<void> {
+  const response = await directoryFetch(
+    orgId,
+    `/groups/${encodeURIComponent(groupKey)}/members/${encodeURIComponent(userEmail)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ role: toApiRole(role) }),
+    },
+  );
+
+  if (response.status === 404) {
     return;
   }
   if (!response.ok) {
@@ -392,18 +520,18 @@ export async function addWorkspaceGroupMember(
 
 export async function removeWorkspaceGroupMember(
   orgId: string,
-  groupEmail: string,
+  groupKey: string,
   userEmail: string,
 ): Promise<void> {
   const response = await directoryFetch(
     orgId,
-    `/groups/${encodeURIComponent(groupEmail)}/members/${encodeURIComponent(userEmail)}`,
+    `/groups/${encodeURIComponent(groupKey)}/members/${encodeURIComponent(userEmail)}`,
     {
       method: "DELETE",
     },
   );
 
-  // Ignore if not a member or group doesn't exist
+  // Not a member, or the group is gone — either way the end state is reached.
   if (response.status === 404 || response.status === 400) {
     return;
   }

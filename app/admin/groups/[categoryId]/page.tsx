@@ -8,6 +8,7 @@ import {
   requireCategoryOverviewAccess,
 } from "@/server/queries/access";
 import { getCategoryDetailData } from "@/server/queries/groups";
+import { getAppOrganization } from "@/server/queries/app";
 
 export default async function AdminGroupCategoryPage({
   params,
@@ -32,9 +33,12 @@ export default async function AdminGroupCategoryPage({
     hasFullCategoryVisibility ||
     scopedCategoryIds?.includes(categoryId) === true;
 
-  const detail = await getCategoryDetailData(access.organization.id, categoryId, {
-    visibleGroupIds: canManageEntireCategory ? null : scopedGroupIds,
-  });
+  const [detail, organization] = await Promise.all([
+    getCategoryDetailData(access.organization.id, categoryId, {
+      visibleGroupIds: canManageEntireCategory ? null : scopedGroupIds,
+    }),
+    getAppOrganization(),
+  ]);
 
   if (!detail) {
     notFound();
@@ -49,6 +53,10 @@ export default async function AdminGroupCategoryPage({
         assignableMembers={detail.assignableMembers}
         canCreateGroups={canManageEntireCategory}
         canManageCategoryAdmins={access.adminAccessLevel === "full"}
+        workspaceConnected={Boolean(organization?.workspaceConnectedAt)}
+        canManageWorkspaceIntegration={
+          access.adminAccessLevel === "full" || access.member?.role === "leader"
+        }
       />
     </AppPage>
   );
