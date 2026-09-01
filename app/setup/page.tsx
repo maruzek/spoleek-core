@@ -9,31 +9,43 @@ import {
   getSetupInstructions,
   getSetupViewerSessionSafe,
   getSetupWizardState,
+  getSetupWorkspaceConnectState,
 } from "@/server/queries/bootstrap";
 
 export const dynamic = "force-dynamic";
 
 export default async function SetupPage() {
-  const bootstrapState = await getBootstrapState();
+  const [bootstrapState, wizardState] = await Promise.all([
+    getBootstrapState(),
+    getSetupWizardState(),
+  ]);
 
-  if (bootstrapState.hasOrganization) {
+  // The Workspace track keeps the wizard open past org creation so the OAuth
+  // grant — which needs a real orgId — can finish inside setup.
+  const isConnectStage =
+    Boolean(wizardState.organizationId) &&
+    bootstrapState.organization?.id === wizardState.organizationId;
+
+  if (bootstrapState.hasOrganization && !isConnectStage) {
     redirect("/");
   }
 
-  const wizardState = await getSetupWizardState();
   const envStatus = getServerEnvStatus();
   const instructions =
     wizardState.deploymentTrack && wizardState.authStrategy
       ? getSetupInstructions(wizardState.deploymentTrack, wizardState.authStrategy)
       : null;
   const envReadiness =
-    wizardState.deploymentTrack && wizardState.authStrategy
+    !isConnectStage && wizardState.deploymentTrack && wizardState.authStrategy
       ? await getSetupEnvReadiness(wizardState)
       : null;
   const viewer =
     wizardState.envValidated
       ? await getSetupViewerSessionSafe()
       : null;
+  const workspaceConnectState = isConnectStage
+    ? await getSetupWorkspaceConnectState(wizardState.organizationId!)
+    : null;
   const currentStep = deriveSetupStep(wizardState, {
     hasAdminSession: Boolean(viewer && wizardState.adminUserId === viewer.user.id),
   });
@@ -47,6 +59,7 @@ export default async function SetupPage() {
       viewer={viewer ? { email: viewer.user.email, name: viewer.user.name } : null}
       googleAvailable={envStatus.isGoogleAuthEnabled}
       databaseIssue={bootstrapState.databaseIssue}
+      workspaceConnectState={workspaceConnectState}
     />
   );
 }

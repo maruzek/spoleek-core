@@ -18,9 +18,15 @@ export const dynamic = "force-dynamic";
 
 const STATE_COOKIE = "spoleek_workspace_oauth_state";
 const SETTINGS_URL = "/admin/settings";
+const SETUP_URL = "/setup";
+const SETUP_ORIGIN_SUFFIX = ".setup";
 
-function redirectWithStatus(status: "ok" | "error", message?: string) {
-  const url = new URL(buildAbsoluteAppUrl(SETTINGS_URL));
+function redirectWithStatus(
+  status: "ok" | "error",
+  message?: string,
+  fromSetup = false,
+) {
+  const url = new URL(buildAbsoluteAppUrl(fromSetup ? SETUP_URL : SETTINGS_URL));
   url.searchParams.set("workspace", status);
   if (message) url.searchParams.set("workspaceMessage", message);
   return NextResponse.redirect(url.toString());
@@ -39,13 +45,15 @@ export async function GET(request: NextRequest) {
   const state = url.searchParams.get("state");
   const errorParam = url.searchParams.get("error");
   const cookieState = request.cookies.get(STATE_COOKIE)?.value;
+  const fromSetup = Boolean(cookieState?.endsWith(SETUP_ORIGIN_SUFFIX));
 
   const response = errorParam
-    ? redirectWithStatus("error", errorParam)
+    ? redirectWithStatus("error", errorParam, fromSetup)
     : await handleCallback({
         code,
         state,
         cookieState,
+        fromSetup,
         orgId: organization.id,
         orgDomain: organization.workspaceDomain,
         userId: session.user.id,
@@ -62,30 +70,32 @@ async function handleCallback(params: {
   code: string | null;
   state: string | null;
   cookieState: string | undefined;
+  fromSetup: boolean;
   orgId: string;
   orgDomain: string | null;
   userId: string;
 }) {
-  const { code, state, cookieState, orgId, orgDomain, userId } = params;
+  const { code, state, cookieState, fromSetup, orgId, orgDomain, userId } =
+    params;
 
   if (!code || !state || !cookieState || state !== cookieState) {
-    return redirectWithStatus("error", "invalid_state");
+    return redirectWithStatus("error", "invalid_state", fromSetup);
   }
 
   if (!orgDomain) {
-    return redirectWithStatus("error", "domain_missing");
+    return redirectWithStatus("error", "domain_missing", fromSetup);
   }
 
   try {
     const tokens = await exchangeAuthorizationCode(code);
     if (!tokens.refresh_token) {
-      return redirectWithStatus("error", "no_refresh_token");
+      return redirectWithStatus("error", "no_refresh_token", fromSetup);
     }
 
     const userInfo = await fetchGoogleUserInfo(tokens.access_token);
     const grantingDomain = (userInfo.hd ?? userInfo.email.split("@")[1] ?? "").toLowerCase();
     if (grantingDomain !== orgDomain.toLowerCase()) {
-      return redirectWithStatus("error", "domain_mismatch");
+      return redirectWithStatus("error", "domain_mismatch", fromSetup);
     }
 
     const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
@@ -134,12 +144,13 @@ async function handleCallback(params: {
       })
       .where(eq(organizations.id, orgId));
 
-    return redirectWithStatus("ok");
+    return redirectWithStatus("ok", undefined, fromSetup);
   } catch (error) {
     console.error("Workspace OAuth callback failed", error);
     return redirectWithStatus(
       "error",
       error instanceof Error ? error.message : "unknown_error",
+      fromSetup,
     );
   }
 }

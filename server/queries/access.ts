@@ -504,7 +504,15 @@ export async function requireCurrentMemberAccess(options?: {
   const member = await getCurrentMember(session.user.id);
 
   if (!member) {
-    redirect("/join");
+    // A system admin can legitimately have no membership (the first-run wizard
+    // can create one without it), so send them to admin rather than to signup.
+    const [user] = await db
+      .select({ systemRole: users.systemRole })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+
+    redirect(user?.systemRole === "system_admin" ? "/admin" : "/join");
   }
 
   if (options?.requireProfileComplete && member.status === "active") {

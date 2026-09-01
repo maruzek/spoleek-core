@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { parseBankAccount } from "@/lib/iban";
+import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
 
 export const emailAdminSchema = z.object({
   name: z.string().min(2, "Admin name is required."),
@@ -125,4 +126,42 @@ export const organizationBootstrapWithMembershipSchema =
 
 export type OrganizationBootstrapWithMembershipValues = z.infer<
   typeof organizationBootstrapWithMembershipSchema
+>;
+
+export const workspaceDomainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Enter your Google Workspace domain.")
+  .max(253)
+  .regex(
+    /^[a-z0-9.-]+\.[a-z]{2,}$/i,
+    "Enter a valid domain (e.g. spoleek.org).",
+  );
+
+export const workspaceEmailTemplateSchema = z
+  .string()
+  .trim()
+  .min(1, "Enter an email template.")
+  .max(120)
+  .refine(
+    (value) => {
+      const local = renderWorkspaceEmailLocalPart({
+        template: value,
+        firstName: "Jane",
+        lastName: "Doe",
+      });
+      return local.length > 0 && /^[a-z0-9._-]+$/.test(local);
+    },
+    "Template must produce a valid email local part (e.g. {first}.{last}).",
+  );
+
+export const setupWorkspaceConfigSchema = z.object({
+  workspaceDomain: workspaceDomainSchema,
+  workspaceEmailTemplate: workspaceEmailTemplateSchema,
+  defaultEmailPreference: z.enum(["personal", "workspace"]).default("workspace"),
+});
+
+export type SetupWorkspaceConfigValues = z.infer<
+  typeof setupWorkspaceConfigSchema
 >;

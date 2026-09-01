@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { getViewerSession } from "@/server/queries/auth";
@@ -13,15 +13,21 @@ export const dynamic = "force-dynamic";
 
 const STATE_COOKIE = "spoleek_workspace_oauth_state";
 const STATE_TTL_SECONDS = 600;
+const SETUP_ORIGIN_SUFFIX = ".setup";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await getViewerSession();
   if (!session) {
     return NextResponse.redirect(buildAbsoluteAppUrl("/"));
   }
 
   const { organization } = await requireOrgAdminAccess(session.user.id);
-  const state = generateOAuthState();
+  // The origin travels inside the state value itself, so the callback can send
+  // the admin back to the first-run wizard rather than to settings.
+  const state =
+    new URL(request.url).searchParams.get("origin") === "setup"
+      ? `${generateOAuthState()}${SETUP_ORIGIN_SUFFIX}`
+      : generateOAuthState();
   const authUrl = buildWorkspaceAuthUrl({
     state,
     loginHintDomain: organization.workspaceDomain,

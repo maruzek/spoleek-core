@@ -24,6 +24,18 @@ const setupCookieSchema = z.object({
   envValidated: z.boolean().optional(),
   adminUserId: z.string().optional(),
   adminEmail: z.string().optional(),
+  workspaceDomain: z.string().optional(),
+  workspaceEmailTemplate: z.string().optional(),
+  workspaceDefaultEmailPreference: z.enum(["personal", "workspace"]).optional(),
+  workspaceConfigured: z.boolean().optional(),
+  organizationName: z.string().optional(),
+  organizationSlug: z.string().optional(),
+  legalName: z.string().optional(),
+  primaryEmail: z.string().optional(),
+  website: z.string().optional(),
+  organizationProfileSaved: z.boolean().optional(),
+  createAdminAsMember: z.boolean().optional(),
+  organizationId: z.string().optional(),
 });
 
 export type BootstrapState = Awaited<ReturnType<typeof getBootstrapState>>;
@@ -99,6 +111,11 @@ export function deriveSetupStep(
   state: SetupWizardCookieState,
   opts?: { hasAdminSession?: boolean },
 ): SetupStep {
+  // The organization exists, so only the Workspace OAuth grant is left.
+  if (state.organizationId) {
+    return "connect";
+  }
+
   if (!state.deploymentTrack || !state.authStrategy) {
     return "intent";
   }
@@ -115,7 +132,58 @@ export function deriveSetupStep(
     return "admin";
   }
 
-  return "organization";
+  if (state.workspaceModuleEnabled && !state.workspaceConfigured) {
+    return "workspace";
+  }
+
+  if (!state.organizationProfileSaved) {
+    return "organization";
+  }
+
+  return "membership";
+}
+
+/**
+ * Connect-step data. Only reachable once the org row exists, so it can read the
+ * live connection state instead of the setup cookie.
+ */
+export async function getSetupWorkspaceConnectState(orgId: string) {
+  const [{ db }, { eq }, { organizations, workspaceConnections, memberCustomFields }] =
+    await Promise.all([
+      import("@/server/db"),
+      import("drizzle-orm"),
+      import("@/server/db/schema"),
+    ]);
+
+  const [organization] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  if (!organization) {
+    return null;
+  }
+
+  const [connection] = await db
+    .select({ id: workspaceConnections.id, revokedAt: workspaceConnections.revokedAt })
+    .from(workspaceConnections)
+    .where(eq(workspaceConnections.orgId, orgId))
+    .limit(1);
+
+  const customFields = await db
+    .select({ key: memberCustomFields.key, label: memberCustomFields.label })
+    .from(memberCustomFields)
+    .where(eq(memberCustomFields.orgId, orgId));
+
+  return {
+    connected: Boolean(connection && !connection.revokedAt),
+    domain: organization.workspaceDomain,
+    emailTemplate: organization.workspaceEmailTemplate,
+    adminEmail: organization.workspaceAdminEmail,
+    provisionFields: organization.workspaceProvisionFields ?? [],
+    customFields,
+  };
 }
 
 export function getSetupInstructions(

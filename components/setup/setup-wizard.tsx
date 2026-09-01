@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
@@ -8,12 +8,13 @@ import { toast } from "sonner";
 import {
   Building2Icon,
   CheckIcon,
-  ChevronDownIcon,
   CircleAlertIcon,
   CloudCogIcon,
   DatabaseZapIcon,
+  ExternalLinkIcon,
   HardDriveDownloadIcon,
   KeyRoundIcon,
+  LinkIcon,
   LockKeyholeIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -21,6 +22,8 @@ import {
 import {
   authStrategyLabels,
   deploymentTrackLabels,
+  deriveWorkspaceDomainFromEmail,
+  getSetupStepsFor,
   type SetupAuthStrategy,
   type SetupDeploymentTrack,
   type SetupStep,
@@ -28,8 +31,11 @@ import {
 import {
   emailAdminSchema,
   type EmailAdminValues,
+  organizationBootstrapSchema,
   organizationBootstrapWithMembershipSchema,
   type OrganizationBootstrapWithMembershipValues,
+  setupWorkspaceConfigSchema,
+  type SetupWorkspaceConfigValues,
 } from "@/lib/bootstrap/setup-schemas";
 import {
   feeCurrencyOptions,
@@ -40,12 +46,29 @@ import { slugify } from "@/lib/slugify";
 import {
   advanceSetupEnvironmentAction,
   claimSetupSessionAdminAction,
+  completeSetupAction,
   createBootstrapOrganizationAction,
+  editSetupOrganizationProfileAction,
   createSetupEmailAdminAction,
   resetSetupWizardAction,
   saveSetupIntentAction,
+  saveSetupOrganizationProfileAction,
+  saveSetupWorkspaceConfigAction,
+  setSetupAdminMembershipAction,
   validateSetupEnvironmentAction,
 } from "@/server/actions/bootstrap";
+import { saveWorkspaceProvisionFieldsAction } from "@/server/actions/organization-settings";
+import {
+  WorkspaceProvisionFields,
+  toProvisionFieldState,
+} from "@/components/app/workspace-provision-fields";
+import { RadioChoiceGroup } from "@/components/app/radio-choice-group";
+import { SwitchChoiceField } from "@/components/app/switch-choice-field";
+import {
+  DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+  renderWorkspaceEmailLocalPart,
+} from "@/server/lib/workspace/email-template";
+import type { WorkspaceProvisionFieldConfig } from "@/server/lib/workspace/field-catalog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,11 +99,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -89,7 +107,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { CopyButton } from "../ui/code-block/copy-button";
 
 type SetupWizardProps = {
@@ -99,6 +116,16 @@ type SetupWizardProps = {
     authStrategy?: SetupAuthStrategy;
     workspaceModuleEnabled?: boolean;
     adminEmail?: string;
+    workspaceDomain?: string;
+    workspaceEmailTemplate?: string;
+    workspaceDefaultEmailPreference?: "personal" | "workspace";
+    createAdminAsMember?: boolean;
+    organizationName?: string;
+    organizationSlug?: string;
+    legalName?: string;
+    primaryEmail?: string;
+    website?: string;
+    organizationId?: string;
   };
   envReadiness: {
     canAdvance: boolean;
@@ -123,6 +150,14 @@ type SetupWizardProps = {
   } | null;
   googleAvailable: boolean;
   databaseIssue: string | null;
+  workspaceConnectState: {
+    connected: boolean;
+    domain: string | null;
+    emailTemplate: string | null;
+    adminEmail: string | null;
+    provisionFields: WorkspaceProvisionFieldConfig[];
+    customFields: { key: string; label: string }[];
+  } | null;
 };
 
 type SetupIntentValues = {
@@ -189,12 +224,18 @@ const authOptions: Array<{
   },
 ];
 
-const stepIndex: Record<SetupStep, number> = {
-  intent: 1,
-  environment: 2,
-  readiness: 3,
-  admin: 4,
-  organization: 5,
+const stepMeta: Record<
+  SetupStep,
+  { title: string; icon: typeof HardDriveDownloadIcon }
+> = {
+  intent: { title: "Choose setup path", icon: HardDriveDownloadIcon },
+  environment: { title: "Follow tailored env guidance", icon: CloudCogIcon },
+  readiness: { title: "Validate readiness", icon: DatabaseZapIcon },
+  admin: { title: "Create first admin", icon: KeyRoundIcon },
+  workspace: { title: "Configure Workspace", icon: Building2Icon },
+  organization: { title: "Describe the organization", icon: Building2Icon },
+  membership: { title: "Set up membership", icon: ShieldCheckIcon },
+  connect: { title: "Connect Google Workspace", icon: LinkIcon },
 };
 
 function readZodFieldError<
@@ -234,6 +275,24 @@ function collectMessages(error: unknown): string[] {
   return [];
 }
 
+function decodeWorkspaceMessage(value: string | null) {
+  if (!value) return "Google did not return a reason.";
+  switch (value) {
+    case "invalid_state":
+      return "The OAuth state could not be verified. Start the connection again.";
+    case "no_refresh_token":
+      return "Google did not return a refresh token. Revoke Spoleek's access in your Google account and retry.";
+    case "domain_mismatch":
+      return "That Google account does not belong to the workspace domain you configured.";
+    case "domain_missing":
+      return "The workspace domain is missing on the organization.";
+    case "access_denied":
+      return "You cancelled the Google consent screen.";
+    default:
+      return value;
+  }
+}
+
 function toFieldErrors(errors: unknown[], serverErrors?: string[]) {
   const messages = [
     ...errors.flatMap(collectMessages),
@@ -251,12 +310,19 @@ export function SetupWizard({
   viewer,
   googleAvailable,
   databaseIssue,
+  workspaceConnectState,
 }: SetupWizardProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const workspaceCallbackStatus = searchParams.get("workspace");
+  const workspaceCallbackMessage = searchParams.get("workspaceMessage");
 
   const [intentError, setIntentError] = useState<string | null>(null);
   const [adminFormError, setAdminFormError] = useState<string | null>(null);
   const [claimAdminError, setClaimAdminError] = useState<string | null>(null);
+  const [workspaceFormError, setWorkspaceFormError] = useState<string | null>(
+    null,
+  );
   const [organizationFormError, setOrganizationFormError] = useState<
     string | null
   >(null);
@@ -292,11 +358,39 @@ export function SetupWizard({
     },
   });
   const createOrg = useAction(createBootstrapOrganizationAction, {
-    onSuccess() {
+    onSuccess({ data }) {
+      // Workspace setups stay in the wizard: the OAuth grant needs the orgId
+      // that was just written, so the connect step renders next.
+      if (data?.workspaceModuleEnabled) {
+        router.refresh();
+        return;
+      }
+
       router.push("/");
       router.refresh();
     },
   });
+  const setAdminMembership = useAction(setSetupAdminMembershipAction);
+  const [createAdminAsMember, setCreateAdminAsMember] = useState(
+    state.createAdminAsMember ?? true,
+  );
+  const saveOrgProfile = useAction(saveSetupOrganizationProfileAction, {
+    onSuccess() {
+      router.refresh();
+    },
+  });
+  const editOrgProfile = useAction(editSetupOrganizationProfileAction, {
+    onSuccess() {
+      router.refresh();
+    },
+  });
+  const saveWorkspaceConfig = useAction(saveSetupWorkspaceConfigAction, {
+    onSuccess() {
+      router.refresh();
+    },
+  });
+  const saveProvisionFields = useAction(saveWorkspaceProvisionFieldsAction);
+  const completeSetup = useAction(completeSetupAction);
   const resetWizard = useAction(resetSetupWizardAction, {
     onSuccess() {
       router.refresh();
@@ -373,11 +467,12 @@ export function SetupWizard({
 
   const organizationForm = useForm({
     defaultValues: {
-      organizationName: "",
-      organizationSlug: "",
-      legalName: "",
-      primaryEmail: state.adminEmail ?? viewer?.email ?? "",
-      website: "",
+      organizationName: state.organizationName ?? "",
+      organizationSlug: state.organizationSlug ?? "",
+      legalName: state.legalName ?? "",
+      primaryEmail:
+        state.primaryEmail ?? state.adminEmail ?? viewer?.email ?? "",
+      website: state.website ?? "",
       membershipManagementMode: "none" as "none" | "periodic_renewal",
       membershipRenewalMonth: null as number | null,
       membershipRenewalDay: null as number | null,
@@ -424,13 +519,137 @@ export function SetupWizard({
         return;
       }
 
-      toast.success("Setup complete. Redirecting to login.");
+      toast.success(
+        state.workspaceModuleEnabled
+          ? "Organization created. One step left: connect Google Workspace."
+          : "Setup complete. Redirecting to login.",
+      );
     },
   });
 
+  // The Workspace track signs the first admin in with Google, so their address
+  // is the strongest available hint at the domain being set up.
+  const suggestedWorkspaceDomain = deriveWorkspaceDomainFromEmail(
+    state.adminEmail ?? viewer?.email,
+  );
+
+  const workspaceForm = useForm({
+    defaultValues: {
+      workspaceDomain: state.workspaceDomain ?? suggestedWorkspaceDomain ?? "",
+      workspaceEmailTemplate:
+        state.workspaceEmailTemplate ?? DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+      defaultEmailPreference:
+        state.workspaceDefaultEmailPreference ?? "workspace",
+    } satisfies SetupWorkspaceConfigValues,
+    onSubmitInvalid() {
+      toast.error("Fix the highlighted Workspace fields.");
+    },
+    onSubmit: async ({ value }) => {
+      setWorkspaceFormError(null);
+
+      const result = await saveWorkspaceConfig.executeAsync(value);
+
+      if (result?.serverError) {
+        setWorkspaceFormError(result.serverError);
+        toast.error(result.serverError);
+      }
+    },
+  });
+
+  /**
+   * The organization step owns only the identity half of the form, so it
+   * validates that slice on its own instead of running the full submit.
+   */
+  const identityFields = [
+    "organizationName",
+    "organizationSlug",
+    "legalName",
+    "primaryEmail",
+    "website",
+  ] as const;
+
+  const submitOrganizationProfile = async () => {
+    setOrganizationFormError(null);
+    setOrganizationServerFieldErrors({});
+
+    const values = organizationForm.state.values;
+    const parsed = organizationBootstrapSchema.safeParse({
+      organizationName: values.organizationName,
+      organizationSlug: values.organizationSlug,
+      legalName: values.legalName,
+      primaryEmail: values.primaryEmail,
+      website: values.website,
+    });
+
+    for (const field of identityFields) {
+      organizationForm.setFieldMeta(field, (meta) => ({
+        ...meta,
+        isTouched: true,
+      }));
+    }
+
+    if (!parsed.success) {
+      const fieldErrors: SafeFieldErrors<OrganizationBootstrapWithMembershipValues> =
+        {};
+
+      for (const issue of parsed.error.issues) {
+        const key = issue
+          .path[0] as keyof OrganizationBootstrapWithMembershipValues;
+        fieldErrors[key] = [...(fieldErrors[key] ?? []), issue.message];
+      }
+
+      setOrganizationServerFieldErrors(fieldErrors);
+      toast.error("Fix the highlighted organization fields.");
+      return;
+    }
+
+    const result = await saveOrgProfile.executeAsync(parsed.data);
+
+    if (result?.validationErrors) {
+      setOrganizationServerFieldErrors({
+        organizationName: result.validationErrors.organizationName?._errors,
+        organizationSlug: result.validationErrors.organizationSlug?._errors,
+        legalName: result.validationErrors.legalName?._errors,
+        primaryEmail: result.validationErrors.primaryEmail?._errors,
+        website: result.validationErrors.website?._errors,
+      });
+      toast.error("Organization details still have validation issues.");
+      return;
+    }
+
+    if (result?.serverError) {
+      setOrganizationFormError(result.serverError);
+      toast.error(result.serverError);
+    }
+  };
+
+  const [provisionFields, setProvisionFields] = useState<
+    WorkspaceProvisionFieldConfig[]
+  >(() => toProvisionFieldState(workspaceConnectState?.provisionFields ?? []));
+
+  const finishSetup = async (saveFields: boolean) => {
+    if (saveFields) {
+      const result = await saveProvisionFields.executeAsync({
+        fields: provisionFields.filter((field) => field.enabled),
+      });
+
+      if (result?.serverError) {
+        toast.error(result.serverError);
+        return;
+      }
+    }
+
+    await completeSetup.executeAsync({});
+    toast.success("Setup complete.");
+    router.push("/admin");
+    router.refresh();
+  };
+
   const readinessResult =
     validateReadiness.result.data?.readiness ?? envReadiness;
-  const activeStep = stepIndex[currentStep];
+  const steps = getSetupStepsFor(Boolean(state.workspaceModuleEnabled));
+  const stepNumber = (step: SetupStep) => steps.indexOf(step) + 1;
+  const activeStep = stepNumber(currentStep);
 
   function clearAdminFieldError(field: keyof EmailAdminValues) {
     setAdminFormError(null);
@@ -480,11 +699,13 @@ export function SetupWizard({
               approval.
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => resetWizard.execute({})}>
-              Start over
-            </Button>
-          </div>
+          {currentStep === "connect" ? null : (
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={() => resetWizard.execute({})}>
+                Start over
+              </Button>
+            </div>
+          )}
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
@@ -496,34 +717,9 @@ export function SetupWizard({
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              {[
-                {
-                  step: "intent" as const,
-                  title: "Choose setup path",
-                  icon: HardDriveDownloadIcon,
-                },
-                {
-                  step: "environment" as const,
-                  title: "Follow tailored env guidance",
-                  icon: CloudCogIcon,
-                },
-                {
-                  step: "readiness" as const,
-                  title: "Validate readiness",
-                  icon: DatabaseZapIcon,
-                },
-                {
-                  step: "admin" as const,
-                  title: "Create first admin",
-                  icon: KeyRoundIcon,
-                },
-                {
-                  step: "organization" as const,
-                  title: "Create organization",
-                  icon: ShieldCheckIcon,
-                },
-              ].map(({ step, title, icon: Icon }) => {
-                const index = stepIndex[step];
+              {steps.map((step) => {
+                const { title, icon: Icon } = stepMeta[step];
+                const index = stepNumber(step);
                 const done = index < activeStep;
                 const current = index === activeStep;
 
@@ -587,7 +783,9 @@ export function SetupWizard({
             {currentStep === "intent" ? (
               <Card className="bg-card/95">
                 <CardHeader>
-                  <CardTitle>Step 1 · Choose your setup path</CardTitle>
+                  <CardTitle>
+                    Step {stepNumber("intent")} · Choose your setup path
+                  </CardTitle>
                   <CardDescription>
                     These choices determine the instructions and env
                     requirements shown next, including whether member activation
@@ -627,38 +825,17 @@ export function SetupWizard({
                               <Field
                                 data-invalid={showErrors && errors.length > 0}
                               >
-                                <ToggleGroup
-                                  type="single"
-                                  orientation="vertical"
-                                  className="grid w-full"
+                                <RadioChoiceGroup
+                                  idPrefix="setup-deployment-track"
+                                  className="w-full"
                                   value={field.state.value}
                                   onValueChange={(value) => {
                                     setIntentError(null);
-                                    field.handleChange(
-                                      (value as SetupDeploymentTrack | "") ||
-                                        "",
-                                    );
+                                    field.handleChange(value);
                                   }}
-                                  aria-invalid={showErrors && errors.length > 0}
-                                >
-                                  {deploymentOptions.map((option) => (
-                                    <ToggleGroupItem
-                                      key={option.value}
-                                      value={option.value}
-                                      variant="outline"
-                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
-                                    >
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-medium">
-                                          {option.title}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground">
-                                          {option.description}
-                                        </span>
-                                      </div>
-                                    </ToggleGroupItem>
-                                  ))}
-                                </ToggleGroup>
+                                  options={deploymentOptions}
+                                  invalid={showErrors && errors.length > 0}
+                                />
                                 {showErrors ? (
                                   <FieldError errors={errors} />
                                 ) : null}
@@ -695,40 +872,17 @@ export function SetupWizard({
                               <Field
                                 data-invalid={showErrors && errors.length > 0}
                               >
-                                <ToggleGroup
-                                  type="single"
-                                  orientation="vertical"
-                                  className="grid w-full"
+                                <RadioChoiceGroup
+                                  idPrefix="setup-auth-strategy"
+                                  className="w-full"
                                   value={field.state.value}
                                   onValueChange={(value) => {
                                     setIntentError(null);
-                                    field.handleChange(
-                                      (value as
-                                        | SetupAuthStrategy
-                                        | "google-workspace"
-                                        | "") || "",
-                                    );
+                                    field.handleChange(value);
                                   }}
-                                  aria-invalid={showErrors && errors.length > 0}
-                                >
-                                  {authOptions.map((option) => (
-                                    <ToggleGroupItem
-                                      key={option.value}
-                                      value={option.value}
-                                      variant="outline"
-                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
-                                    >
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-medium">
-                                          {option.title}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground">
-                                          {option.description}
-                                        </span>
-                                      </div>
-                                    </ToggleGroupItem>
-                                  ))}
-                                </ToggleGroup>
+                                  options={authOptions}
+                                  invalid={showErrors && errors.length > 0}
+                                />
                                 {showErrors ? (
                                   <FieldError errors={errors} />
                                 ) : null}
@@ -767,7 +921,8 @@ export function SetupWizard({
               <Card className="bg-card/95">
                 <CardHeader>
                   <CardTitle>
-                    Step 2 · Follow the tailored environment guide
+                    Step {stepNumber("environment")} · Follow the tailored
+                    environment guide
                   </CardTitle>
                   <CardDescription>
                     Your choices now narrow the required `.env` values and
@@ -852,7 +1007,9 @@ export function SetupWizard({
             {currentStep === "readiness" && instructions ? (
               <Card className="bg-card/95">
                 <CardHeader>
-                  <CardTitle>Step 3 · Validate readiness</CardTitle>
+                  <CardTitle>
+                    Step {stepNumber("readiness")} · Validate readiness
+                  </CardTitle>
                   <CardDescription>
                     Spoleek checks only the env vars and provider requirements
                     needed for your chosen setup path.
@@ -932,7 +1089,9 @@ export function SetupWizard({
             {currentStep === "admin" ? (
               <Card className="bg-card/95">
                 <CardHeader>
-                  <CardTitle>Step 4 · Create the first admin account</CardTitle>
+                  <CardTitle>
+                    Step {stepNumber("admin")} · Create the first admin account
+                  </CardTitle>
                   <CardDescription>
                     This account will own the first organization and unlock the
                     post-setup login flow. Public member self-registration stays
@@ -940,6 +1099,19 @@ export function SetupWizard({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-6">
+                  <SwitchChoiceField
+                    id="setup-admin-as-member"
+                    title="Also add this admin as a member"
+                    description="Adds the admin to the organization's membership — counted in member lists, renewals, and fees. Turn it off for a manager who administers the organization without belonging to it. Admin access is unaffected either way, and you can add them as a member later."
+                    checked={createAdminAsMember}
+                    onCheckedChange={(checked) => {
+                      setCreateAdminAsMember(checked);
+                      setAdminMembership.execute({
+                        createAdminAsMember: checked,
+                      });
+                    }}
+                  />
+
                   {viewer ? (
                     <Alert>
                       <ShieldCheckIcon />
@@ -1229,13 +1401,228 @@ export function SetupWizard({
               </Card>
             ) : null}
 
+            {currentStep === "workspace" ? (
+              <Card className="bg-card/95">
+                <CardHeader>
+                  <CardTitle>
+                    Step {stepNumber("workspace")} · Configure Google Workspace
+                  </CardTitle>
+                  <CardDescription>
+                    These values are written onto the organization when it is
+                    created, so member provisioning works the moment you connect
+                    your Google admin account in the next step.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="flex flex-col gap-6"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void workspaceForm.handleSubmit();
+                    }}
+                  >
+                    <FieldGroup>
+                      <workspaceForm.Field
+                        name="workspaceDomain"
+                        validators={{
+                          onBlur: ({ value }) =>
+                            readZodFieldError(
+                              setupWorkspaceConfigSchema.shape.workspaceDomain,
+                              value,
+                            ),
+                          onSubmit: ({ value }) =>
+                            readZodFieldError(
+                              setupWorkspaceConfigSchema.shape.workspaceDomain,
+                              value,
+                            ),
+                        }}
+                      >
+                        {(field) => {
+                          const errors = toFieldErrors(field.state.meta.errors);
+                          const showErrors =
+                            field.state.meta.isTouched ||
+                            field.form.state.submissionAttempts > 0;
+
+                          return (
+                            <Field
+                              data-invalid={showErrors && errors.length > 0}
+                            >
+                              <FieldLabel htmlFor="setup-workspace-domain">
+                                Workspace domain
+                              </FieldLabel>
+                              <FieldContent>
+                                <Input
+                                  id="setup-workspace-domain"
+                                  value={field.state.value}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) => {
+                                    setWorkspaceFormError(null);
+                                    field.handleChange(event.target.value);
+                                  }}
+                                  placeholder="spoleek.org"
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                  aria-invalid={showErrors && errors.length > 0}
+                                />
+                                <FieldDescription>
+                                  {suggestedWorkspaceDomain &&
+                                  field.state.value === suggestedWorkspaceDomain
+                                    ? `Detected from your admin account (${state.adminEmail ?? viewer?.email}). Change it if your Workspace uses a different primary domain.`
+                                    : "The Google account you connect next must be a super-admin on this domain."}
+                                </FieldDescription>
+                                {showErrors ? (
+                                  <FieldError errors={errors} />
+                                ) : null}
+                              </FieldContent>
+                            </Field>
+                          );
+                        }}
+                      </workspaceForm.Field>
+
+                      <workspaceForm.Field
+                        name="workspaceEmailTemplate"
+                        validators={{
+                          onBlur: ({ value }) =>
+                            readZodFieldError(
+                              setupWorkspaceConfigSchema.shape
+                                .workspaceEmailTemplate,
+                              value,
+                            ),
+                          onSubmit: ({ value }) =>
+                            readZodFieldError(
+                              setupWorkspaceConfigSchema.shape
+                                .workspaceEmailTemplate,
+                              value,
+                            ),
+                        }}
+                      >
+                        {(field) => {
+                          const errors = toFieldErrors(field.state.meta.errors);
+                          const showErrors =
+                            field.state.meta.isTouched ||
+                            field.form.state.submissionAttempts > 0;
+
+                          return (
+                            <Field
+                              data-invalid={showErrors && errors.length > 0}
+                            >
+                              <FieldLabel htmlFor="setup-workspace-template">
+                                Email template
+                              </FieldLabel>
+                              <FieldContent>
+                                <Input
+                                  id="setup-workspace-template"
+                                  value={field.state.value}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) => {
+                                    setWorkspaceFormError(null);
+                                    field.handleChange(event.target.value);
+                                  }}
+                                  placeholder={DEFAULT_WORKSPACE_EMAIL_TEMPLATE}
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                  aria-invalid={showErrors && errors.length > 0}
+                                />
+                                <FieldDescription>
+                                  Placeholders: <code>{"{first}"}</code>,{" "}
+                                  <code>{"{last}"}</code>,{" "}
+                                  <code>{"{initial}"}</code>. Preview for Jane
+                                  Doe:{" "}
+                                  <span className="font-mono text-foreground">
+                                    {renderWorkspaceEmailLocalPart({
+                                      template:
+                                        field.state.value ||
+                                        DEFAULT_WORKSPACE_EMAIL_TEMPLATE,
+                                      firstName: "Jane",
+                                      lastName: "Doe",
+                                    })}
+                                    <workspaceForm.Subscribe
+                                      selector={(s) => s.values.workspaceDomain}
+                                    >
+                                      {(domain) =>
+                                        domain
+                                          ? `@${domain.trim().toLowerCase()}`
+                                          : ""
+                                      }
+                                    </workspaceForm.Subscribe>
+                                  </span>
+                                </FieldDescription>
+                                {showErrors ? (
+                                  <FieldError errors={errors} />
+                                ) : null}
+                              </FieldContent>
+                            </Field>
+                          );
+                        }}
+                      </workspaceForm.Field>
+
+                      <workspaceForm.Field name="defaultEmailPreference">
+                        {(field) => (
+                          <FieldSet>
+                            <FieldLegend>Default preferred email</FieldLegend>
+                            <FieldDescription>
+                              Which address Spoleek uses for members who have
+                              not set their own preference.
+                            </FieldDescription>
+                            <RadioChoiceGroup
+                              idPrefix="setup-workspace-email-preference"
+                              className="w-full"
+                              value={field.state.value}
+                              onValueChange={field.handleChange}
+                              options={[
+                                {
+                                  value: "workspace" as const,
+                                  title: "Workspace email",
+                                  description:
+                                    "Use the provisioned Workspace address as the primary contact.",
+                                },
+                                {
+                                  value: "personal" as const,
+                                  title: "Personal email",
+                                  description:
+                                    "Keep writing to the member's own address instead.",
+                                },
+                              ]}
+                            />
+                          </FieldSet>
+                        )}
+                      </workspaceForm.Field>
+                    </FieldGroup>
+                  </form>
+
+                  {workspaceFormError ? (
+                    <Alert variant="destructive" className="mt-6">
+                      <CircleAlertIcon />
+                      <AlertTitle>Could not save Workspace settings</AlertTitle>
+                      <AlertDescription>{workspaceFormError}</AlertDescription>
+                    </Alert>
+                  ) : null}
+                </CardContent>
+                <CardFooter className="justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    You can fine-tune all of this later in administration.
+                  </p>
+                  <Button
+                    onClick={() => void workspaceForm.handleSubmit()}
+                    disabled={saveWorkspaceConfig.isPending}
+                  >
+                    Save and continue
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : null}
+
             {currentStep === "organization" ? (
               <Card className="bg-card/95">
                 <CardHeader>
-                  <CardTitle>Step 5 · Create the organization</CardTitle>
+                  <CardTitle>
+                    Step {stepNumber("organization")} · Describe the
+                    organization
+                  </CardTitle>
                   <CardDescription>
-                    This final step writes the first organization, marks setup
-                    complete, and makes `/` the dedicated login page.
+                    Identity and contact details for the organization this
+                    deployment is being set up for.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-6">
@@ -1246,7 +1633,10 @@ export function SetupWizard({
                       {state.adminEmail ? (
                         <span>
                           {state.adminEmail} will be assigned as the initial org
-                          admin.
+                          admin
+                          {createAdminAsMember
+                            ? " and added to the organization's membership."
+                            : ", without being added to the organization's membership."}
                         </span>
                       ) : (
                         <span>Finish the admin step before continuing.</span>
@@ -1261,10 +1651,18 @@ export function SetupWizard({
                         Google Workspace module will be enabled
                       </AlertTitle>
                       <AlertDescription>
-                        Your auth strategy is set to Google-first. The Workspace
-                        module will be activated on this organization. Configure
-                        your workspace domain and connect your Google admin
-                        account in administration after setup.
+                        {state.workspaceDomain ? (
+                          <span>
+                            The module will be activated on{" "}
+                            <strong>{state.workspaceDomain}</strong>. Connecting
+                            your Google admin account is the next and final
+                            step.
+                          </span>
+                        ) : (
+                          <span>
+                            The module will be activated on this organization.
+                          </span>
+                        )}
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -1571,423 +1969,6 @@ export function SetupWizard({
                       </organizationForm.Field>
                     </FieldGroup>
 
-                    <Separator />
-
-                    <Collapsible>
-                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg px-1 py-2 text-sm font-medium hover:bg-muted/50 transition-colors">
-                        <span>Membership settings</span>
-                        <ChevronDownIcon className="size-4 transition-transform duration-200 in-data-[state=open]:rotate-180" />
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="flex flex-col gap-6 pt-4">
-                        <p className="text-sm text-muted-foreground">
-                          Configure how memberships work. Defaults to no
-                          management — you can change these anytime in
-                          administration.
-                        </p>
-
-                        <FieldSet>
-                          <FieldLegend>Management mode</FieldLegend>
-                          <organizationForm.Field name="membershipManagementMode">
-                            {(field) => (
-                              <ToggleGroup
-                                type="single"
-                                orientation="vertical"
-                                className="grid w-full"
-                                value={field.state.value}
-                                onValueChange={(value) => {
-                                  if (value) {
-                                    field.handleChange(
-                                      value as "none" | "periodic_renewal",
-                                    );
-                                  }
-                                }}
-                              >
-                                {membershipManagementModeOptions.map(
-                                  (option) => (
-                                    <ToggleGroupItem
-                                      key={option.value}
-                                      value={option.value}
-                                      variant="outline"
-                                      className="h-auto w-full items-start justify-start rounded-2xl px-4 py-4 text-left whitespace-normal"
-                                    >
-                                      <div className="flex flex-col gap-1">
-                                        <span className="font-medium">
-                                          {option.label}
-                                        </span>
-                                        <span className="text-sm text-muted-foreground">
-                                          {option.description}
-                                        </span>
-                                      </div>
-                                    </ToggleGroupItem>
-                                  ),
-                                )}
-                              </ToggleGroup>
-                            )}
-                          </organizationForm.Field>
-                        </FieldSet>
-
-                        <organizationForm.Subscribe
-                          selector={(s) =>
-                            s.values.membershipManagementMode ===
-                            "periodic_renewal"
-                          }
-                        >
-                          {(isPeriodicRenewal) =>
-                            isPeriodicRenewal ? (
-                              <div className="flex flex-col gap-4">
-                                <div className="grid gap-4 md:grid-cols-2">
-                                  <organizationForm.Field
-                                    name="membershipRenewalMonth"
-                                    validators={{
-                                      onChange: ({ value }) =>
-                                        value == null
-                                          ? "Renewal month is required for periodic renewal."
-                                          : undefined,
-                                    }}
-                                  >
-                                    {(field) => {
-                                      const errors = toFieldErrors(
-                                        field.state.meta.errors,
-                                        organizationServerFieldErrors.membershipRenewalMonth,
-                                      );
-                                      const showErrors =
-                                        field.state.meta.isTouched ||
-                                        field.form.state.submissionAttempts > 0;
-
-                                      return (
-                                        <Field
-                                          data-invalid={
-                                            showErrors && errors.length > 0
-                                          }
-                                        >
-                                          <FieldLabel>Renewal month</FieldLabel>
-                                          <FieldContent>
-                                            <Select
-                                              value={
-                                                field.state.value?.toString() ??
-                                                ""
-                                              }
-                                              onValueChange={(v) => {
-                                                clearOrganizationFieldError(
-                                                  "membershipRenewalMonth",
-                                                );
-                                                field.handleChange(
-                                                  v ? Number(v) : null,
-                                                );
-                                              }}
-                                            >
-                                              <SelectTrigger>
-                                                <SelectValue placeholder="Select month" />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {MONTH_LABELS.map(
-                                                  (label, i) => (
-                                                    <SelectItem
-                                                      key={i + 1}
-                                                      value={(i + 1).toString()}
-                                                    >
-                                                      {label}
-                                                    </SelectItem>
-                                                  ),
-                                                )}
-                                              </SelectContent>
-                                            </Select>
-                                            {showErrors ? (
-                                              <FieldError errors={errors} />
-                                            ) : null}
-                                          </FieldContent>
-                                        </Field>
-                                      );
-                                    }}
-                                  </organizationForm.Field>
-
-                                  <organizationForm.Field
-                                    name="membershipRenewalDay"
-                                    validators={{
-                                      onChange: ({ value }) =>
-                                        value == null
-                                          ? "Renewal day is required for periodic renewal."
-                                          : undefined,
-                                    }}
-                                  >
-                                    {(field) => {
-                                      const errors = toFieldErrors(
-                                        field.state.meta.errors,
-                                        organizationServerFieldErrors.membershipRenewalDay,
-                                      );
-                                      const showErrors =
-                                        field.state.meta.isTouched ||
-                                        field.form.state.submissionAttempts > 0;
-
-                                      return (
-                                        <Field
-                                          data-invalid={
-                                            showErrors && errors.length > 0
-                                          }
-                                        >
-                                          <FieldLabel>Renewal day</FieldLabel>
-                                          <FieldContent>
-                                            <Input
-                                              type="number"
-                                              min={1}
-                                              max={31}
-                                              placeholder="1–31"
-                                              value={field.state.value ?? ""}
-                                              onBlur={field.handleBlur}
-                                              onChange={(e) => {
-                                                clearOrganizationFieldError(
-                                                  "membershipRenewalDay",
-                                                );
-                                                const n = parseInt(
-                                                  e.target.value,
-                                                  10,
-                                                );
-                                                field.handleChange(
-                                                  isNaN(n) ? null : n,
-                                                );
-                                              }}
-                                            />
-                                            {showErrors ? (
-                                              <FieldError errors={errors} />
-                                            ) : null}
-                                          </FieldContent>
-                                        </Field>
-                                      );
-                                    }}
-                                  </organizationForm.Field>
-                                </div>
-
-                                <div className="flex items-center justify-between rounded-xl border border-border/80 bg-background/70 px-4 py-3">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-sm font-medium">
-                                      Require fee payment
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      Members will receive a payment request
-                                      during the renewal period.
-                                    </span>
-                                  </div>
-                                  <organizationForm.Field name="membershipFeeEnabled">
-                                    {(field) => (
-                                      <Switch
-                                        checked={field.state.value}
-                                        onCheckedChange={(checked) => {
-                                          field.handleChange(checked);
-                                        }}
-                                      />
-                                    )}
-                                  </organizationForm.Field>
-                                </div>
-
-                                <organizationForm.Subscribe
-                                  selector={(s) =>
-                                    s.values.membershipFeeEnabled
-                                  }
-                                >
-                                  {(feeEnabled) =>
-                                    feeEnabled ? (
-                                      <div className="grid gap-4 md:grid-cols-2">
-                                        <organizationForm.Field
-                                          name="membershipFeeAmount"
-                                          validators={{
-                                            onBlur: ({ value }) =>
-                                              value == null
-                                                ? "Fee amount is required when fee payment is enabled."
-                                                : undefined,
-                                          }}
-                                        >
-                                          {(field) => {
-                                            const errors = toFieldErrors(
-                                              field.state.meta.errors,
-                                              organizationServerFieldErrors.membershipFeeAmount,
-                                            );
-                                            const showErrors =
-                                              field.state.meta.isTouched ||
-                                              field.form.state
-                                                .submissionAttempts > 0;
-
-                                            return (
-                                              <Field
-                                                data-invalid={
-                                                  showErrors &&
-                                                  errors.length > 0
-                                                }
-                                              >
-                                                <FieldLabel>
-                                                  Fee amount
-                                                </FieldLabel>
-                                                <FieldContent>
-                                                  <Input
-                                                    type="number"
-                                                    min={0}
-                                                    step="0.01"
-                                                    placeholder="e.g. 500"
-                                                    value={
-                                                      field.state.value ?? ""
-                                                    }
-                                                    onBlur={field.handleBlur}
-                                                    onChange={(e) => {
-                                                      clearOrganizationFieldError(
-                                                        "membershipFeeAmount",
-                                                      );
-                                                      const n = parseFloat(
-                                                        e.target.value,
-                                                      );
-                                                      field.handleChange(
-                                                        isNaN(n) ? null : n,
-                                                      );
-                                                    }}
-                                                  />
-                                                  <FieldDescription>
-                                                    Whole units (e.g. 500 for
-                                                    500 CZK).
-                                                  </FieldDescription>
-                                                  {showErrors ? (
-                                                    <FieldError
-                                                      errors={errors}
-                                                    />
-                                                  ) : null}
-                                                </FieldContent>
-                                              </Field>
-                                            );
-                                          }}
-                                        </organizationForm.Field>
-
-                                        <organizationForm.Field name="membershipFeeCurrency">
-                                          {(field) => (
-                                            <Field>
-                                              <FieldLabel>Currency</FieldLabel>
-                                              <FieldContent>
-                                                <Select
-                                                  value={field.state.value}
-                                                  onValueChange={(v) =>
-                                                    field.handleChange(v)
-                                                  }
-                                                >
-                                                  <SelectTrigger>
-                                                    <SelectValue />
-                                                  </SelectTrigger>
-                                                  <SelectContent>
-                                                    {feeCurrencyOptions.map(
-                                                      (opt) => (
-                                                        <SelectItem
-                                                          key={opt.value}
-                                                          value={opt.value}
-                                                        >
-                                                          {opt.label}
-                                                        </SelectItem>
-                                                      ),
-                                                    )}
-                                                  </SelectContent>
-                                                </Select>
-                                              </FieldContent>
-                                            </Field>
-                                          )}
-                                        </organizationForm.Field>
-
-                                        <organizationForm.Field
-                                          name="membershipFeeBankAccount"
-                                          validators={{
-                                            onBlur: ({ value }) =>
-                                              value != null &&
-                                              typeof value === "string" &&
-                                              value.trim().length > 0 &&
-                                              value.trim().length < 5
-                                                ? "Enter a valid bank account or IBAN."
-                                                : undefined,
-                                          }}
-                                        >
-                                          {(field) => {
-                                            const errors = toFieldErrors(
-                                              field.state.meta.errors,
-                                              organizationServerFieldErrors.membershipFeeBankAccount,
-                                            );
-                                            const showErrors =
-                                              field.state.meta.isTouched ||
-                                              field.form.state
-                                                .submissionAttempts > 0;
-
-                                            return (
-                                              <Field
-                                                className="md:col-span-2"
-                                                data-invalid={
-                                                  showErrors &&
-                                                  errors.length > 0
-                                                }
-                                              >
-                                                <FieldLabel>
-                                                  Bank account (IBAN)
-                                                </FieldLabel>
-                                                <FieldContent>
-                                                  <Input
-                                                    placeholder="CZ65 0800 0000 1920 0014 5399"
-                                                    value={
-                                                      (field.state
-                                                        .value as string) ?? ""
-                                                    }
-                                                    onBlur={field.handleBlur}
-                                                    onChange={(e) => {
-                                                      clearOrganizationFieldError(
-                                                        "membershipFeeBankAccount",
-                                                      );
-                                                      field.handleChange(
-                                                        e.target.value || null,
-                                                      );
-                                                    }}
-                                                  />
-                                                  {showErrors ? (
-                                                    <FieldError
-                                                      errors={errors}
-                                                    />
-                                                  ) : null}
-                                                </FieldContent>
-                                              </Field>
-                                            );
-                                          }}
-                                        </organizationForm.Field>
-
-                                        <organizationForm.Field name="membershipFeePaymentWindowDays">
-                                          {(field) => (
-                                            <Field>
-                                              <FieldLabel>
-                                                Payment window (days)
-                                              </FieldLabel>
-                                              <FieldContent>
-                                                <Input
-                                                  type="number"
-                                                  min={1}
-                                                  max={365}
-                                                  value={field.state.value}
-                                                  onBlur={field.handleBlur}
-                                                  onChange={(e) => {
-                                                    const n = parseInt(
-                                                      e.target.value,
-                                                      10,
-                                                    );
-                                                    field.handleChange(
-                                                      isNaN(n) ? 30 : n,
-                                                    );
-                                                  }}
-                                                />
-                                                <FieldDescription>
-                                                  Days after the renewal date
-                                                  before payment is considered
-                                                  overdue.
-                                                </FieldDescription>
-                                              </FieldContent>
-                                            </Field>
-                                          )}
-                                        </organizationForm.Field>
-                                      </div>
-                                    ) : null
-                                  }
-                                </organizationForm.Subscribe>
-                              </div>
-                            ) : null
-                          }
-                        </organizationForm.Subscribe>
-                      </CollapsibleContent>
-                    </Collapsible>
                   </form>
 
                   {organizationFormError ? (
@@ -2002,15 +1983,569 @@ export function SetupWizard({
                 </CardContent>
                 <CardFooter className="justify-between gap-4">
                   <p className="text-sm text-muted-foreground">
-                    Once your organization is created, setup is complete and
-                    you&apos;ll be redirected to login.
+                    Nothing is written to the database yet — membership comes
+                    next.
                   </p>
+                  <Button
+                    onClick={() => void submitOrganizationProfile()}
+                    disabled={saveOrgProfile.isPending}
+                  >
+                    Save and continue
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : null}
+
+            {currentStep === "membership" ? (
+              <Card className="bg-card/95">
+                <CardHeader>
+                  <CardTitle>
+                    Step {stepNumber("membership")} · Set up membership
+                  </CardTitle>
+                  <CardDescription>
+                    Decide how memberships work for{" "}
+                    {state.organizationName ?? "your organization"}. Everything
+                    here can be changed later in administration.{" "}
+                    {state.workspaceModuleEnabled
+                      ? "Saving creates the organization, then you'll connect Google Workspace to finish."
+                      : "Saving creates the organization and completes setup."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form
+                    className="flex flex-col gap-6"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void organizationForm.handleSubmit();
+                    }}
+                  >
+
+                    <FieldSet>
+                      <FieldLegend>Management mode</FieldLegend>
+                      <organizationForm.Field name="membershipManagementMode">
+                        {(field) => (
+                          <RadioChoiceGroup
+                            idPrefix="setup-membership-mode"
+                            className="w-full"
+                            value={field.state.value}
+                            onValueChange={field.handleChange}
+                            options={membershipManagementModeOptions.map(
+                              (option) => ({
+                                value: option.value,
+                                title: option.label,
+                                description: option.description,
+                              }),
+                            )}
+                          />
+                        )}
+                      </organizationForm.Field>
+                    </FieldSet>
+
+                    <organizationForm.Subscribe
+                      selector={(s) =>
+                        s.values.membershipManagementMode ===
+                        "periodic_renewal"
+                      }
+                    >
+                      {(isPeriodicRenewal) =>
+                        isPeriodicRenewal ? (
+                          <div className="flex flex-col gap-4">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <organizationForm.Field
+                                name="membershipRenewalMonth"
+                                validators={{
+                                  onChange: ({ value }) =>
+                                    value == null
+                                      ? "Renewal month is required for periodic renewal."
+                                      : undefined,
+                                }}
+                              >
+                                {(field) => {
+                                  const errors = toFieldErrors(
+                                    field.state.meta.errors,
+                                    organizationServerFieldErrors.membershipRenewalMonth,
+                                  );
+                                  const showErrors =
+                                    field.state.meta.isTouched ||
+                                    field.form.state.submissionAttempts > 0;
+
+                                  return (
+                                    <Field
+                                      data-invalid={
+                                        showErrors && errors.length > 0
+                                      }
+                                    >
+                                      <FieldLabel>Renewal month</FieldLabel>
+                                      <FieldContent>
+                                        <Select
+                                          value={
+                                            field.state.value?.toString() ??
+                                            ""
+                                          }
+                                          onValueChange={(v) => {
+                                            clearOrganizationFieldError(
+                                              "membershipRenewalMonth",
+                                            );
+                                            field.handleChange(
+                                              v ? Number(v) : null,
+                                            );
+                                          }}
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select month" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {MONTH_LABELS.map(
+                                              (label, i) => (
+                                                <SelectItem
+                                                  key={i + 1}
+                                                  value={(i + 1).toString()}
+                                                >
+                                                  {label}
+                                                </SelectItem>
+                                              ),
+                                            )}
+                                          </SelectContent>
+                                        </Select>
+                                        {showErrors ? (
+                                          <FieldError errors={errors} />
+                                        ) : null}
+                                      </FieldContent>
+                                    </Field>
+                                  );
+                                }}
+                              </organizationForm.Field>
+
+                              <organizationForm.Field
+                                name="membershipRenewalDay"
+                                validators={{
+                                  onChange: ({ value }) =>
+                                    value == null
+                                      ? "Renewal day is required for periodic renewal."
+                                      : undefined,
+                                }}
+                              >
+                                {(field) => {
+                                  const errors = toFieldErrors(
+                                    field.state.meta.errors,
+                                    organizationServerFieldErrors.membershipRenewalDay,
+                                  );
+                                  const showErrors =
+                                    field.state.meta.isTouched ||
+                                    field.form.state.submissionAttempts > 0;
+
+                                  return (
+                                    <Field
+                                      data-invalid={
+                                        showErrors && errors.length > 0
+                                      }
+                                    >
+                                      <FieldLabel>Renewal day</FieldLabel>
+                                      <FieldContent>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          max={31}
+                                          placeholder="1–31"
+                                          value={field.state.value ?? ""}
+                                          onBlur={field.handleBlur}
+                                          onChange={(e) => {
+                                            clearOrganizationFieldError(
+                                              "membershipRenewalDay",
+                                            );
+                                            const n = parseInt(
+                                              e.target.value,
+                                              10,
+                                            );
+                                            field.handleChange(
+                                              isNaN(n) ? null : n,
+                                            );
+                                          }}
+                                        />
+                                        {showErrors ? (
+                                          <FieldError errors={errors} />
+                                        ) : null}
+                                      </FieldContent>
+                                    </Field>
+                                  );
+                                }}
+                              </organizationForm.Field>
+                            </div>
+
+                            <div className="flex items-center justify-between rounded-xl border border-border/80 bg-background/70 px-4 py-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium">
+                                  Require fee payment
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  Members will receive a payment request
+                                  during the renewal period.
+                                </span>
+                              </div>
+                              <organizationForm.Field name="membershipFeeEnabled">
+                                {(field) => (
+                                  <Switch
+                                    checked={field.state.value}
+                                    onCheckedChange={(checked) => {
+                                      field.handleChange(checked);
+                                    }}
+                                  />
+                                )}
+                              </organizationForm.Field>
+                            </div>
+
+                            <organizationForm.Subscribe
+                              selector={(s) =>
+                                s.values.membershipFeeEnabled
+                              }
+                            >
+                              {(feeEnabled) =>
+                                feeEnabled ? (
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    <organizationForm.Field
+                                      name="membershipFeeAmount"
+                                      validators={{
+                                        onBlur: ({ value }) =>
+                                          value == null
+                                            ? "Fee amount is required when fee payment is enabled."
+                                            : undefined,
+                                      }}
+                                    >
+                                      {(field) => {
+                                        const errors = toFieldErrors(
+                                          field.state.meta.errors,
+                                          organizationServerFieldErrors.membershipFeeAmount,
+                                        );
+                                        const showErrors =
+                                          field.state.meta.isTouched ||
+                                          field.form.state
+                                            .submissionAttempts > 0;
+
+                                        return (
+                                          <Field
+                                            data-invalid={
+                                              showErrors &&
+                                              errors.length > 0
+                                            }
+                                          >
+                                            <FieldLabel>
+                                              Fee amount
+                                            </FieldLabel>
+                                            <FieldContent>
+                                              <Input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                placeholder="e.g. 500"
+                                                value={
+                                                  field.state.value ?? ""
+                                                }
+                                                onBlur={field.handleBlur}
+                                                onChange={(e) => {
+                                                  clearOrganizationFieldError(
+                                                    "membershipFeeAmount",
+                                                  );
+                                                  const n = parseFloat(
+                                                    e.target.value,
+                                                  );
+                                                  field.handleChange(
+                                                    isNaN(n) ? null : n,
+                                                  );
+                                                }}
+                                              />
+                                              <FieldDescription>
+                                                Whole units (e.g. 500 for
+                                                500 CZK).
+                                              </FieldDescription>
+                                              {showErrors ? (
+                                                <FieldError
+                                                  errors={errors}
+                                                />
+                                              ) : null}
+                                            </FieldContent>
+                                          </Field>
+                                        );
+                                      }}
+                                    </organizationForm.Field>
+
+                                    <organizationForm.Field name="membershipFeeCurrency">
+                                      {(field) => (
+                                        <Field>
+                                          <FieldLabel>Currency</FieldLabel>
+                                          <FieldContent>
+                                            <Select
+                                              value={field.state.value}
+                                              onValueChange={(v) =>
+                                                field.handleChange(v)
+                                              }
+                                            >
+                                              <SelectTrigger>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                {feeCurrencyOptions.map(
+                                                  (opt) => (
+                                                    <SelectItem
+                                                      key={opt.value}
+                                                      value={opt.value}
+                                                    >
+                                                      {opt.label}
+                                                    </SelectItem>
+                                                  ),
+                                                )}
+                                              </SelectContent>
+                                            </Select>
+                                          </FieldContent>
+                                        </Field>
+                                      )}
+                                    </organizationForm.Field>
+
+                                    <organizationForm.Field
+                                      name="membershipFeeBankAccount"
+                                      validators={{
+                                        onBlur: ({ value }) =>
+                                          value != null &&
+                                          typeof value === "string" &&
+                                          value.trim().length > 0 &&
+                                          value.trim().length < 5
+                                            ? "Enter a valid bank account or IBAN."
+                                            : undefined,
+                                      }}
+                                    >
+                                      {(field) => {
+                                        const errors = toFieldErrors(
+                                          field.state.meta.errors,
+                                          organizationServerFieldErrors.membershipFeeBankAccount,
+                                        );
+                                        const showErrors =
+                                          field.state.meta.isTouched ||
+                                          field.form.state
+                                            .submissionAttempts > 0;
+
+                                        return (
+                                          <Field
+                                            className="md:col-span-2"
+                                            data-invalid={
+                                              showErrors &&
+                                              errors.length > 0
+                                            }
+                                          >
+                                            <FieldLabel>
+                                              Bank account (IBAN)
+                                            </FieldLabel>
+                                            <FieldContent>
+                                              <Input
+                                                placeholder="CZ65 0800 0000 1920 0014 5399"
+                                                value={
+                                                  (field.state
+                                                    .value as string) ?? ""
+                                                }
+                                                onBlur={field.handleBlur}
+                                                onChange={(e) => {
+                                                  clearOrganizationFieldError(
+                                                    "membershipFeeBankAccount",
+                                                  );
+                                                  field.handleChange(
+                                                    e.target.value || null,
+                                                  );
+                                                }}
+                                              />
+                                              {showErrors ? (
+                                                <FieldError
+                                                  errors={errors}
+                                                />
+                                              ) : null}
+                                            </FieldContent>
+                                          </Field>
+                                        );
+                                      }}
+                                    </organizationForm.Field>
+
+                                    <organizationForm.Field name="membershipFeePaymentWindowDays">
+                                      {(field) => (
+                                        <Field>
+                                          <FieldLabel>
+                                            Payment window (days)
+                                          </FieldLabel>
+                                          <FieldContent>
+                                            <Input
+                                              type="number"
+                                              min={1}
+                                              max={365}
+                                              value={field.state.value}
+                                              onBlur={field.handleBlur}
+                                              onChange={(e) => {
+                                                const n = parseInt(
+                                                  e.target.value,
+                                                  10,
+                                                );
+                                                field.handleChange(
+                                                  isNaN(n) ? 30 : n,
+                                                );
+                                              }}
+                                            />
+                                            <FieldDescription>
+                                              Days after the renewal date
+                                              before payment is considered
+                                              overdue.
+                                            </FieldDescription>
+                                          </FieldContent>
+                                        </Field>
+                                      )}
+                                    </organizationForm.Field>
+                                  </div>
+                                ) : null
+                              }
+                            </organizationForm.Subscribe>
+                          </div>
+                        ) : null
+                      }
+                    </organizationForm.Subscribe>
+                  </form>
+
+                  {organizationFormError ? (
+                    <Alert variant="destructive">
+                      <CircleAlertIcon />
+                      <AlertTitle>Organization bootstrap failed</AlertTitle>
+                      <AlertDescription>
+                        {organizationFormError}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                </CardContent>
+                <CardFooter className="justify-between gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => editOrgProfile.execute({})}
+                    disabled={editOrgProfile.isPending}
+                  >
+                    Back to organization
+                  </Button>
                   <Button
                     type="submit"
                     onClick={() => void organizationForm.handleSubmit()}
                     disabled={createOrg.isPending}
                   >
-                    Finish setup
+                    {createOrg.isPending
+                      ? "Creating organization…"
+                      : state.workspaceModuleEnabled
+                        ? "Create organization and continue"
+                        : "Create organization and finish setup"}
+                  </Button>
+                </CardFooter>
+              </Card>
+            ) : null}
+
+            {currentStep === "connect" && workspaceConnectState ? (
+              <Card className="bg-card/95">
+                <CardHeader>
+                  <CardTitle>
+                    Step {stepNumber("connect")} · Connect Google Workspace
+                  </CardTitle>
+                  <CardDescription>
+                    Your organization is created. Grant Spoleek access to your
+                    Google Workspace directory so it can provision member
+                    accounts, then decide which fields it fills in.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-6">
+                  {workspaceCallbackStatus === "error" ? (
+                    <Alert variant="destructive">
+                      <CircleAlertIcon />
+                      <AlertTitle>Connection failed</AlertTitle>
+                      <AlertDescription>
+                        {decodeWorkspaceMessage(workspaceCallbackMessage)}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+
+                  {workspaceConnectState.connected ? (
+                    <>
+                      <Alert>
+                        <CheckIcon />
+                        <AlertTitle>Google Workspace connected</AlertTitle>
+                        <AlertDescription>
+                          Connected as{" "}
+                          <strong>
+                            {workspaceConnectState.adminEmail ??
+                              "a super-admin"}
+                          </strong>{" "}
+                          on{" "}
+                          <strong>{workspaceConnectState.domain}</strong>.
+                        </AlertDescription>
+                      </Alert>
+
+                      <WorkspaceProvisionFields
+                        fields={provisionFields}
+                        onFieldsChange={setProvisionFields}
+                        customFields={workspaceConnectState.customFields}
+                        groupCategories={[]}
+                        description="Pick what Spoleek writes onto a member's Workspace account when it is created — during approval, import, or manual creation."
+                        footnote={
+                          <>
+                            Nothing here is final: you can change which fields
+                            are filled, and what fills them, any time under
+                            Settings → Workspace. More auto-fill sources appear
+                            as your organization takes shape — once you add
+                            group categories, a field can be derived from the
+                            member&apos;s group name with a template like{" "}
+                            <code>{"{name}"}</code>, and any custom member
+                            fields you define become sources too. Only the org
+                            unit and member profile options are available this
+                            early, because nothing else exists yet.
+                          </>
+                        }
+                      />
+                    </>
+                  ) : (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-background/70 p-4">
+                      <p className="text-sm font-medium">
+                        Connect as a Workspace super-admin
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Spoleek needs the <code>admin.directory.user</code>{" "}
+                        scope to create accounts on{" "}
+                        <strong>
+                          {workspaceConnectState.domain ?? "your domain"}
+                        </strong>
+                        . You will come straight back here afterwards.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="self-start"
+                        onClick={() => {
+                          window.location.href =
+                            "/api/workspace/oauth/start?origin=setup";
+                        }}
+                      >
+                        <LinkIcon data-icon="inline-start" />
+                        Connect Google Workspace
+                        <ExternalLinkIcon data-icon="inline-end" />
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+                <CardFooter className="justify-between gap-4">
+                  <Button
+                    variant="ghost"
+                    onClick={() => void finishSetup(false)}
+                    disabled={completeSetup.isPending}
+                  >
+                    {workspaceConnectState.connected
+                      ? "Skip field setup"
+                      : "Skip for now"}
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      void finishSetup(workspaceConnectState.connected)
+                    }
+                    disabled={
+                      completeSetup.isPending || saveProvisionFields.isPending
+                    }
+                  >
+                    Go to administration
                   </Button>
                 </CardFooter>
               </Card>
