@@ -18,6 +18,10 @@ import {
   searchWorkspaceUsersSchema,
   updateMemberSchema,
 } from "@/lib/member-admin";
+import {
+  describeApprovalRequirement,
+  requiresApprovalFlow,
+} from "@/lib/member-status-transitions";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { generateRandomPassword } from "@/lib/crypto";
 import { authActionClient } from "@/lib/safe-action-auth";
@@ -292,6 +296,12 @@ export const approveMemberAction = authActionClient
     z.object({
       memberId: z.uuid(),
       role: z.enum(["member", "leader", "org_admin"]).default("member"),
+      /**
+       * The admin was told the Workspace module is enabled but not connected,
+       * and chose to approve without a Google account anyway. Without this the
+       * approval is refused rather than silently skipping provisioning.
+       */
+      acknowledgeWorkspaceUnavailable: z.boolean().default(false),
       workspace: z
         .object({
           primaryEmail: z.email(),
@@ -390,6 +400,19 @@ export const approveMemberAction = authActionClient
           primaryEmail: provision.primaryEmail,
         },
       };
+    }
+
+    // The module is switched on but the OAuth connection was never completed
+    // (no workspaceConnectedAt / workspaceDomain). Approving here still works,
+    // it just creates no Google account — so require the admin to have seen
+    // the warning rather than letting provisioning be skipped silently.
+    if (
+      organization.workspaceModuleEnabled &&
+      !parsedInput.acknowledgeWorkspaceUnavailable
+    ) {
+      throw new Error(
+        "Google Workspace is enabled but not connected, so no account can be created. Connect it in Settings → Google Workspace, or approve without a Workspace account.",
+      );
     }
 
     const nextStatus = usesEmailPasswordActivation(
@@ -669,6 +692,17 @@ export const updateMemberAction = authActionClient
       memberId: parsedInput.memberId,
       scope,
     });
+    if (
+      member.status !== "deleted" &&
+      requiresApprovalFlow(member.status, parsedInput.status)
+    ) {
+      returnValidationErrors(updateMemberSchema, {
+        status: {
+          _errors: [describeApprovalRequirement(parsedInput.status)],
+        },
+      });
+    }
+
     const groupIds = validateGroupSelectionOrThrow({
       schema: updateMemberSchema,
       scopeAccessLevel: scope.accessLevel,

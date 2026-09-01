@@ -6,6 +6,7 @@ import { useForm } from "@tanstack/react-form";
 import {
   AlertTriangleIcon,
   BadgeCheckIcon,
+  CheckCircle2Icon,
   EllipsisVerticalIcon,
   ExternalLinkIcon,
   FingerprintIcon,
@@ -90,6 +91,10 @@ import {
   type UpdateMemberValues,
   updateMemberSchema,
 } from "@/lib/member-admin";
+import {
+  describeApprovalRequirement,
+  requiresApprovalFlow,
+} from "@/lib/member-status-transitions";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 import { syncWorkspaceMemberAction } from "@/server/actions/member-admin";
@@ -132,6 +137,8 @@ type MemberEditSheetProps = {
   validationErrors?: MemberEditValidationErrors;
   customFieldErrors?: Record<string, string[]>;
   customFieldAnswers: Record<string, unknown>;
+  isApprovePending: boolean;
+  onApprove: () => void;
   onDelete: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: UpdateMemberValues) => Promise<void>;
@@ -153,6 +160,17 @@ function toDefaultValues(
     customFieldAnswers,
   };
 }
+
+const STATUS_OPTIONS: Array<{
+  value: EditableMemberStatus;
+  label: string;
+}> = [
+  { value: "invited", label: "Invited" },
+  { value: "pending", label: "Pending" },
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+  { value: "archived", label: "Archived" },
+];
 
 function DefinitionRow({
   label,
@@ -195,6 +213,8 @@ export function MemberEditSheet({
   validationErrors,
   customFieldErrors,
   customFieldAnswers,
+  isApprovePending,
+  onApprove,
   onDelete,
   onOpenChange,
   onSubmit,
@@ -340,6 +360,29 @@ export function MemberEditSheet({
           }}
         >
           <div className="flex-1 overflow-y-auto px-4 pb-4">
+            {member.status === "pending" ? (
+              <Card className="mb-4 mt-1 border-amber-500/30 bg-amber-500/5">
+                <CardHeader className="flex flex-col items-start gap-3">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+                      Awaiting approval
+                    </div>
+                    <CardTitle className="text-base">
+                      This member has not been approved yet
+                    </CardTitle>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={onApprove}
+                    disabled={isApprovePending || isPending || isDeletePending}
+                  >
+                    <CheckCircle2Icon data-icon="inline-start" />
+                    {isApprovePending ? "Approving..." : "Approve member"}
+                  </Button>
+                </CardHeader>
+              </Card>
+            ) : null}
+
             {member.workspaceUserEmail ? (
               <Card className="mb-6 mt-1 overflow-hidden border-primary/20 bg-primary/5">
                 <CardHeader className="flex flex-row items-center gap-4">
@@ -730,34 +773,72 @@ export function MemberEditSheet({
                 </form.Field>
 
                 <form.Field name="status">
-                  {(formField) => (
-                    <Field>
-                      <FieldLabel>Status</FieldLabel>
-                      <FieldContent>
-                        <Select
-                          value={formField.state.value}
-                          onValueChange={(value) =>
-                            formField.handleChange(
-                              value as UpdateMemberValues["status"],
-                            )
-                          }
-                        >
-                          <SelectTrigger className="w-full px-4">
-                            <SelectValue placeholder="Choose status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectItem value="invited">Invited</SelectItem>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="suspended">Suspended</SelectItem>
-                              <SelectItem value="archived">Archived</SelectItem>
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                      </FieldContent>
-                    </Field>
-                  )}
+                  {(formField) => {
+                    const blockedTarget = STATUS_OPTIONS.find(
+                      (option) =>
+                        option.value === formField.state.value &&
+                        requiresApprovalFlow(member.status, option.value),
+                    );
+
+                    return (
+                      <Field data-invalid={Boolean(blockedTarget)}>
+                        <FieldLabel>Status</FieldLabel>
+                        <FieldContent>
+                          <Select
+                            value={formField.state.value}
+                            onValueChange={(value) =>
+                              formField.handleChange(
+                                value as UpdateMemberValues["status"],
+                              )
+                            }
+                          >
+                            <SelectTrigger className="w-full px-4">
+                              <SelectValue placeholder="Choose status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {STATUS_OPTIONS.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                    disabled={requiresApprovalFlow(
+                                      member.status,
+                                      option.value,
+                                    )}
+                                  >
+                                    {option.label}
+                                    {requiresApprovalFlow(
+                                      member.status,
+                                      option.value,
+                                    )
+                                      ? " — needs approval"
+                                      : ""}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                          {blockedTarget ? (
+                            <FieldError
+                              errors={[
+                                {
+                                  message: describeApprovalRequirement(
+                                    blockedTarget.value,
+                                  ),
+                                },
+                              ]}
+                            />
+                          ) : (
+                            <FieldError
+                              errors={getFieldError("status").map((message) => ({
+                                message,
+                              }))}
+                            />
+                          )}
+                        </FieldContent>
+                      </Field>
+                    );
+                  }}
                 </form.Field>
               </div>
 

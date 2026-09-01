@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
@@ -230,8 +231,18 @@ export function MemberAdmin({
   const [workspaceApproveError, setWorkspaceApproveError] = useState<
     string | null
   >(null);
+  // A single useAction hook backs every Approve button, so `isPending` alone
+  // would grey out all of them. Track the member actually being approved.
+  const [approvingMemberId, setApprovingMemberId] = useState<string | null>(
+    null,
+  );
+  // Member awaiting the "Workspace is not connected" warning decision.
+  const [unconnectedWarningMember, setUnconnectedWarningMember] =
+    useState<WorkspaceApprovalMember | null>(null);
   const workspaceReady =
     workspace.enabled && workspace.connected && Boolean(workspace.domain);
+  /** Module switched on, but the OAuth connection was never completed. */
+  const workspaceMisconfigured = workspace.enabled && !workspaceReady;
   const { organization } = useAppShell();
   const { defaultEmailPreference } = organization;
 
@@ -259,6 +270,9 @@ export function MemberAdmin({
     },
   });
   const approveAction = useAction(approveMemberAction, {
+    onSettled() {
+      setApprovingMemberId(null);
+    },
     onSuccess({ data }) {
       if (!data?.success) {
         const error = data?.workspace?.error;
@@ -301,6 +315,37 @@ export function MemberAdmin({
       }
     },
   });
+  /**
+   * The one way to approve a member. Both the table row and the edit sheet go
+   * through here so the Workspace provisioning dialog is never skipped.
+   */
+  const startApproval = useCallback(
+    (member: WorkspaceApprovalMember, { fromEditSheet = false } = {}) => {
+      setWorkspaceApproveError(null);
+
+      // The provisioning dialog and the edit sheet are both z-50 modals, so a
+      // dialog opened while the sheet is up renders underneath it. Close the
+      // sheet first — approval reloads the record anyway.
+      if (fromEditSheet) {
+        updateSearchParam(null);
+      }
+
+      if (workspaceReady) {
+        setWorkspaceApproveMember(member);
+        return;
+      }
+
+      if (workspaceMisconfigured) {
+        setUnconnectedWarningMember(member);
+        return;
+      }
+
+      setApprovingMemberId(member.id);
+      approveAction.execute({ memberId: member.id, role: member.role });
+    },
+    [approveAction, updateSearchParam, workspaceMisconfigured, workspaceReady],
+  );
+
   const updateAction = useAction(updateMemberAction, {
     onSuccess() {
       updateSearchParam(null);
@@ -644,26 +689,18 @@ export function MemberAdmin({
                   type="button"
                   size="sm"
                   variant="default"
-                  onClick={() => {
-                    if (workspaceReady) {
-                      setWorkspaceApproveError(null);
-                      setWorkspaceApproveMember({
-                        id: member.id,
-                        firstName: member.firstName,
-                        lastName: member.lastName,
-                        email: member.email,
-                        role: member.role,
-                      });
-                      return;
-                    }
-                    approveAction.execute({
-                      memberId: member.id,
+                  onClick={() =>
+                    startApproval({
+                      id: member.id,
+                      firstName: member.firstName,
+                      lastName: member.lastName,
+                      email: member.email,
                       role: member.role,
-                    });
-                  }}
-                  disabled={approveAction.isPending}
+                    })
+                  }
+                  disabled={approvingMemberId === member.id}
                 >
-                  Approve
+                  {approvingMemberId === member.id ? "Approving..." : "Approve"}
                 </Button>
               ) : null}
               {member.status === "invited" &&
@@ -706,7 +743,8 @@ export function MemberAdmin({
       ...trailingColumns,
     ];
   }, [
-    approveAction,
+    approvingMemberId,
+    startApproval,
     defaultEmailPreference,
     customFields,
     memberCategories,
@@ -850,31 +888,6 @@ export function MemberAdmin({
         onDone={() => router.refresh()}
       />
 
-      <MemberApproveWorkspaceDialog
-        open={Boolean(workspaceApproveMember)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setWorkspaceApproveMember(null);
-            setWorkspaceApproveError(null);
-          }
-        }}
-        member={workspaceApproveMember}
-        workspaceDomain={workspace.domain ?? ""}
-        defaultPhoneCountry={workspace.countryCode}
-        isPending={approveAction.isPending}
-        submitError={workspaceApproveError}
-        provisionFields={workspaceProvisionFields}
-        onConfirm={async ({ primaryEmail, extraFields }) => {
-          if (!workspaceApproveMember) return;
-          setWorkspaceApproveError(null);
-          await approveAction.executeAsync({
-            memberId: workspaceApproveMember.id,
-            role: workspaceApproveMember.role,
-            workspace: { primaryEmail, extraFields },
-          });
-        }}
-      />
-
       {selectedMember ? (
         <MemberEditSheet
           key={selectedMember.member.id}
@@ -894,6 +907,19 @@ export function MemberAdmin({
           roleOptions={access.roleOptions}
           isDeletePending={deleteAction.isPending}
           isPending={updateAction.isPending}
+          isApprovePending={approvingMemberId === selectedMember.member.id}
+          onApprove={() =>
+            startApproval(
+              {
+                id: selectedMember.member.id,
+                firstName: selectedMember.member.firstName,
+                lastName: selectedMember.member.lastName,
+                email: selectedMember.member.email,
+                role: selectedMember.member.role,
+              },
+              { fromEditSheet: true },
+            )
+          }
           serverError={updateAction.result.serverError}
           validationErrors={updateAction.result.validationErrors}
           customFieldErrors={updateAction.result.data?.customFieldErrors}
@@ -907,6 +933,83 @@ export function MemberAdmin({
           }}
         />
       ) : null}
+
+      <AlertDialog
+        open={Boolean(unconnectedWarningMember)}
+        onOpenChange={(open) => {
+          if (!open) setUnconnectedWarningMember(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <AlertTriangleIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              Google Workspace is not connected
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The Workspace module is enabled, but the Google connection was
+              never completed — so approving{" "}
+              {unconnectedWarningMember
+                ? `${unconnectedWarningMember.firstName} ${unconnectedWarningMember.lastName}`.trim()
+                : "this member"}{" "}
+              will activate their membership without creating a Google account.
+              You can connect Workspace first and approve afterwards, or
+              approve now and provision the account later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <Button variant="outline" asChild>
+              <Link href="/admin/settings?tab=workspace">
+                Set up connection
+              </Link>
+            </Button>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                if (!unconnectedWarningMember) return;
+                setApprovingMemberId(unconnectedWarningMember.id);
+                approveAction.execute({
+                  memberId: unconnectedWarningMember.id,
+                  role: unconnectedWarningMember.role,
+                  acknowledgeWorkspaceUnavailable: true,
+                });
+                setUnconnectedWarningMember(null);
+              }}
+            >
+              Approve without account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <MemberApproveWorkspaceDialog
+        open={Boolean(workspaceApproveMember)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWorkspaceApproveMember(null);
+            setWorkspaceApproveError(null);
+          }
+        }}
+        member={workspaceApproveMember}
+        workspaceDomain={workspace.domain ?? ""}
+        defaultPhoneCountry={workspace.countryCode}
+        isPending={approveAction.isPending}
+        submitError={workspaceApproveError}
+        provisionFields={workspaceProvisionFields}
+        onConfirm={async ({ primaryEmail, extraFields }) => {
+          if (!workspaceApproveMember) return;
+          setWorkspaceApproveError(null);
+          setApprovingMemberId(workspaceApproveMember.id);
+          await approveAction.executeAsync({
+            memberId: workspaceApproveMember.id,
+            role: workspaceApproveMember.role,
+            workspace: { primaryEmail, extraFields },
+          });
+        }}
+      />
     </div>
   );
 }
