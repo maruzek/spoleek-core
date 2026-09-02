@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  getDateConstraintBounds,
+  pickConstraintsForType,
+} from "@/lib/member-custom-field-constraints";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -34,6 +38,8 @@ export function MemberCustomFieldInput({
   error?: string;
   onChange: (value: unknown) => void;
 }) {
+  const constraints = pickConstraintsForType(field.type, field.constraints ?? {});
+
   const sharedDescription = field.description ? (
     <FieldDescription>{field.description}</FieldDescription>
   ) : null;
@@ -50,6 +56,8 @@ export function MemberCustomFieldInput({
   );
 
   if (field.type === "textarea") {
+    const textValue = typeof value === "string" ? value : "";
+
     return (
       <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor={`custom-field-${field.key}`}>
@@ -58,11 +66,17 @@ export function MemberCustomFieldInput({
         <FieldContent>
           <Textarea
             id={`custom-field-${field.key}`}
-            value={typeof value === "string" ? value : ""}
+            value={textValue}
+            maxLength={constraints.maxLength}
             onChange={(event) => onChange(event.target.value)}
             aria-invalid={Boolean(error)}
           />
           {sharedDescription}
+          {constraints.maxLength ? (
+            <FieldDescription>
+              {textValue.length} / {constraints.maxLength} characters
+            </FieldDescription>
+          ) : null}
           {error ? <FieldError>{error}</FieldError> : null}
         </FieldContent>
       </Field>
@@ -123,6 +137,10 @@ export function MemberCustomFieldInput({
 
   if (field.type === "multi_select") {
     const selectedValues = Array.isArray(value) ? value.map(String) : [];
+    const selectionHint = describeSelectionLimits(
+      constraints.minSelected,
+      constraints.maxSelected,
+    );
 
     return (
       <Field data-invalid={Boolean(error)}>
@@ -130,6 +148,9 @@ export function MemberCustomFieldInput({
           <FieldSet>
             <FieldLegend>{labelContent}</FieldLegend>
             {sharedDescription}
+            {selectionHint ? (
+              <FieldDescription>{selectionHint}</FieldDescription>
+            ) : null}
             {field.options.map((option) => {
               const checked = selectedValues.includes(option);
 
@@ -162,6 +183,8 @@ export function MemberCustomFieldInput({
   }
 
   if (field.type === "date") {
+    const bounds = getDateConstraintBounds(constraints);
+
     return (
       <Field data-invalid={Boolean(error)}>
         <FieldLabel htmlFor={`custom-field-${field.key}`}>
@@ -174,6 +197,12 @@ export function MemberCustomFieldInput({
             onChange={onChange}
             required={field.required}
             aria-invalid={Boolean(error)}
+            startMonth={bounds.min}
+            endMonth={bounds.max}
+            disabledDates={[
+              ...(bounds.min ? [{ before: bounds.min }] : []),
+              ...(bounds.max ? [{ after: bounds.max }] : []),
+            ]}
           />
           {sharedDescription}
           {error ? <FieldError>{error}</FieldError> : null}
@@ -205,6 +234,13 @@ export function MemberCustomFieldInput({
               ? String(value)
               : ""
           }
+          min={field.type === "number" ? constraints.min : undefined}
+          max={field.type === "number" ? constraints.max : undefined}
+          step={
+            field.type === "number" && constraints.integerOnly ? 1 : undefined
+          }
+          minLength={constraints.minLength}
+          maxLength={constraints.maxLength}
           onChange={(event) => onChange(event.target.value)}
           aria-invalid={Boolean(error)}
         />
@@ -213,4 +249,23 @@ export function MemberCustomFieldInput({
       </FieldContent>
     </Field>
   );
+}
+
+/** "Select 2 to 3 options." — omitted entirely when neither limit is set. */
+function describeSelectionLimits(min?: number, max?: number) {
+  if (min !== undefined && max !== undefined) {
+    return min === max
+      ? `Select exactly ${min}.`
+      : `Select between ${min} and ${max}.`;
+  }
+
+  if (min !== undefined) {
+    return `Select at least ${min}.`;
+  }
+
+  if (max !== undefined) {
+    return `Select up to ${max}.`;
+  }
+
+  return null;
 }

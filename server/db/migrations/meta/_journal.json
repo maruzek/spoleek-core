@@ -211,6 +211,13 @@
       "when": 1788371706928,
       "tag": "0029_curious_mindworm",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788377636816,
+      "tag": "0030_glamorous_khan",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "member_custom_fields" ADD COLUMN "constraints" jsonb DEFAULT '{}'::jsonb NOT NULL;

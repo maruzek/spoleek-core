@@ -1,6 +1,12 @@
 import { z } from "zod";
 
 import { formatDateTime } from "@/lib/format";
+import {
+  compilePattern,
+  memberCustomFieldConstraintsSchema,
+  pickConstraintsForType,
+  validateFieldConstraints,
+} from "@/lib/member-custom-field-constraints";
 import type {
   CustomFieldValue,
   MemberCustomField,
@@ -72,6 +78,7 @@ export const memberCustomFieldSchema = z
     isActive: z.boolean(),
     sortOrder: z.number().int().min(0).default(0),
     options: z.array(z.string().trim().min(1)).default([]),
+    constraints: memberCustomFieldConstraintsSchema.default({}),
   })
   .superRefine((value, ctx) => {
     const needsOptions =
@@ -91,6 +98,62 @@ export const memberCustomFieldSchema = z
         path: ["options"],
         message: "Options are only supported for select fields.",
       });
+    }
+
+    const constraints = pickConstraintsForType(value.type, value.constraints);
+
+    const addConstraintIssue = (message: string) => {
+      ctx.addIssue({ code: "custom", path: ["constraints"], message });
+    };
+
+    if (
+      constraints.minAge !== undefined &&
+      constraints.maxAge !== undefined &&
+      constraints.minAge > constraints.maxAge
+    ) {
+      addConstraintIssue("Minimum age cannot be greater than maximum age.");
+    }
+
+    if (
+      constraints.notBefore &&
+      constraints.notAfter &&
+      constraints.notBefore > constraints.notAfter
+    ) {
+      addConstraintIssue("Earliest date cannot be after the latest date.");
+    }
+
+    if (
+      constraints.min !== undefined &&
+      constraints.max !== undefined &&
+      constraints.min > constraints.max
+    ) {
+      addConstraintIssue("Minimum value cannot be greater than maximum value.");
+    }
+
+    if (
+      constraints.minLength !== undefined &&
+      constraints.maxLength !== undefined &&
+      constraints.minLength > constraints.maxLength
+    ) {
+      addConstraintIssue("Minimum length cannot be greater than maximum length.");
+    }
+
+    if (
+      constraints.minSelected !== undefined &&
+      constraints.maxSelected !== undefined &&
+      constraints.minSelected > constraints.maxSelected
+    ) {
+      addConstraintIssue(
+        "Minimum selected cannot be greater than maximum selected.",
+      );
+    }
+
+    if (constraints.format === "custom") {
+      if (!constraints.pattern) {
+        addConstraintIssue("Add a pattern for the custom format.");
+      } else if (!compilePattern(constraints.pattern)) {
+        addConstraintIssue("That pattern is not a valid regular expression.");
+      }
     }
   });
 
@@ -156,7 +219,10 @@ export function stringifyFieldOptions(options: string[]) {
 }
 
 export function normalizeFieldInputValue(
-  field: Pick<MemberCustomField, "type" | "required" | "label" | "key">,
+  field: Pick<
+    MemberCustomField,
+    "type" | "required" | "label" | "key" | "constraints"
+  >,
   rawValue: unknown,
 ): {
   normalized: CustomFieldValue;
@@ -198,6 +264,15 @@ export function normalizeFieldInputValue(
       };
     }
 
+    const constraintError = validateFieldConstraints(field, {
+      kind: "multi_select",
+      value: values,
+    });
+
+    if (constraintError) {
+      return { normalized: null, publicValue: null, error: constraintError };
+    }
+
     return {
       normalized: values.length > 0 ? values : null,
       publicValue: values,
@@ -235,6 +310,15 @@ export function normalizeFieldInputValue(
       };
     }
 
+    const constraintError = validateFieldConstraints(field, {
+      kind: "number",
+      value: numberValue,
+    });
+
+    if (constraintError) {
+      return { normalized: null, publicValue: null, error: constraintError };
+    }
+
     return {
       normalized: numberValue,
       publicValue: numberValue,
@@ -265,11 +349,29 @@ export function normalizeFieldInputValue(
       };
     }
 
+    const constraintError = validateFieldConstraints(field, {
+      kind: "date",
+      value: dateValue,
+    });
+
+    if (constraintError) {
+      return { normalized: null, publicValue: null, error: constraintError };
+    }
+
     return {
       normalized: dateValue.toISOString(),
       publicValue: textValue,
       error: null,
     };
+  }
+
+  const constraintError = validateFieldConstraints(field, {
+    kind: "text",
+    value: textValue,
+  });
+
+  if (constraintError) {
+    return { normalized: null, publicValue: null, error: constraintError };
   }
 
   return {

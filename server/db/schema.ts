@@ -13,6 +13,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+// Type-only: erased at compile time, so this does not create an import cycle.
+import type { MemberCustomFieldConstraints } from "@/lib/member-custom-field-constraints";
+
 export const systemRoleEnum = pgEnum("system_role", [
   "member",
   "system_admin",
@@ -623,6 +626,10 @@ export const memberCustomFields = pgTable(
     discoveryMode: memberCustomFieldDiscoveryModeEnum("discovery_mode").notNull().default("available"),
     required: boolean("required").notNull().default(false),
     options: jsonb("options").$type<string[]>().notNull().default([]),
+    constraints: jsonb("constraints")
+      .$type<MemberCustomFieldConstraints>()
+      .notNull()
+      .default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,

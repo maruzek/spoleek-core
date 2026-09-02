@@ -22,6 +22,7 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { MemberCustomFieldConstraintFields } from "@/components/app/member-custom-field-constraint-fields";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,6 +59,7 @@ function toFormValues(
     isActive: field?.isActive ?? true,
     sortOrder: field?.sortOrder ?? 0,
     options: field?.options ?? [],
+    constraints: field?.constraints ?? {},
   };
 }
 
@@ -453,6 +455,24 @@ function InnerForm({
                   </Field>
                 )}
               </form.Field>
+
+              <form.Subscribe selector={(state) => state.values.type}>
+                {(type) => (
+                  <form.Field name="constraints">
+                    {(formField) => (
+                      <MemberCustomFieldConstraintFields
+                        type={type}
+                        value={formField.state.value}
+                        errors={getValidationFieldMessages(
+                          validationErrors,
+                          "constraints",
+                        )}
+                        onChange={formField.handleChange}
+                      />
+                    )}
+                  </form.Field>
+                )}
+              </form.Subscribe>
 
               <form.Subscribe selector={(state) => state.values.type}>
                 {(type) =>

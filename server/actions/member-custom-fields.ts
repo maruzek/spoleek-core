@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
+import { pickConstraintsForType } from "@/lib/member-custom-field-constraints";
 import {
   memberCustomFieldActiveSchema,
   memberCustomFieldSchema,
@@ -46,6 +47,11 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       isActive: parsedInput.isActive,
       sortOrder: parsedInput.sortOrder,
       options: parsedInput.options,
+      // Drop constraints that belong to a previously selected type.
+      constraints: pickConstraintsForType(
+        parsedInput.type,
+        parsedInput.constraints,
+      ),
       updatedAt: new Date(),
     };
 
