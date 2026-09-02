@@ -22,7 +22,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -32,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/format";
+import { DatePicker } from "@/components/ui/date-picker";
 import { getPaymentTitle } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
@@ -140,11 +140,12 @@ function MarkPaidDialog({
         <FieldGroup>
           <Field>
             <FieldLabel>Payment date</FieldLabel>
-            <Input
-              type="date"
+            <DatePicker
+              id="payment-paid-date"
               value={paidDate}
-              max={todayIso}
-              onChange={(e) => setPaidDate(e.target.value)}
+              endMonth={new Date()}
+              disabledDates={{ after: new Date() }}
+              onChange={setPaidDate}
             />
           </Field>
           <Field>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Field,
   FieldContent,
@@ -160,6 +161,27 @@ export function MemberCustomFieldInput({
     );
   }
 
+  if (field.type === "date") {
+    return (
+      <Field data-invalid={Boolean(error)}>
+        <FieldLabel htmlFor={`custom-field-${field.key}`}>
+          {labelContent}
+        </FieldLabel>
+        <FieldContent>
+          <DatePicker
+            id={`custom-field-${field.key}`}
+            value={typeof value === "string" ? value : ""}
+            onChange={onChange}
+            required={field.required}
+            aria-invalid={Boolean(error)}
+          />
+          {sharedDescription}
+          {error ? <FieldError>{error}</FieldError> : null}
+        </FieldContent>
+      </Field>
+    );
+  }
+
   const inputType =
     field.type === "number"
       ? "number"
@@ -167,9 +189,7 @@ export function MemberCustomFieldInput({
         ? "email"
         : field.type === "phone"
           ? "tel"
-          : field.type === "date"
-            ? "date"
-            : "text";
+          : "text";
 
   return (
     <Field data-invalid={Boolean(error)}>
