@@ -5,10 +5,16 @@ import { useMemo, useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
+import {
+  CloudAlertIcon,
+  PlusIcon,
+  Settings2Icon,
+  ShieldIcon,
+  UsersIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import { GroupDriftInboxCard } from "@/components/app/group-drift-inbox-card";
+import { GroupDriftPanel } from "@/components/app/group-drift-panel";
 import { GroupForm } from "@/components/app/group-form";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
@@ -111,6 +117,7 @@ type GroupDetailProps = {
   }>;
   workspaceLinks: GroupWorkspaceLinkRow[];
   workspaceDrift: WorkspaceDriftRow[];
+  workspaceDomain: string | null;
   workspaceConnected: boolean;
   canManageWorkspaceIntegration: boolean;
 };
@@ -138,6 +145,7 @@ export function GroupDetail({
   assignableMembers,
   workspaceLinks,
   workspaceDrift,
+  workspaceDomain,
   workspaceConnected,
   canManageWorkspaceIntegration,
 }: GroupDetailProps) {
@@ -366,16 +374,27 @@ export function GroupDetail({
           <TabsTrigger value="members">
             <UsersIcon data-icon="inline-start" />
             Members
-            {openDriftCount > 0 ? (
-              <Badge variant="secondary" className="ml-2">
-                {openDriftCount}
-              </Badge>
-            ) : null}
           </TabsTrigger>
           <TabsTrigger value="admins">
             <ShieldIcon data-icon="inline-start" />
             Group Admins
           </TabsTrigger>
+          {workspaceDrift.length > 0 ? (
+            <TabsTrigger value="drift">
+              <CloudAlertIcon data-icon="inline-start" />
+              In Google
+              {openDriftCount > 0 ? (
+                <span className="relative ml-2 inline-flex">
+                  {/* The glow is what makes the count ambient — an admin who
+                      never opens this tab still sees that it wants attention. */}
+                  <span className="absolute inset-0 animate-ping rounded-full bg-amber-500/40" />
+                  <Badge className="relative border-amber-500/40 bg-amber-500/15 text-amber-700 shadow-[0_0_10px_rgba(245,158,11,0.45)] dark:text-amber-400">
+                    {openDriftCount}
+                  </Badge>
+                </span>
+              ) : null}
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="settings">
             <Settings2Icon data-icon="inline-start" />
             Settings
@@ -383,10 +402,6 @@ export function GroupDetail({
         </TabsList>
 
         <TabsContent value="members" className="flex flex-col gap-4 pt-4">
-          <GroupDriftInboxCard
-            rows={workspaceDrift}
-            canManage={canManageWorkspaceIntegration}
-          />
           <DataTable
             data={members}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -435,6 +450,16 @@ export function GroupDetail({
             )}
           />
         </TabsContent>
+
+        {workspaceDrift.length > 0 ? (
+          <TabsContent value="drift" className="flex flex-col gap-4 pt-4">
+            <GroupDriftPanel
+              rows={workspaceDrift}
+              canManage={canManageWorkspaceIntegration}
+              workspaceDomain={workspaceDomain}
+            />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="settings" className="flex flex-col gap-6 pt-4">
           <Card className="overflow-hidden max-w-2xl mx-auto w-full">

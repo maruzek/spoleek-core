@@ -916,6 +916,8 @@ export const workspaceGroupDrift = pgTable(
     role: workspaceGroupRoleEnum("role").notNull().default("member"),
     /** Google's member type — a nested group cannot become a Spoleek member. */
     memberType: text("member_type").notNull().default("USER"),
+    /** Google's user id, so the row can link straight to the Admin console. */
+    workspaceUserId: text("workspace_user_id"),
     status: workspaceDriftStatusEnum("status").notNull().default("open"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
       .notNull()

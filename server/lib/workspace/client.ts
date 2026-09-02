@@ -378,6 +378,8 @@ export type WorkspaceGroupMember = {
   role: WorkspaceGroupMemberRole;
   type: string;
   status: string | null;
+  /** Google's user id, so a drift row can link straight to the Admin console. */
+  workspaceUserId: string | null;
 };
 
 function toApiRole(role: WorkspaceGroupMemberRole) {
@@ -444,6 +446,7 @@ export async function listWorkspaceGroupMembers(
 
     const body = (await response.json()) as {
       members?: {
+        id?: string;
         email?: string;
         role?: string;
         type?: string;
@@ -462,6 +465,7 @@ export async function listWorkspaceGroupMembers(
         role: fromApiRole(raw.role),
         type: raw.type ?? "USER",
         status: raw.status ?? null,
+        workspaceUserId: raw.id ?? null,
       });
     }
 

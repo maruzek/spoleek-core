@@ -16,6 +16,8 @@ export type ActualMember = {
   role: WorkspaceGroupRole;
   /** Google's member type. `GROUP` is a nested group, not a person. */
   type?: string;
+  /** Google's user id, carried through so drift can link to the Admin console. */
+  workspaceUserId?: string | null;
 };
 
 export type RoleChange = {

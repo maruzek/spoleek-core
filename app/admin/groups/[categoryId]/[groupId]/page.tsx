@@ -44,6 +44,7 @@ export default async function AdminGroupPage({
         assignableMembers={detail.assignableMembers}
         workspaceLinks={workspaceLinks}
         workspaceDrift={workspaceDrift}
+        workspaceDomain={organization?.workspaceDomain ?? null}
         workspaceConnected={Boolean(organization?.workspaceConnectedAt)}
         canManageWorkspaceIntegration={
           access.adminAccessLevel === "full" || access.member?.role === "leader"

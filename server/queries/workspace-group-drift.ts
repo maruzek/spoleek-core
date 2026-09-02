@@ -39,6 +39,7 @@ export async function listWorkspaceGroupDrift(
       address: workspaceGroupDrift.address,
       role: workspaceGroupDrift.role,
       memberType: workspaceGroupDrift.memberType,
+      workspaceUserId: workspaceGroupDrift.workspaceUserId,
       status: workspaceGroupDrift.status,
       firstSeenAt: workspaceGroupDrift.firstSeenAt,
       lastSeenAt: workspaceGroupDrift.lastSeenAt,

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_group_drift" ADD COLUMN "workspace_user_id" text;

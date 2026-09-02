@@ -41,6 +41,7 @@ export async function recordLinkDrift(link: DriftLink, drift: ActualMember[]) {
           address,
           role: entry.role,
           memberType: entry.type ?? "USER",
+          workspaceUserId: entry.workspaceUserId ?? null,
           firstSeenAt: now,
           lastSeenAt: now,
         })),
@@ -50,6 +51,7 @@ export async function recordLinkDrift(link: DriftLink, drift: ActualMember[]) {
         set: {
           role: sql`excluded.role`,
           memberType: sql`excluded.member_type`,
+          workspaceUserId: sql`excluded.workspace_user_id`,
           lastSeenAt: now,
           updatedAt: now,
         },
