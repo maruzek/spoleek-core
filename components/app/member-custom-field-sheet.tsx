@@ -340,7 +340,13 @@ function InnerForm({
                 <form.Field name="stage">
                   {(formField) => (
                     <Field>
-                      <FieldLabel>Visibility stage</FieldLabel>
+                      <FieldLabel>
+                        Visibility stage
+                        <FieldHint>
+                          Admin only fields never appear to members — only
+                          admins can fill them in on the member edit form.
+                        </FieldHint>
+                      </FieldLabel>
                       <FieldContent>
                         <Select
                           value={formField.state.value}

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."member_custom_field_stage" ADD VALUE 'admin_only';

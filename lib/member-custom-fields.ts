@@ -37,6 +37,7 @@ export const memberCustomFieldStageOptions: Array<{
   { value: "registration", label: "Registration" },
   { value: "post_approval", label: "After approval" },
   { value: "optional", label: "Optional only" },
+  { value: "admin_only", label: "Admin only" },
 ];
 
 export const memberCustomFieldDiscoveryModeOptions: Array<{
@@ -72,7 +73,7 @@ export const memberCustomFieldSchema = z
       "select",
       "multi_select",
     ]),
-    stage: z.enum(["registration", "post_approval", "optional"]),
+    stage: z.enum(["registration", "post_approval", "optional", "admin_only"]),
     discoveryMode: z.enum(["visible", "available", "hidden"]),
     required: z.boolean(),
     isActive: z.boolean(),

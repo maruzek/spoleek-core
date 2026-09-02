@@ -114,6 +114,7 @@ export const memberCustomFieldStageEnum = pgEnum("member_custom_field_stage", [
   "registration",
   "post_approval",
   "optional",
+  "admin_only",
 ]);
 
 export const memberCustomFieldDiscoveryModeEnum = pgEnum(
