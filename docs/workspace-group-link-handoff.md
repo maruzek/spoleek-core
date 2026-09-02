@@ -1,9 +1,10 @@
-# Handoff — Workspace group link, P1 → P2
+# Handoff — Workspace group link, P2 → `pull` / P3
 
 You are continuing a feature that is **already half-built and committed**. Read this whole
 file, then `docs/workspace-group-link.md` (the design doc), before writing any code.
 
-- Branch: `workspace-groups-link`. P1 is commit `4d188cc` ("groups link v1"). Working tree clean.
+- Branch: `workspace-groups-link`. P1 is commit `4d188cc` ("groups link v1"); the one-to-one
+  enforcement and all of P2 except `pull` sit on top of it.
 - Design doc: **`docs/workspace-group-link.md`** — sections 2 (model), 4 (ideas), 6 (phasing),
   7 (decisions already made and why). §6 defines P1/P2/P3. Do not re-litigate §7.
 - There is no production database. The local dev DB can be wiped and reseeded; never write a
@@ -120,6 +121,74 @@ membership, and Spoleek reconciles the two. The old implementation (a free-text
   only when creating. **`group-sheet.tsx`**, **`group-category-detail.tsx`**,
   **`group-detail.tsx`** and the three pages under `app/admin/` just thread props through.
 
+## P2 — what exists, file by file
+
+### Database (`server/db/schema.ts`, migration `0028_wooden_martin_li.sql`)
+
+- `workspace_group_drift` — one row per address that is in the Google group but not in the
+  Spoleek roster. `status` is only `open` | `ignored`; there is deliberately **no `resolved`**.
+  Adopting or removing deletes the row outright, so if the change never lands in Google the
+  next reconcile puts the row back as `open` rather than hiding a failure behind a status.
+  `member_type` carries Google's `USER` / `GROUP` / `CUSTOMER` so a nested group is never
+  offered as a person to adopt. Unique on `(link_id, address)`.
+
+### Server logic
+
+- **`server/lib/workspace/drift.ts`** — `recordLinkDrift(link, plan.drift)` makes the stored
+  set match what the reconciler just saw: seen rows are touched without disturbing `status`
+  (so an "ignore" survives every pass), unseen rows are deleted. `clearLinkDrift` is the
+  post-decision cleanup.
+- **`server/lib/workspace/reconcile-links.ts`** — `reconcileWorkspaceLinks({limit, orgId,
+  pauseMs})`. Walks enabled links least-recently-synced first, paces itself (250 ms between
+  links, 100 links per run) because the Directory API is per-project rate-limited, applies the
+  plan for `push` links, records drift for all of them, refreshes the cached group email, and
+  drains at the end. A `WorkspaceNotConnectedError` is a *skip*, not an error — it must not
+  overwrite the link's last real status.
+- **`server/lib/workspace/adopt-drift.ts`** — `adoptDriftAddress(link, address)`. Matches an
+  existing member (Workspace address beats personal address) or creates a `pending` one, named
+  from the directory. **It refuses rather than adopting an address the desired set would not
+  contain** — an external address on a link without `includeExternal`, an alias of another
+  account, a member who syncs under a different address. Adopting one of those would write a
+  ledger row for a non-desired address, and `remove_owned` would then delete it from Google:
+  the exact opposite of the admin's intent. Each refusal returns a reason, surfaced per address
+  as its own toast.
+- **`server/lib/cron-auth.ts`** — `authorizeCronRequest`, shared by both workspace cron routes.
+- **`app/api/internal/reconcile-workspace-groups/route.ts`** — nightly at `0 2 * * *` in
+  `vercel.json`, `maxDuration = 300`.
+
+### Reads and actions
+
+- **`server/queries/workspace-group-drift.ts`** — `listWorkspaceGroupDrift(orgId, {groupId,
+  includeIgnored})` resolves each address back to a member so the inbox reads as names, and
+  `countOpenDriftByLink(orgId)` feeds the badges. `listGroupWorkspaceLinks` now returns
+  `driftCount` alongside `pendingCount` / `failedCount` / `ownedCount`.
+- **`server/actions/workspace-group-drift.ts`** — `adopt` / `remove` / `ignore`, all taking a
+  list of drift ids so one row and "adopt all" are the same path. Access is checked once per
+  link, not once per row. `remove` refuses on an `observe` link — that link's whole promise is
+  that Spoleek never writes.
+- `requireWorkspaceLinkAccess` moved out of the links action file into
+  `server/queries/access.ts`; both action files use it.
+
+### UI
+
+- **`components/app/group-drift-inbox-card.tsx`** — the inbox, on the group's **Members** tab
+  with a count badge on the tab trigger, styled after the approval board (`a1ba4d9`). Per-row
+  Adopt / Remove / Ignore, "Adopt all", and a collapsible list of ignored addresses.
+- Drift counts also render as a "N to review" status on the per-group link card and in the
+  org-wide Groups settings table.
+
+## Your job: what is left
+
+1. **`pull` direction** — the one P2 item still unbuilt, and deliberately so: §7 says to let the
+   drift inbox show what admins actually click first. Add `"pull"` to
+   `workspaceLinkDirectionEnum` and to `workspaceLinkDirectionOptions` with its own consequence
+   copy. The two hazards §7 records still stand: pull must answer "an unknown address appeared —
+   create a shadow member, invite, or skip?" (the adopt rules in `adopt-drift.ts` are the
+   obvious starting point), and it *deletes* Spoleek memberships, which touches fee/renewal
+   state (`server/lib/payment-lifecycle.ts`, `managesMembershipFees`).
+2. **P3** — design doc §6: multiple links per group, category-level auto-create/auto-link,
+   nested groups, import wizard source, mailing-list-via-Google-address.
+
 ## Gotchas found the hard way
 
 - `ComboboxEmpty` (Base UI `Combobox.Empty`) keys off an `items` prop we do not use, so it
@@ -130,34 +199,12 @@ membership, and Spoleek reconciles the two. The old implementation (a free-text
 - A sticky `<thead>` does not reliably paint a `<tr>` background — put the background on the
   `<th>` cells, and make it opaque.
 - Drizzle rejects a `readonly` tuple for `notInArray`; type such constants as `MembershipStatus[]`.
-
-## Your job: P2
-
-Design doc §6 defines it. Build in this order:
-
-1. **Persist drift.** New table (suggested `workspace_group_drift`: `orgId`, `linkId`,
-   `workspaceGroupId`, `address`, `role`, `firstSeenAt`, `lastSeenAt`, `status`
-   `open` | `ignored`, `resolvedAt`, unique on `(linkId, address)`). Populate it from
-   `planLinkSync` results. Nothing else can render drift ambiently until this exists, because
-   finding drift needs a `members.list` call to Google.
-2. **Nightly reconcile cron** — `app/api/internal/reconcile-workspace-groups/route.ts`, same
-   auth shape as the drain route, added to `vercel.json`. Walk enabled links, run
-   `planLinkSync`, `applyPlan` for `push` links, upsert drift rows for all links. Throttle:
-   Directory API is rate-limited per project.
-3. **Drift inbox** with Adopt / Remove / Ignore, reusing the approval-board pattern from the
-   member edit panel (commit `a1ba4d9`). *Adopt* creates the `tenant_members` +
-   `group_memberships` rows, matching by workspace email — see
-   `server/lib/workspace/link-user-to-member.ts`. Surface a count on the group's Members tab.
-   **The user explicitly asked for this**: "if the Google group has members that Spoleek does
-   not, show them somewhere". Today they are only visible as "Leave alone" rows in a preview.
-4. **`pull` direction.** Add `"pull"` to `workspaceLinkDirectionEnum` and to
-   `workspaceLinkDirectionOptions` with its own consequence copy. Two hazards §7 records:
-   pull must answer "an unknown address appeared — create a shadow member, invite, or skip?",
-   and it *deletes* Spoleek memberships, which touches fee/renewal state
-   (`server/lib/payment-lifecycle.ts`, `managesMembershipFees`). Build the drift inbox first and
-   let what admins actually click inform this.
-5. Anything else in §6 P2 that still fits: the org-wide links view already exists, so what
-   remains is role mapping polish and removal-policy edge cases surfaced by the cron.
+- Drizzle's `onConflictDoUpdate` `set` must reference `excluded.<column>` via raw `sql` when the
+  value comes from the row being inserted; touching drift rows without clobbering `status`
+  depends on it.
+- `resolveDesiredMembers` prefers `workspaceUserEmail` and only falls back to the preferred
+  personal address when `includeExternal` is on. Any new code that decides "is this address one
+  Spoleek wants?" has to follow the same order or it will fight the reconciler.
 
 ## Conventions and verification
 

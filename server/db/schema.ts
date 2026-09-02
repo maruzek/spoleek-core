@@ -191,6 +191,18 @@ export const workspaceLinkSyncStatusEnum = pgEnum("workspace_link_sync_status", 
   "error",
 ]);
 
+/**
+ * A drift row is one address that is in the Google group but not in the Spoleek
+ * roster. `ignored` is how an admin says "this one is meant to be here" without
+ * Spoleek ever adopting or deleting it. There is no `resolved` state: adopting
+ * or removing deletes the row outright, so if the address is still in Google at
+ * the next reconcile it truthfully comes back as `open`.
+ */
+export const workspaceDriftStatusEnum = pgEnum("workspace_drift_status", [
+  "open",
+  "ignored",
+]);
+
 export const workspaceSyncOperationKindEnum = pgEnum(
   "workspace_sync_operation_kind",
   ["add_member", "remove_member", "update_role"],
@@ -883,6 +895,45 @@ export const workspaceSyncOperations = pgTable(
   ],
 );
 
+/**
+ * Addresses found in a linked Google group that Spoleek does not have in the
+ * roster. Persisted rather than recomputed on demand because finding drift
+ * costs a `members.list` call per link — the nightly reconcile pays that price
+ * once so every screen can render the count for free.
+ */
+export const workspaceGroupDrift = pgTable(
+  "workspace_group_drift",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    linkId: uuid("link_id")
+      .notNull()
+      .references(() => groupWorkspaceLinks.id, { onDelete: "cascade" }),
+    workspaceGroupId: text("workspace_group_id").notNull(),
+    address: text("address").notNull(),
+    role: workspaceGroupRoleEnum("role").notNull().default("member"),
+    /** Google's member type — a nested group cannot become a Spoleek member. */
+    memberType: text("member_type").notNull().default("USER"),
+    status: workspaceDriftStatusEnum("status").notNull().default("open"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_group_drift_link_address_idx").on(
+      table.linkId,
+      table.address,
+    ),
+    index("workspace_group_drift_org_status_idx").on(table.orgId, table.status),
+  ],
+);
+
 export const emailActivities = pgTable(
   "email_activities",
   {
@@ -1033,6 +1084,7 @@ export const schema = {
   groupWorkspaceLinks,
   workspaceGroupMemberLinks,
   workspaceSyncOperations,
+  workspaceGroupDrift,
   emailActivities,
   emailActivityEvents,
   memberPayments,
@@ -1086,5 +1138,7 @@ export type WorkspaceSyncOperationKind =
 export type GroupWorkspaceLink = typeof groupWorkspaceLinks.$inferSelect;
 export type WorkspaceGroupMemberLink = typeof workspaceGroupMemberLinks.$inferSelect;
 export type WorkspaceSyncOperation = typeof workspaceSyncOperations.$inferSelect;
+export type WorkspaceDriftStatus = typeof workspaceDriftStatusEnum.enumValues[number];
+export type WorkspaceGroupDrift = typeof workspaceGroupDrift.$inferSelect;
 export type EmailActivity = typeof emailActivities.$inferSelect;
 export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;

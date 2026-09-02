@@ -14,6 +14,8 @@ export type DesiredMember = {
 export type ActualMember = {
   address: string;
   role: WorkspaceGroupRole;
+  /** Google's member type. `GROUP` is a nested group, not a person. */
+  type?: string;
 };
 
 export type RoleChange = {

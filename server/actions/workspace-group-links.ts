@@ -18,7 +18,7 @@ import {
   groups,
   workspaceGroupMemberLinks,
 } from "@/server/db/schema";
-import { requireGroupManagementAccess } from "@/server/queries/access";
+import { requireWorkspaceLinkAccess } from "@/server/queries/access";
 import { getGroupWorkspaceLink } from "@/server/queries/workspace-group-links";
 import { getWorkspaceGroup } from "@/server/lib/workspace/client";
 import {
@@ -27,24 +27,8 @@ import {
   enqueueOperations,
   planLinkSync,
 } from "@/server/lib/workspace/group-links";
+import { recordLinkDrift } from "@/server/lib/workspace/drift";
 import { drainWorkspaceSyncOperations } from "@/server/lib/workspace/sync-queue";
-
-/**
- * A link writes to Workspace, so it stays behind the same gate as the rest of
- * the Workspace integration even in categories where group admins are allowed
- * to manage the roster.
- */
-async function requireWorkspaceLinkAccess(groupId: string) {
-  const context = await requireGroupManagementAccess(groupId);
-
-  if (context.adminAccessLevel !== "full" && context.member?.role !== "leader") {
-    throw new Error(
-      "Only organization admins can change the Workspace link for a group.",
-    );
-  }
-
-  return context;
-}
 
 async function requireLinkForEdit(linkId: string) {
   const [existing] = await db
@@ -241,6 +225,7 @@ export const createGroupWorkspaceLinkAction = authActionClient
 
     const preview = await planLinkSync(link);
     const applied = await applyPlan(link, preview.plan);
+    await recordLinkDrift(link, preview.plan.drift);
 
     after(() => drainWorkspaceSyncOperations({ linkId: link.id }));
 
@@ -310,6 +295,10 @@ export const syncGroupWorkspaceLinkAction = authActionClient
     const applied = parsedInput.apply
       ? await applyPlan(link, preview.plan)
       : { queued: 0, adopted: 0 };
+
+    // Recorded on a dry run too: looking is what makes drift visible, and the
+    // admin has already paid for the `members.list` call either way.
+    await recordLinkDrift(link, preview.plan.drift);
 
     if (parsedInput.apply) {
       after(() => drainWorkspaceSyncOperations({ linkId: link.id }));

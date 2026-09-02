@@ -113,6 +113,14 @@ export function GroupLinksSettingsCard({
                           <StatusIndicator />
                           <StatusLabel>{health.label}</StatusLabel>
                         </Status>
+                        {link.driftCount > 0 ? (
+                          <Status variant="warning" className="mt-1">
+                            <StatusIndicator />
+                            <StatusLabel>
+                              {link.driftCount} to review
+                            </StatusLabel>
+                          </Status>
+                        ) : null}
                         {link.lastSyncError ? (
                           <p className="mt-1 max-w-xs text-destructive text-xs">
                             {link.lastSyncError}

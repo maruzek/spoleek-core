@@ -8,6 +8,7 @@ import { useAction } from "next-safe-action/hooks";
 import { PlusIcon, Settings2Icon, ShieldIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { GroupDriftInboxCard } from "@/components/app/group-drift-inbox-card";
 import { GroupForm } from "@/components/app/group-form";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
@@ -44,6 +45,7 @@ import {
   removeGroupMemberAction,
   saveGroupAction,
 } from "@/server/actions/groups";
+import type { WorkspaceDriftRow } from "@/server/queries/workspace-group-drift";
 import type { GroupWorkspaceLinkRow } from "@/server/queries/workspace-group-links";
 
 type GroupDetailProps = {
@@ -108,6 +110,7 @@ type GroupDetailProps = {
     createdAt: Date;
   }>;
   workspaceLinks: GroupWorkspaceLinkRow[];
+  workspaceDrift: WorkspaceDriftRow[];
   workspaceConnected: boolean;
   canManageWorkspaceIntegration: boolean;
 };
@@ -134,9 +137,13 @@ export function GroupDetail({
   admins,
   assignableMembers,
   workspaceLinks,
+  workspaceDrift,
   workspaceConnected,
   canManageWorkspaceIntegration,
 }: GroupDetailProps) {
+  const openDriftCount = workspaceDrift.filter(
+    (row) => row.status === "open",
+  ).length;
   const router = useRouter();
   const [memberSheetOpen, setMemberSheetOpen] = useState(false);
   const [adminSheetOpen, setAdminSheetOpen] = useState(false);
@@ -359,6 +366,11 @@ export function GroupDetail({
           <TabsTrigger value="members">
             <UsersIcon data-icon="inline-start" />
             Members
+            {openDriftCount > 0 ? (
+              <Badge variant="secondary" className="ml-2">
+                {openDriftCount}
+              </Badge>
+            ) : null}
           </TabsTrigger>
           <TabsTrigger value="admins">
             <ShieldIcon data-icon="inline-start" />
@@ -371,6 +383,10 @@ export function GroupDetail({
         </TabsList>
 
         <TabsContent value="members" className="flex flex-col gap-4 pt-4">
+          <GroupDriftInboxCard
+            rows={workspaceDrift}
+            canManage={canManageWorkspaceIntegration}
+          />
           <DataTable
             data={members}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1,6 +1,7 @@
 # Workspace group link — design & brainstorm
 
-Status: P1 implemented on branch `workspace-groups-link`. P2/P3 below are still planned.
+Status: P1 and most of P2 implemented on branch `workspace-groups-link`. What remains of P2 is
+the `pull` direction; P3 is still planned.
 
 ## 1. Where we are today
 
@@ -199,6 +200,9 @@ unlink dialog, health badge, "Sync now". Drop `groups.workspaceGroupEmail`.
 
 **P2 — make it self-healing.** Nightly reconcile, drift inbox with adopt/remove/ignore, role
 mapping, removal policies, the Groups settings tab, `pull` direction.
+*Done:* `workspace_group_drift` + `/api/internal/reconcile-workspace-groups` (nightly, paced),
+the drift inbox on a group's Members tab with Adopt / Remove / Ignore, and drift counts on both
+the per-group and org-wide link health views. *Remaining:* `pull`.
 
 **P3 — make it leverage.** Multiple links per group in the UI, category-level
 auto-create/auto-link, nested groups, import wizard source, mailing-list-via-Google-address.
@@ -212,7 +216,17 @@ auto-create/auto-link, nested groups, import wizard source, mailing-list-via-Goo
   we create a shadow member, invite them, or skip?". Pull also *deletes* Spoleek memberships,
   which touches fee and renewal state (`server/lib/payment-lifecycle.ts`,
   `managesMembershipFees`) — a much heavier consequence than deleting a Google membership.
-  Promote to real `pull` in P2 once the drift inbox shows what admins actually click.
+  Promote to real `pull` in P2 once the drift inbox shows what admins actually click. The inbox
+  shipped in P2; `pull` is deliberately still unbuilt until there is usage to learn from.
+- **Adopting only ever claims an address Spoleek would keep** (2026-09-02). Writing a ledger row
+  for an address the desired set does not contain would make `remove_owned` delete it on the next
+  pass — the exact opposite of what the admin asked for. So an external address is adoptable only
+  on a link with `includeExternal`, and an alias of a Workspace account is refused in favour of the
+  primary address. Each refusal names its reason rather than failing silently.
+- **Adopted strangers land as `pending`, not `active`** (2026-09-02). Being in a Google group
+  proves someone was added there, not that the organization approved them; `pending` routes them
+  through the existing approval board, and pending members are still synced, so the adoption is
+  not undone by the next reconcile.
 - **Strictly one-to-one, enforced in both directions** (2026-09-02). A Spoleek group has at
   most one Google group and a Google group is claimed by at most one Spoleek group, enforced by
   unique indexes and by a friendly pre-check in the actions. Many-to-one roll-ups (several

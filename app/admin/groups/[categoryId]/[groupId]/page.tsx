@@ -4,6 +4,7 @@ import { AppPage } from "@/components/app/app-page";
 import { GroupDetail } from "@/components/app/group-detail";
 import { requireGroupManagementAccess } from "@/server/queries/access";
 import { getGroupDetailData } from "@/server/queries/groups";
+import { listWorkspaceGroupDrift } from "@/server/queries/workspace-group-drift";
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
 import { getAppOrganization } from "@/server/queries/app";
 
@@ -17,9 +18,13 @@ export default async function AdminGroupPage({
     requireGroupManagementAccess(groupId),
     getAppOrganization(),
   ]);
-  const [detail, workspaceLinks] = await Promise.all([
+  const [detail, workspaceLinks, workspaceDrift] = await Promise.all([
     getGroupDetailData(access.organization.id, groupId),
     listGroupWorkspaceLinks(access.organization.id, { groupId }),
+    listWorkspaceGroupDrift(access.organization.id, {
+      groupId,
+      includeIgnored: true,
+    }),
   ]);
 
   if (!detail || detail.group.categoryId !== categoryId) {
@@ -38,6 +43,7 @@ export default async function AdminGroupPage({
         admins={detail.admins}
         assignableMembers={detail.assignableMembers}
         workspaceLinks={workspaceLinks}
+        workspaceDrift={workspaceDrift}
         workspaceConnected={Boolean(organization?.workspaceConnectedAt)}
         canManageWorkspaceIntegration={
           access.adminAccessLevel === "full" || access.member?.role === "leader"

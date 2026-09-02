@@ -8,6 +8,7 @@ import {
   workspaceGroupMemberLinks,
 } from "@/server/db/schema";
 import { countPendingOperations } from "@/server/lib/workspace/sync-queue";
+import { countOpenDriftByLink } from "@/server/queries/workspace-group-drift";
 
 export type GroupWorkspaceLinkRow = Awaited<
   ReturnType<typeof listGroupWorkspaceLinks>
@@ -17,7 +18,7 @@ export async function listGroupWorkspaceLinks(
   orgId: string,
   options?: { groupId?: string },
 ) {
-  const [rows, pendingByLink] = await Promise.all([
+  const [rows, pendingByLink, driftByLink] = await Promise.all([
     db
       .select({
         id: groupWorkspaceLinks.id,
@@ -51,6 +52,7 @@ export async function listGroupWorkspaceLinks(
       )
       .orderBy(asc(groupCategories.name), asc(groups.name)),
     countPendingOperations(orgId),
+    countOpenDriftByLink(orgId),
   ]);
 
   // How many Google memberships this link is responsible for — the number the
@@ -73,6 +75,7 @@ export async function listGroupWorkspaceLinks(
       pendingCount: counts.pending,
       failedCount: counts.failed,
       ownedCount: ownedByLink.get(row.id) ?? 0,
+      driftCount: driftByLink.get(row.id) ?? 0,
     };
   });
 }

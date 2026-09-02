@@ -496,6 +496,24 @@ export async function requireGroupManagementAccess(groupId: string) {
   return context;
 }
 
+/**
+ * A Workspace link writes to Google, so it stays behind the org-admin gate even
+ * in categories where `groupAdminsManageMembers` lets group admins manage the
+ * roster. Same gate for the drift inbox: adopting or removing a drift row moves
+ * membership on one side or the other.
+ */
+export async function requireWorkspaceLinkAccess(groupId: string) {
+  const context = await requireGroupManagementAccess(groupId);
+
+  if (context.adminAccessLevel !== "full" && context.member?.role !== "leader") {
+    throw new Error(
+      "Only organization admins can change the Workspace link for a group.",
+    );
+  }
+
+  return context;
+}
+
 export async function requireCurrentMemberAccess(options?: {
   requireProfileComplete?: boolean;
 }) {

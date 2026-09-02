@@ -174,6 +174,14 @@ export function GroupWorkspaceLinksCard({
                           <StatusIndicator />
                           <StatusLabel>{health.label}</StatusLabel>
                         </Status>
+                        {link.driftCount > 0 ? (
+                          <Status variant="warning" className="font-sans">
+                            <StatusIndicator />
+                            <StatusLabel>
+                              {link.driftCount} to review
+                            </StatusLabel>
+                          </Status>
+                        ) : null}
                       </ItemTitle>
                       <ItemDescription>
                         {directionLabel}
