@@ -10,6 +10,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import Link from "next/link";
 import { usePathname, useSelectedLayoutSegments } from "next/navigation";
 
 const SEGMENT_LABELS: Record<string, string> = {
@@ -74,11 +75,10 @@ export function AppBreadcrumbs() {
                     {label}
                   </BreadcrumbPage>
                 ) : (
-                  <BreadcrumbLink
-                    href={toHref(basePath, segments, index)}
-                    className="capitalize"
-                  >
-                    {label}
+                  <BreadcrumbLink asChild className="capitalize">
+                    <Link href={toHref(basePath, segments, index)}>
+                      {label}
+                    </Link>
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>
