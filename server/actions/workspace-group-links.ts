@@ -15,6 +15,7 @@ import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import {
   groupWorkspaceLinks,
+  groups,
   workspaceGroupMemberLinks,
 } from "@/server/db/schema";
 import { requireGroupManagementAccess } from "@/server/queries/access";
@@ -67,6 +68,51 @@ async function requireLinkForEdit(linkId: string) {
 }
 
 /**
+ * Links are one-to-one in both directions: a Spoleek group has at most one
+ * Google group, and a Google group is claimed by at most one Spoleek group.
+ * The unique indexes enforce it; this turns the constraint violation into a
+ * message that says which side is already taken.
+ */
+async function findConflictingLink(
+  orgId: string,
+  groupId: string,
+  workspaceGroupId: string,
+) {
+  const [byGroup] = await db
+    .select({ workspaceGroupEmail: groupWorkspaceLinks.workspaceGroupEmail })
+    .from(groupWorkspaceLinks)
+    .where(
+      and(
+        eq(groupWorkspaceLinks.orgId, orgId),
+        eq(groupWorkspaceLinks.groupId, groupId),
+      ),
+    )
+    .limit(1);
+
+  if (byGroup) {
+    return `This group is already linked to ${byGroup.workspaceGroupEmail}. Unlink it first.`;
+  }
+
+  const [byTarget] = await db
+    .select({ groupName: groups.name })
+    .from(groupWorkspaceLinks)
+    .innerJoin(groups, eq(groups.id, groupWorkspaceLinks.groupId))
+    .where(
+      and(
+        eq(groupWorkspaceLinks.orgId, orgId),
+        eq(groupWorkspaceLinks.workspaceGroupId, workspaceGroupId),
+      ),
+    )
+    .limit(1);
+
+  if (byTarget) {
+    return `That Google group is already linked to “${byTarget.groupName}”.`;
+  }
+
+  return null;
+}
+
+/**
  * Dry run. Nothing is written to Google or to the ledger — the admin sees
  * exactly what linking would do and confirms before anything happens.
  */
@@ -89,22 +135,15 @@ export const previewGroupWorkspaceLinkAction = authActionClient
       });
     }
 
-    const existing = await db
-      .select({ id: groupWorkspaceLinks.id })
-      .from(groupWorkspaceLinks)
-      .where(
-        and(
-          eq(groupWorkspaceLinks.groupId, parsedInput.groupId),
-          eq(groupWorkspaceLinks.workspaceGroupId, target.id),
-        ),
-      )
-      .limit(1);
+    const conflict = await findConflictingLink(
+      context.organization.id,
+      parsedInput.groupId,
+      target.id,
+    );
 
-    if (existing.length > 0) {
+    if (conflict) {
       returnValidationErrors(previewGroupWorkspaceLinkSchema, {
-        workspaceGroupKey: {
-          _errors: ["This group is already linked to that Google group."],
-        },
+        workspaceGroupKey: { _errors: [conflict] },
       });
     }
 
@@ -118,14 +157,12 @@ export const previewGroupWorkspaceLinkAction = authActionClient
         direction: parsedInput.direction,
         removalPolicy: parsedInput.removalPolicy,
       },
-      [
-        {
-          groupId: parsedInput.groupId,
-          memberRole: parsedInput.memberRole,
-          adminRole: parsedInput.adminRole,
-          includeExternal: parsedInput.includeExternal,
-        },
-      ],
+      {
+        groupId: parsedInput.groupId,
+        memberRole: parsedInput.memberRole,
+        adminRole: parsedInput.adminRole,
+        includeExternal: parsedInput.includeExternal,
+      },
     );
 
     return {
@@ -165,6 +202,18 @@ export const createGroupWorkspaceLinkAction = authActionClient
       });
     }
 
+    const conflict = await findConflictingLink(
+      context.organization.id,
+      parsedInput.groupId,
+      target.id,
+    );
+
+    if (conflict) {
+      returnValidationErrors(createGroupWorkspaceLinkSchema, {
+        workspaceGroupKey: { _errors: [conflict] },
+      });
+    }
+
     const [link] = await db
       .insert(groupWorkspaceLinks)
       .values({
@@ -185,7 +234,7 @@ export const createGroupWorkspaceLinkAction = authActionClient
     if (!link) {
       returnValidationErrors(createGroupWorkspaceLinkSchema, {
         workspaceGroupKey: {
-          _errors: ["This group is already linked to that Google group."],
+          _errors: ["That link already exists."],
         },
       });
     }

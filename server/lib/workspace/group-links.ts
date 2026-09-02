@@ -21,7 +21,6 @@ import type { WorkspaceLinkPlanRow } from "@/lib/workspace-group-links";
 import {
   computeGroupPlan,
   normalizeAddress,
-  strongestRole,
   type DesiredMember,
   type GroupSyncPlan,
 } from "@/server/lib/workspace/reconcile";
@@ -61,11 +60,15 @@ export type LinkConfig = {
   includeExternal: boolean;
 };
 
-async function loadLinkConfigs(
+/**
+ * The link that owns a Google group, if any. Links are one-to-one in both
+ * directions, so this is at most one row.
+ */
+async function loadLinkConfig(
   orgId: string,
   workspaceGroupId: string,
-): Promise<LinkConfig[]> {
-  return db
+): Promise<LinkConfig | null> {
+  const [row] = await db
     .select({
       groupId: groupWorkspaceLinks.groupId,
       memberRole: groupWorkspaceLinks.memberRole,
@@ -80,37 +83,28 @@ async function loadLinkConfigs(
         eq(groupWorkspaceLinks.isEnabled, true),
         eq(groupWorkspaceLinks.direction, "push"),
       ),
-    );
+    )
+    .limit(1);
+
+  return row ?? null;
 }
 
 /**
- * The desired roster for one Google group, as the **union over every enabled
- * push link** pointing at it. Computing it per Google group rather than per
- * Spoleek group is what stops two Spoleek groups linked to `all-staff@` from
- * fighting: each would otherwise consider the other's members "not desired".
+ * The desired roster for a Google group: the members of the one Spoleek group
+ * linked to it.
  *
- * `extraLinks` lets the link dialog preview a link that has not been saved yet
- * without writing a placeholder row.
+ * `overrideLink` lets the link dialog preview a link that has not been saved
+ * yet without writing a placeholder row.
  */
 export async function resolveDesiredMembers(
   orgId: string,
   workspaceGroupId: string,
-  extraLinks: LinkConfig[] = [],
+  overrideLink?: LinkConfig,
 ): Promise<DesiredResolution> {
-  const configs = [
-    ...(await loadLinkConfigs(orgId, workspaceGroupId)),
-    ...extraLinks,
-  ];
+  const config = overrideLink ?? (await loadLinkConfig(orgId, workspaceGroupId));
 
-  if (configs.length === 0) {
+  if (!config) {
     return { desired: [], skipped: [] };
-  }
-
-  const configsByGroupId = new Map<string, LinkConfig[]>();
-  for (const config of configs) {
-    const list = configsByGroupId.get(config.groupId) ?? [];
-    list.push(config);
-    configsByGroupId.set(config.groupId, list);
   }
 
   const [org] = await db
@@ -130,7 +124,6 @@ export async function resolveDesiredMembers(
       email: tenantMembers.email,
       workspaceUserEmail: tenantMembers.workspaceUserEmail,
       preferredEmail: tenantMembers.preferredEmail,
-      groupId: groupMemberships.groupId,
       groupRole: groupMemberships.role,
     })
     .from(groupMemberships)
@@ -138,69 +131,54 @@ export async function resolveDesiredMembers(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
-        inArray(groupMemberships.groupId, [...configsByGroupId.keys()]),
+        eq(groupMemberships.groupId, config.groupId),
         notInArray(tenantMembers.status, EXCLUDED_MEMBER_STATUSES),
       ),
     );
 
   const byAddress = new Map<string, DesiredMember>();
-  const skipped = new Map<string, SkippedMember>();
+  const skipped: SkippedMember[] = [];
 
   for (const row of rows) {
-    for (const config of configsByGroupId.get(row.groupId) ?? []) {
-      const wantedRole: WorkspaceGroupRole =
-        row.groupRole === "group_admin" ? config.adminRole : config.memberRole;
-      const name = displayName(row.firstName, row.lastName, row.email);
+    const name = displayName(row.firstName, row.lastName, row.email);
+    const wantedRole: WorkspaceGroupRole =
+      row.groupRole === "group_admin" ? config.adminRole : config.memberRole;
 
-      const address = row.workspaceUserEmail
-        ? normalizeAddress(row.workspaceUserEmail)
-        : config.includeExternal
-          ? resolvePreferredEmail({
-              personalEmail: row.email,
-              workspaceEmail: null,
-              memberPreference: row.preferredEmail,
-              orgDefault: org?.defaultEmailPreference ?? "personal",
-              workspaceReady: Boolean(org?.workspaceConnectedAt),
-            })
-          : null;
+    const address = row.workspaceUserEmail
+      ? normalizeAddress(row.workspaceUserEmail)
+      : config.includeExternal
+        ? resolvePreferredEmail({
+            personalEmail: row.email,
+            workspaceEmail: null,
+            memberPreference: row.preferredEmail,
+            orgDefault: org?.defaultEmailPreference ?? "personal",
+            workspaceReady: Boolean(org?.workspaceConnectedAt),
+          })
+        : null;
 
-      if (!address) {
-        skipped.set(row.memberId, {
-          memberId: row.memberId,
-          name,
-          reason: row.email ? "no_workspace_account" : "no_email",
-        });
-        continue;
-      }
+    if (!address) {
+      skipped.push({
+        memberId: row.memberId,
+        name,
+        reason: row.email ? "no_workspace_account" : "no_email",
+      });
+      continue;
+    }
 
-      const normalized = normalizeAddress(address);
-      const existing = byAddress.get(normalized);
-      byAddress.set(
-        normalized,
-        existing
-          ? {
-              address: normalized,
-              role: strongestRole(existing.role, wantedRole),
-              memberId: existing.memberId ?? row.memberId,
-              name: existing.name ?? name,
-            }
-          : {
-              address: normalized,
-              role: wantedRole,
-              memberId: row.memberId,
-              name,
-            },
-      );
+    // Two members can share an address (a shared mailbox, a duplicate record);
+    // the group only holds it once.
+    const normalized = normalizeAddress(address);
+    if (!byAddress.has(normalized)) {
+      byAddress.set(normalized, {
+        address: normalized,
+        role: wantedRole,
+        memberId: row.memberId,
+        name,
+      });
     }
   }
 
-  // Someone reachable through one link is not "skipped" just because another
-  // link could not resolve an address for them.
-  for (const entry of byAddress.values()) {
-    if (entry.memberId) skipped.delete(entry.memberId);
-  }
-
-  return { desired: [...byAddress.values()], skipped: [...skipped.values()] };
+  return { desired: [...byAddress.values()], skipped };
 }
 
 /** Addresses the ledger says Spoleek put into this Google group. */
@@ -234,7 +212,7 @@ export async function planLinkSync(
     GroupWorkspaceLink,
     "orgId" | "workspaceGroupId" | "workspaceGroupEmail" | "direction" | "removalPolicy"
   >,
-  extraLinks: LinkConfig[] = [],
+  overrideLink?: LinkConfig,
 ): Promise<LinkSyncPreview> {
   const group = await getWorkspaceGroup(link.orgId, link.workspaceGroupId);
 
@@ -246,7 +224,7 @@ export async function planLinkSync(
 
   const [actual, { desired, skipped }, owned] = await Promise.all([
     listWorkspaceGroupMembers(link.orgId, link.workspaceGroupId),
-    resolveDesiredMembers(link.orgId, link.workspaceGroupId, extraLinks),
+    resolveDesiredMembers(link.orgId, link.workspaceGroupId, overrideLink),
     loadOwnedAddresses(link.orgId, link.workspaceGroupId),
   ]);
 
@@ -502,8 +480,7 @@ export async function createLinkForGroup(
 /**
  * Fast path for a membership mutation. Deliberately DB-only: it decides what to
  * enqueue without calling Google, so assigning 200 members costs one query
- * instead of 200 round trips. Correctness for removals comes from re-deriving
- * the union — an address is only removed once no remaining link wants it.
+ * instead of 200 round trips.
  */
 export async function enqueueMemberSyncForGroup(
   orgId: string,
@@ -512,7 +489,7 @@ export async function enqueueMemberSyncForGroup(
 ) {
   if (memberIds.length === 0) return;
 
-  const links = await db
+  const [link] = await db
     .select()
     .from(groupWorkspaceLinks)
     .where(
@@ -522,9 +499,10 @@ export async function enqueueMemberSyncForGroup(
         eq(groupWorkspaceLinks.isEnabled, true),
         eq(groupWorkspaceLinks.direction, "push"),
       ),
-    );
+    )
+    .limit(1);
 
-  if (links.length === 0) return;
+  if (!link) return;
 
   const members = await db
     .select({
@@ -551,62 +529,60 @@ export async function enqueueMemberSyncForGroup(
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  for (const link of links) {
-    const { desired } = await resolveDesiredMembers(orgId, link.workspaceGroupId);
-    const desiredByAddress = new Map(desired.map((entry) => [entry.address, entry]));
-    const owned = await loadOwnedAddresses(orgId, link.workspaceGroupId);
+  const { desired } = await resolveDesiredMembers(orgId, link.workspaceGroupId);
+  const desiredByAddress = new Map(desired.map((entry) => [entry.address, entry]));
+  const owned = await loadOwnedAddresses(orgId, link.workspaceGroupId);
 
-    const operations: Enqueueable[] = [];
+  const operations: Enqueueable[] = [];
 
-    for (const member of members) {
-      const raw = member.workspaceUserEmail
-        ? member.workspaceUserEmail
-        : link.includeExternal
-          ? resolvePreferredEmail({
-              personalEmail: member.email,
-              workspaceEmail: null,
-              memberPreference: member.preferredEmail,
-              orgDefault: org?.defaultEmailPreference ?? "personal",
-              workspaceReady: Boolean(org?.workspaceConnectedAt),
-            })
-          : null;
+  for (const member of members) {
+    const raw = member.workspaceUserEmail
+      ? member.workspaceUserEmail
+      : link.includeExternal
+        ? resolvePreferredEmail({
+            personalEmail: member.email,
+            workspaceEmail: null,
+            memberPreference: member.preferredEmail,
+            orgDefault: org?.defaultEmailPreference ?? "personal",
+            workspaceReady: Boolean(org?.workspaceConnectedAt),
+          })
+        : null;
 
-      if (!raw) continue;
+    if (!raw) continue;
 
-      const address = normalizeAddress(raw);
-      const want = desiredByAddress.get(address);
+    const address = normalizeAddress(raw);
+    const want = desiredByAddress.get(address);
 
-      if (want) {
+    if (want) {
+      operations.push({
+        kind: "add_member",
+        address,
+        role: want.role,
+        memberId: want.memberId,
+      });
+      // `add` is a no-op for someone already in the group, so a non-default
+      // role needs its own idempotent patch to actually take effect.
+      if (want.role !== "member") {
         operations.push({
-          kind: "add_member",
+          kind: "update_role",
           address,
           role: want.role,
           memberId: want.memberId,
         });
-        // `add` is a no-op for someone already in the group, so a non-default
-        // role needs its own idempotent patch to actually take effect.
-        if (want.role !== "member") {
-          operations.push({
-            kind: "update_role",
-            address,
-            role: want.role,
-            memberId: want.memberId,
-          });
-        }
-        continue;
       }
-
-      if (link.removalPolicy === "keep") continue;
-      if (link.removalPolicy === "remove_owned" && !owned.has(address)) continue;
-
-      operations.push({
-        kind: "remove_member",
-        address,
-        role: null,
-        memberId: null,
-      });
+      continue;
     }
 
-    await enqueueOperations(orgId, link.id, operations);
+    if (link.removalPolicy === "keep") continue;
+    if (link.removalPolicy === "remove_owned" && !owned.has(address)) continue;
+
+    operations.push({
+      kind: "remove_member",
+      address,
+      role: null,
+      memberId: null,
+    });
   }
+
+  await enqueueOperations(orgId, link.id, operations);
 }

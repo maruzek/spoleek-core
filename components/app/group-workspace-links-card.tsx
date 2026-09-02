@@ -144,10 +144,10 @@ export function GroupWorkspaceLinksCard({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Linked Google groups</CardTitle>
+          <CardTitle>Linked Google group</CardTitle>
           <CardDescription>
-            Keep a Google group&apos;s membership in step with this group. Nothing
-            is changed in Google until you confirm a preview.
+            Keep one Google group&apos;s membership in step with this group.
+            Nothing is changed in Google until you confirm a preview.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -231,7 +231,7 @@ export function GroupWorkspaceLinksCard({
             </div>
           )}
 
-          {canManage ? (
+          {canManage && links.length === 0 ? (
             <div>
               <Button type="button" onClick={() => setLinkDialogOpen(true)}>
                 <Link2Icon data-icon="inline-start" />

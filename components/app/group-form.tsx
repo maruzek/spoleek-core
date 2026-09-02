@@ -353,7 +353,7 @@ export function GroupForm({
         <FieldSet>
           <FieldLegend>Linked Google group</FieldLegend>
           <FieldDescription>
-            Optional. Members you add to this group are kept in step with a
+            Optional. Members you add to this group are kept in step with one
             Google group. You can change or remove this later in the
             group&apos;s settings.
           </FieldDescription>

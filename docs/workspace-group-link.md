@@ -44,8 +44,8 @@ removalPolicy       enum('remove_owned','remove_all','keep') default 'remove_own
 includeExternal     boolean default false  -- push personal email when no workspace account
 isEnabled           boolean default true
 lastSyncedAt, lastSyncStatus, lastSyncError
-unique (orgId, groupId, workspaceGroupId)
-index (orgId, workspaceGroupId)   -- many Spoleek groups -> one Google group
+unique (groupId)                  -- one Google group per Spoleek group
+unique (orgId, workspaceGroupId)  -- one Spoleek group per Google group
 ```
 
 `groups.workspaceGroupEmail` is dropped outright — there is no production data, so the local
@@ -86,8 +86,9 @@ One row per membership **we** created. It buys three things:
   (ledger rows written) — that's the "Adopts 4" in the dry-run preview.
 - **Safe unlink.** Unlinking offers "also remove the N memberships Spoleek created" with an
   exact count, instead of guessing.
-- **Multi-link peace.** Two Spoleek groups pointing at `all-staff@` don't fight: the desired
-  set is the **union over all enabled links** to that `workspaceGroupId`, computed once.
+- **Room to grow.** If links ever become many-to-one, the desired set becomes a union over
+  every link to a `workspaceGroupId` and the ledger is what stops two Spoleek groups from
+  fighting over it. Today links are strictly one-to-one, so the union is not built.
 
 ### 2.3 The reconciler
 
@@ -212,6 +213,8 @@ auto-create/auto-link, nested groups, import wizard source, mailing-list-via-Goo
   which touches fee and renewal state (`server/lib/payment-lifecycle.ts`,
   `managesMembershipFees`) — a much heavier consequence than deleting a Google membership.
   Promote to real `pull` in P2 once the drift inbox shows what admins actually click.
-- **Schema allows many links per group; the P1 form ships one.** The union logic is not
-  optional either way — two *different* Spoleek groups can already point at the same Google
-  group — so only the UI is deferred, not the reconciler.
+- **Strictly one-to-one, enforced in both directions** (2026-09-02). A Spoleek group has at
+  most one Google group and a Google group is claimed by at most one Spoleek group, enforced by
+  unique indexes and by a friendly pre-check in the actions. Many-to-one roll-ups (several
+  Spoleek groups feeding `all-staff@`) are a real want but a separate, later feature — tracked
+  in Linear. Until then the union logic is deliberately absent rather than dormant.

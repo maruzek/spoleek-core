@@ -21,6 +21,7 @@ import {
   categoryAdminAssignments,
   groupCategories,
   groupMemberships,
+  groupWorkspaceLinks,
   groups,
 } from "@/server/db/schema";
 import {
@@ -32,7 +33,10 @@ import {
 import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
 import { getGroupCategoryById, getGroupById } from "@/server/queries/groups";
 import { getMemberById } from "@/server/queries/members";
-import { updateWorkspaceUserOrgUnit } from "@/server/lib/workspace/client";
+import {
+  getWorkspaceGroup,
+  updateWorkspaceUserOrgUnit,
+} from "@/server/lib/workspace/client";
 import {
   createLinkForGroup,
   enqueueMemberSyncForGroup,
@@ -84,6 +88,33 @@ async function syncGroupMembership(
 ) {
   await enqueueMemberSyncForGroup(orgId, groupId, memberIds);
   after(() => drainWorkspaceSyncOperations({ orgId }));
+}
+
+/**
+ * The name of the Spoleek group already linked to this Google group, if any.
+ * Links are one-to-one in both directions.
+ */
+async function findGroupClaimingWorkspaceGroup(
+  orgId: string,
+  workspaceGroupKey: string,
+) {
+  const target = await getWorkspaceGroup(orgId, workspaceGroupKey);
+
+  if (!target) return null;
+
+  const [row] = await db
+    .select({ name: groups.name })
+    .from(groupWorkspaceLinks)
+    .innerJoin(groups, eq(groups.id, groupWorkspaceLinks.groupId))
+    .where(
+      and(
+        eq(groupWorkspaceLinks.orgId, orgId),
+        eq(groupWorkspaceLinks.workspaceGroupId, target.id),
+      ),
+    )
+    .limit(1);
+
+  return row?.name ?? null;
 }
 
 async function requireOrgMemberInOrganization(orgId: string, memberId: string) {
@@ -287,6 +318,29 @@ export const saveGroupAction = authActionClient
         throw new Error("The selected category could not be found.");
       }
 
+      // A link changes Workspace state, so it stays behind the org-admin gate
+      // even where group admins may otherwise create groups.
+      const canLink =
+        context.adminAccessLevel === "full" || context.member?.role === "leader";
+
+      // A Google group can only be claimed by one Spoleek group, so check
+      // before creating anything rather than leaving a group behind with a
+      // link that silently failed.
+      if (parsedInput.workspaceLink && canLink) {
+        const conflict = await findGroupClaimingWorkspaceGroup(
+          organization.id,
+          parsedInput.workspaceLink.workspaceGroupKey,
+        );
+
+        if (conflict) {
+          returnValidationErrors(groupSchema, {
+            workspaceLink: {
+              _errors: [`That Google group is already linked to “${conflict}”.`],
+            },
+          });
+        }
+      }
+
       const [created] = await db
         .insert(groups)
         .values({
@@ -302,11 +356,6 @@ export const saveGroupAction = authActionClient
           workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
         })
         .returning({ id: groups.id });
-
-      // A link changes Workspace state, so it stays behind the org-admin gate
-      // even where group admins may otherwise create groups.
-      const canLink =
-        context.adminAccessLevel === "full" || context.member?.role === "leader";
 
       if (created && parsedInput.workspaceLink && canLink) {
         await createLinkForGroup(organization.id, created.id, parsedInput.workspaceLink);

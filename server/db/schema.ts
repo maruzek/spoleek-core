@@ -765,12 +765,10 @@ export const workspaceConnections = pgTable(
 );
 
 /**
- * A link between a Spoleek group and a Google group. Keyed on the immutable
- * Google group id — the email is cached for display and refreshed on each sync,
- * so renaming the group in the Admin console does not break the link.
- *
- * Several Spoleek groups may point at the same Google group; the desired
- * membership is the union across every enabled link.
+ * A one-to-one link between a Spoleek group and a Google group. Keyed on the
+ * immutable Google group id — the email is cached for display and refreshed on
+ * each sync, so renaming the group in the Admin console does not break the
+ * link.
  */
 export const groupWorkspaceLinks = pgTable(
   "group_workspace_links",
@@ -801,15 +799,14 @@ export const groupWorkspaceLinks = pgTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("group_workspace_links_group_target_idx").on(
-      table.groupId,
-      table.workspaceGroupId,
-    ),
-    index("group_workspace_links_org_target_idx").on(
+    // Strictly one-to-one, enforced in both directions: a Spoleek group has at
+    // most one Google group, and a Google group is claimed by at most one
+    // Spoleek group. Many-to-one roll-ups are a deliberate future feature.
+    uniqueIndex("group_workspace_links_group_idx").on(table.groupId),
+    uniqueIndex("group_workspace_links_org_target_idx").on(
       table.orgId,
       table.workspaceGroupId,
     ),
-    index("group_workspace_links_org_group_idx").on(table.orgId, table.groupId),
   ],
 );
 
