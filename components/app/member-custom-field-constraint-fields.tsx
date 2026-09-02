@@ -10,12 +10,12 @@ import {
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldLabel,
   FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
+import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -32,6 +32,9 @@ import type { MemberCustomFieldType } from "@/server/db/schema";
  * Admin editor for `member_custom_fields.constraints`. Only the keys that the
  * selected type understands are rendered; the save action strips the rest.
  */
+const DATE_GROUP_HINT =
+  "Age limits, a fixed range and a direction lock overlap, so only one applies. Filling any of them in locks the other two until it is cleared.";
+
 export function MemberCustomFieldConstraintFields({
   type,
   value,
@@ -58,25 +61,21 @@ export function MemberCustomFieldConstraintFields({
 
   return (
     <FieldSet>
-      <FieldLegend>Validation</FieldLegend>
-      <FieldDescription>
-        Answers that break these rules are rejected on the join form and in the
-        admin editor. Leave a limit empty to skip it.
-      </FieldDescription>
+      <FieldLegend>
+        Validation
+        <FieldHint>
+          Answers that break these rules are rejected on the join form and in
+          the admin editor. Leave a limit empty to skip it.
+        </FieldHint>
+      </FieldLegend>
 
       {type === "date" ? (
         <>
-          <FieldDescription>
-            Age limits, a fixed range and a direction lock overlap, so only one
-            of them applies. Filling any of them in locks the other two until
-            it is cleared.
-          </FieldDescription>
-
           <div className="grid gap-5 md:grid-cols-2">
             <NumberLimitField
               id="constraint-min-age"
               label="Minimum age"
-              description="Inclusive: someone turning this age on the day they submit still qualifies."
+              description={`Inclusive: someone turning this age on the day they submit still qualifies. ${DATE_GROUP_HINT}`}
               value={value.minAge}
               min={0}
               max={150}
@@ -86,7 +85,7 @@ export function MemberCustomFieldConstraintFields({
             <NumberLimitField
               id="constraint-max-age"
               label="Maximum age"
-              description="Inclusive: this age is still allowed, up to and including the day before the next birthday."
+              description={`Inclusive: this age is still allowed, up to and including the day before the next birthday. ${DATE_GROUP_HINT}`}
               value={value.maxAge}
               min={0}
               max={150}
@@ -99,6 +98,9 @@ export function MemberCustomFieldConstraintFields({
             <Field data-disabled={isGroupLocked("range") || undefined}>
               <FieldLabel htmlFor="constraint-not-before">
                 Earliest allowed date
+                <FieldHint>
+                  Inclusive: this day itself is allowed. {DATE_GROUP_HINT}
+                </FieldHint>
               </FieldLabel>
               <FieldContent>
                 <Input
@@ -110,14 +112,14 @@ export function MemberCustomFieldConstraintFields({
                     patch({ notBefore: event.target.value || undefined })
                   }
                 />
-                <FieldDescription>
-                  Inclusive: this day itself is allowed.
-                </FieldDescription>
               </FieldContent>
             </Field>
             <Field data-disabled={isGroupLocked("range") || undefined}>
               <FieldLabel htmlFor="constraint-not-after">
                 Latest allowed date
+                <FieldHint>
+                  Inclusive: this day itself is allowed. {DATE_GROUP_HINT}
+                </FieldHint>
               </FieldLabel>
               <FieldContent>
                 <Input
@@ -129,15 +131,18 @@ export function MemberCustomFieldConstraintFields({
                     patch({ notAfter: event.target.value || undefined })
                   }
                 />
-                <FieldDescription>
-                  Inclusive: this day itself is allowed.
-                </FieldDescription>
               </FieldContent>
             </Field>
           </div>
 
           <Field data-disabled={isGroupLocked("direction") || undefined}>
-            <FieldLabel>Allowed direction</FieldLabel>
+            <FieldLabel>
+              Allowed direction
+              <FieldHint>
+                Relative to the moment the answer is submitted; today counts as
+                allowed either way. {DATE_GROUP_HINT}
+              </FieldHint>
+            </FieldLabel>
             <FieldContent>
               <Select
                 value={value.direction ?? "any"}
@@ -164,10 +169,6 @@ export function MemberCustomFieldConstraintFields({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <FieldDescription>
-                Relative to the moment the answer is submitted. Today counts as
-                allowed either way.
-              </FieldDescription>
             </FieldContent>
           </Field>
         </>
@@ -249,7 +250,13 @@ export function MemberCustomFieldConstraintFields({
           {value.format === "custom" ? (
             <>
               <Field>
-                <FieldLabel htmlFor="constraint-pattern">Pattern</FieldLabel>
+                <FieldLabel htmlFor="constraint-pattern">
+                  Pattern
+                  <FieldHint>
+                    A JavaScript regular expression. Anchors are added
+                    automatically, so the whole answer must match.
+                  </FieldHint>
+                </FieldLabel>
                 <FieldContent>
                   <Input
                     id="constraint-pattern"
@@ -260,10 +267,6 @@ export function MemberCustomFieldConstraintFields({
                       patch({ pattern: event.target.value || undefined })
                     }
                   />
-                  <FieldDescription>
-                    A JavaScript regular expression. Anchors are added
-                    automatically, so the whole answer must match.
-                  </FieldDescription>
                 </FieldContent>
               </Field>
 
@@ -280,10 +283,6 @@ export function MemberCustomFieldConstraintFields({
                       patch({ patternMessage: event.target.value || undefined })
                     }
                   />
-                  <FieldDescription>
-                    Shown to members when their answer does not match. Without
-                    it they only see a generic format error.
-                  </FieldDescription>
                 </FieldContent>
               </Field>
             </>
@@ -339,7 +338,10 @@ function NumberLimitField({
 }) {
   return (
     <Field data-disabled={disabled || undefined}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id}>
+        {label}
+        {description ? <FieldHint>{description}</FieldHint> : null}
+      </FieldLabel>
       <FieldContent>
         <Input
           id={id}
@@ -355,7 +357,6 @@ function NumberLimitField({
             onChange(next === "" ? undefined : Number(next));
           }}
         />
-        {description ? <FieldDescription>{description}</FieldDescription> : null}
       </FieldContent>
     </Field>
   );

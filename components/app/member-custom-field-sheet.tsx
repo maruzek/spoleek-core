@@ -17,13 +17,13 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
 import { MemberCustomFieldConstraintFields } from "@/components/app/member-custom-field-constraint-fields";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
+import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -234,7 +234,12 @@ function InnerForm({
               <form.Field name="key">
                 {(formField) => (
                   <Field>
-                    <FieldLabel htmlFor="field-key">Key</FieldLabel>
+                    <FieldLabel htmlFor="field-key">
+                      Key
+                      <FieldHint>
+                        Stable internal key used when storing answers.
+                      </FieldHint>
+                    </FieldLabel>
                     <FieldContent>
                       <Input
                         id="field-key"
@@ -248,9 +253,6 @@ function InnerForm({
                           )
                         }
                       />
-                      <FieldDescription>
-                        Stable internal key used when storing answers.
-                      </FieldDescription>
                       <FieldError
                         errors={[
                           ...(
@@ -373,7 +375,13 @@ function InnerForm({
               <form.Field name="discoveryMode">
                 {(formField) => (
                   <Field>
-                    <FieldLabel>Table discovery</FieldLabel>
+                    <FieldLabel>
+                      Table discovery
+                      <FieldHint>
+                        Determines how this field behaves in the main members
+                        table.
+                      </FieldHint>
+                    </FieldLabel>
                     <FieldContent>
                       <Select
                         value={formField.state.value}
@@ -399,9 +407,6 @@ function InnerForm({
                           </SelectGroup>
                         </SelectContent>
                       </Select>
-                      <FieldDescription>
-                        Determines how this field behaves in the main members table.
-                      </FieldDescription>
                     </FieldContent>
                   </Field>
                 )}
@@ -482,6 +487,7 @@ function InnerForm({
                         <Field>
                           <FieldLabel htmlFor="field-options">
                             Options
+                            <FieldHint>Add one option per line.</FieldHint>
                           </FieldLabel>
                           <FieldContent>
                             <Textarea
@@ -502,9 +508,6 @@ function InnerForm({
                                 );
                               }}
                             />
-                            <FieldDescription>
-                              Add one option per line.
-                            </FieldDescription>
                             <FieldError
                               errors={getValidationFieldMessages(
                                 validationErrors,
