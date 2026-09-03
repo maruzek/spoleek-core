@@ -190,6 +190,10 @@ function getKindLabel(kind: EmailActivityRow["kind"] | EmailActivityDetail["kind
     return "Address already registered";
   }
 
+  if (kind === "registration_rejected") {
+    return "Application declined";
+  }
+
   if (kind === "workspace_welcome") {
     return "Workspace welcome";
   }

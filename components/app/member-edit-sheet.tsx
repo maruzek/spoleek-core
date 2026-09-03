@@ -6,13 +6,14 @@ import { useForm } from "@tanstack/react-form";
 import {
   AlertTriangleIcon,
   BadgeCheckIcon,
-  CheckCircle2Icon,
   EllipsisVerticalIcon,
   ExternalLinkIcon,
   FingerprintIcon,
   InfoIcon,
   RefreshCwIcon,
   Trash2Icon,
+  UserRoundCheckIcon,
+  UserRoundXIcon,
 } from "lucide-react";
 
 import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
@@ -138,7 +139,9 @@ type MemberEditSheetProps = {
   customFieldErrors?: Record<string, string[]>;
   customFieldAnswers: Record<string, unknown>;
   isApprovePending: boolean;
+  isRejectPending: boolean;
   onApprove: () => void;
+  onReject: () => void;
   onDelete: () => Promise<void>;
   onOpenChange: (open: boolean) => void;
   onSubmit: (value: UpdateMemberValues) => Promise<void>;
@@ -214,7 +217,9 @@ export function MemberEditSheet({
   customFieldErrors,
   customFieldAnswers,
   isApprovePending,
+  isRejectPending,
   onApprove,
+  onReject,
   onDelete,
   onOpenChange,
   onSubmit,
@@ -371,14 +376,35 @@ export function MemberEditSheet({
                       This member has not been approved yet
                     </CardTitle>
                   </div>
-                  <Button
-                    type="button"
-                    onClick={onApprove}
-                    disabled={isApprovePending || isPending || isDeletePending}
-                  >
-                    <CheckCircle2Icon data-icon="inline-start" />
-                    {isApprovePending ? "Approving..." : "Approve member"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={onApprove}
+                      disabled={
+                        isApprovePending ||
+                        isRejectPending ||
+                        isPending ||
+                        isDeletePending
+                      }
+                    >
+                      <UserRoundCheckIcon data-icon="inline-start" />
+                      {isApprovePending ? "Approving..." : "Approve member"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={onReject}
+                      disabled={
+                        isApprovePending ||
+                        isRejectPending ||
+                        isPending ||
+                        isDeletePending
+                      }
+                    >
+                      <UserRoundXIcon data-icon="inline-start" />
+                      {isRejectPending ? "Rejecting..." : "Reject"}
+                    </Button>
+                  </div>
                 </CardHeader>
               </Card>
             ) : null}

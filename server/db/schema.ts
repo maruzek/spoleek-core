@@ -56,6 +56,7 @@ export const memberInviteDeliveryStatusEnum = pgEnum("member_invite_delivery_sta
 
 export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
   "member_approved",
+  "member_rejected",
   "invite_send_requested",
   "invite_sent",
   "invite_send_skipped",
@@ -79,6 +80,7 @@ export const emailKindEnum = pgEnum("email_kind", [
   "registration_submitted",
   "registration_acknowledgement",
   "registration_duplicate_notice",
+  "registration_rejected",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [

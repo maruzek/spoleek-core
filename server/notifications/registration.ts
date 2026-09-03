@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getServerEnv } from "@/lib/env";
 import { RegistrationExistingAccountEmail } from "@/emails/registration-existing-account-email";
 import { RegistrationReceivedEmail } from "@/emails/registration-received-email";
+import { RegistrationRejectedEmail } from "@/emails/registration-rejected-email";
 import { RegistrationSubmittedEmail } from "@/emails/registration-submitted-email";
 import { db } from "@/server/db";
 import {
@@ -57,7 +58,11 @@ async function loadSelectionsByCategory(orgId: string, groupIds: string[]) {
 
 async function loadApplicant(orgId: string, memberId: string) {
   const [organization] = await db
-    .select({ name: organizations.name, locale: organizations.locale })
+    .select({
+      name: organizations.name,
+      locale: organizations.locale,
+      primaryEmail: organizations.primaryEmail,
+    })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
@@ -230,5 +235,54 @@ export async function notifyRegistrationDuplicate(params: {
     });
   } catch (error) {
     console.error("[notifications] registration_duplicate_notice failed", error);
+  }
+}
+
+/**
+ * Tells an applicant their application was declined.
+ *
+ * Takes the applicant's details rather than an id, because by the time this runs
+ * the member row is gone — rejection deletes it outright. The activity row is
+ * written with no `memberId` for the same reason.
+ */
+export async function notifyRegistrationRejected(params: {
+  orgId: string;
+  applicantName: string;
+  toEmail: string;
+  reason: string | null;
+}) {
+  try {
+    const [organization] = await db
+      .select({
+        name: organizations.name,
+        locale: organizations.locale,
+        primaryEmail: organizations.primaryEmail,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, params.orgId))
+      .limit(1);
+
+    if (!organization) {
+      return;
+    }
+
+    await sendNotificationEmails({
+      orgId: params.orgId,
+      kind: "registration_rejected",
+      recipients: [
+        { email: params.toEmail, name: params.applicantName, reason: "applicant" },
+      ],
+      subject: `Your application to ${organization.name}`,
+      metadata: { hasReason: params.reason !== null },
+      react: RegistrationRejectedEmail({
+        organizationName: organization.name,
+        applicantName: params.applicantName,
+        decidedAt: formatDate(new Date(), organization.locale),
+        reason: params.reason,
+        contactEmail: organization.primaryEmail,
+      }),
+    });
+  } catch (error) {
+    console.error("[notifications] registration_rejected failed", error);
   }
 }

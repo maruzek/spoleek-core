@@ -15,6 +15,8 @@ import {
   PlusIcon,
   Trash2Icon,
   UploadIcon,
+  UserRoundCheckIcon,
+  UserRoundXIcon,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -34,6 +36,8 @@ import { Badge } from "@/components/ui/badge";
 import { BadgeOverflow } from "@/components/ui/badge-overflow";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { useAppShell } from "@/components/app/app-shell-provider";
@@ -45,6 +49,7 @@ import {
   bulkDeleteMembersAction,
   createShadowMemberAction,
   deleteMemberAction,
+  rejectMemberAction,
   resendMemberInviteAction,
   updateMemberAction,
 } from "@/server/actions/member-admin";
@@ -236,6 +241,14 @@ export function MemberAdmin({
   const [approvingMemberId, setApprovingMemberId] = useState<string | null>(
     null,
   );
+  // The pending applicant whose rejection dialog is open, plus the reason the
+  // admin is composing for them. Held here so the dialog survives table redraws.
+  const [rejectMember, setRejectMember] = useState<{
+    id: string;
+    name: string;
+    email: string | null;
+  } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   // Member awaiting the "Workspace is not connected" warning decision.
   const [unconnectedWarningMember, setUnconnectedWarningMember] =
     useState<WorkspaceApprovalMember | null>(null);
@@ -377,6 +390,23 @@ export function MemberAdmin({
 
       toast.error(message);
       router.refresh();
+    },
+  });
+  const rejectAction = useAction(rejectMemberAction, {
+    onSuccess({ data }) {
+      if (!data || data.deletedCount === 0) {
+        toast.error("This application could not be rejected.");
+        return;
+      }
+
+      setRejectMember(null);
+      setRejectReason("");
+      updateSearchParam(null);
+      toast.success("Application rejected. The applicant has been emailed.");
+      router.refresh();
+    },
+    onError({ error }) {
+      toast.error(error.serverError ?? "Could not reject this application.");
     },
   });
   const deleteAction = useAction(deleteMemberAction, {
@@ -675,15 +705,6 @@ export function MemberAdmin({
 
           return (
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => updateSearchParam(member.id)}
-              >
-                <PencilIcon data-icon="inline-start" />
-                Edit
-              </Button>
               {member.status === "pending" ? (
                 <Button
                   type="button"
@@ -700,7 +721,30 @@ export function MemberAdmin({
                   }
                   disabled={approvingMemberId === member.id}
                 >
+                  <UserRoundCheckIcon data-icon="inline-start" />
                   {approvingMemberId === member.id ? "Approving..." : "Approve"}
+                </Button>
+              ) : null}
+              {member.status === "pending" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    setRejectReason("");
+                    setRejectMember({
+                      id: member.id,
+                      name:
+                        `${member.firstName} ${member.lastName}`.trim() ||
+                        member.email ||
+                        "this applicant",
+                      email: member.email,
+                    });
+                  }}
+                  disabled={approvingMemberId === member.id}
+                >
+                  <UserRoundXIcon data-icon="inline-start" />
+                  Reject
                 </Button>
               ) : null}
               {member.status === "invited" &&
@@ -730,6 +774,15 @@ export function MemberAdmin({
                     : "Send invite"}
                 </Button>
               ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => updateSearchParam(member.id)}
+              >
+                <PencilIcon data-icon="inline-start" />
+                Edit
+              </Button>
             </div>
           );
         },
@@ -908,6 +961,18 @@ export function MemberAdmin({
           isDeletePending={deleteAction.isPending}
           isPending={updateAction.isPending}
           isApprovePending={approvingMemberId === selectedMember.member.id}
+          isRejectPending={rejectAction.isPending}
+          onReject={() => {
+            setRejectReason("");
+            setRejectMember({
+              id: selectedMember.member.id,
+              name:
+                `${selectedMember.member.firstName} ${selectedMember.member.lastName}`.trim() ||
+                selectedMember.member.email ||
+                "this applicant",
+              email: selectedMember.member.email,
+            });
+          }}
           onApprove={() =>
             startApproval(
               {
@@ -979,6 +1044,7 @@ export function MemberAdmin({
                 setUnconnectedWarningMember(null);
               }}
             >
+              <UserRoundCheckIcon data-icon="inline-start" />
               Approve without account
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1010,6 +1076,70 @@ export function MemberAdmin({
           });
         }}
       />
+
+      <AlertDialog
+        open={rejectMember !== null}
+        onOpenChange={(open) => {
+          if (!open && !rejectAction.isPending) {
+            setRejectMember(null);
+            setRejectReason("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <UserRoundXIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>Reject {rejectMember?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {rejectMember?.email
+                ? `This permanently deletes the application and every answer they gave. We will email ${rejectMember.email} to say it was not accepted. They can apply again later.`
+                : "This permanently deletes the application and every answer they gave. The applicant has no email address, so no message will be sent."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="reject-reason">Reason (optional)</Label>
+            <Textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.target.value)}
+              maxLength={600}
+              rows={3}
+              placeholder="We are at capacity for this season."
+              disabled={rejectAction.isPending}
+            />
+            <p className="text-sm text-muted-foreground">
+              {rejectMember?.email
+                ? "Shown to the applicant word for word. Leave it empty to send the decision without an explanation."
+                : "Nothing is stored after the deletion, so this reason will not be kept."}
+            </p>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rejectAction.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={rejectAction.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+
+                if (!rejectMember) return;
+
+                rejectAction.execute({
+                  memberId: rejectMember.id,
+                  reason: rejectReason,
+                });
+              }}
+            >
+              {rejectAction.isPending ? "Rejecting..." : "Reject application"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

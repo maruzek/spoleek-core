@@ -35,6 +35,21 @@ export const deleteMemberSchema = z.object({
   memberId: z.uuid(),
 });
 
+export const rejectMemberSchema = z.object({
+  memberId: z.uuid(),
+  /**
+   * Shown verbatim to the applicant, so it is capped at a length an admin can
+   * be expected to read back before sending.
+   */
+  reason: z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((value) => (typeof value === "string" ? value.trim() : ""))
+    .refine((value) => value.length <= 600, {
+      message: "Keep the reason under 600 characters.",
+    })
+    .transform((value) => (value.length > 0 ? value : null)),
+});
+
 export const bulkDeleteMembersSchema = z.object({
   memberIds: z.array(z.uuid()).min(1, "Select at least one member."),
 });
@@ -46,6 +61,7 @@ export const resendMemberInviteSchema = z.object({
 export type CreateMemberValues = z.infer<typeof createMemberSchema>;
 export type UpdateMemberValues = z.infer<typeof updateMemberSchema>;
 export type DeleteMemberValues = z.infer<typeof deleteMemberSchema>;
+export type RejectMemberValues = z.infer<typeof rejectMemberSchema>;
 export type BulkDeleteMembersValues = z.infer<typeof bulkDeleteMembersSchema>;
 export type ResendMemberInviteValues = z.infer<typeof resendMemberInviteSchema>;
 

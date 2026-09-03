@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 
 import { WorkspaceWelcomeEmail } from "@/emails/workspace-welcome-email";
@@ -17,6 +18,7 @@ import {
   resendMemberInviteSchema,
   searchWorkspaceUsersSchema,
   updateMemberSchema,
+  rejectMemberSchema,
 } from "@/lib/member-admin";
 import {
   describeApprovalRequirement,
@@ -37,7 +39,8 @@ import {
   logMemberAuthEvent,
   sendMemberActivationInvite,
 } from "@/server/lib/member-invites";
-import { softDeleteMembers } from "@/server/lib/member-lifecycle";
+import { hardDeleteMembers, softDeleteMembers } from "@/server/lib/member-lifecycle";
+import { notifyRegistrationRejected } from "@/server/notifications/registration";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
 import {
@@ -814,6 +817,61 @@ export const deleteMemberAction = authActionClient
       memberIds: [parsedInput.memberId],
       orgId: organization.id,
     });
+  });
+
+/**
+ * Declines a pending application and erases it. The record is deleted outright
+ * rather than tagged, so the rejection email's promise that their details are
+ * gone is literally true — and so a rejected person can apply again later
+ * instead of hitting the "already registered" path.
+ *
+ * The only trace left is the `email_activities` row for the rejection email
+ * itself, which necessarily holds the address the message went to.
+ */
+export const rejectMemberAction = authActionClient
+  .metadata({ actionName: "rejectMember" })
+  .inputSchema(rejectMemberSchema)
+  .action(async ({ parsedInput }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    const member = await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+
+    if (member.status !== "pending") {
+      throw new Error("Only a pending application can be rejected.");
+    }
+
+    // Read before the delete: nothing about this applicant survives it.
+    const toEmail = member.email;
+    const applicantName =
+      `${member.firstName} ${member.lastName}`.trim() || toEmail || "Applicant";
+
+    const result = await hardDeleteMembers({
+      memberIds: [parsedInput.memberId],
+      orgId: organization.id,
+    });
+
+    if (result.deletedCount === 0) {
+      return result;
+    }
+
+    if (toEmail) {
+      after(() =>
+        notifyRegistrationRejected({
+          orgId: organization.id,
+          applicantName,
+          toEmail,
+          reason: parsedInput.reason,
+        }),
+      );
+    }
+
+    return result;
   });
 
 export const bulkDeleteMembersAction = authActionClient

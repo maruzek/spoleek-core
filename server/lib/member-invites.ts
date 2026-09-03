@@ -10,6 +10,7 @@ import {
   memberAuthEvents,
   memberInvites,
   tenantMembers,
+  type MemberAuthEventType,
   type MemberInviteDeliveryStatus,
 } from "@/server/db/schema";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
@@ -129,18 +130,7 @@ export async function getValidMemberInvite(params: {
 export async function logMemberAuthEvent(params: {
   orgId: string;
   memberId: string;
-  eventType:
-    | "member_approved"
-    | "invite_send_requested"
-    | "invite_sent"
-    | "invite_send_skipped"
-    | "invite_delivery_updated"
-    | "invite_completed"
-    | "activation_attempt_blocked"
-    | "password_reset_sent"
-    | "workspace_provisioned"
-    | "workspace_provision_failed"
-    | "workspace_user_linked";
+  eventType: MemberAuthEventType;
   actorUserId?: string | null;
   inviteId?: string | null;
   message?: string | null;

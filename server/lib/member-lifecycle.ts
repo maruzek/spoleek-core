@@ -72,6 +72,47 @@ export async function softDeleteMembers({
   };
 }
 
+/**
+ * Removes members and everything hanging off them right now, with no retention
+ * window. Every `tenant_members` reference either cascades or nulls, which is
+ * what `purgeDeletedMembers` already relies on.
+ *
+ * Callers that also send the member an email must read what they need first and
+ * pass it along: after this returns, the row is gone and `email_activities`
+ * cannot reference it.
+ */
+export async function hardDeleteMembers({
+  memberIds,
+  orgId,
+}: {
+  memberIds: string[];
+  orgId: string;
+}) {
+  if (memberIds.length === 0) {
+    return { deletedCount: 0, skippedProtectedCount: 0 };
+  }
+
+  const members = await db
+    .select({ id: tenantMembers.id, role: tenantMembers.role })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.orgId, orgId), inArray(tenantMembers.id, memberIds)));
+
+  const deletableIds = members
+    .filter((member) => member.role !== PROTECTED_MEMBER_ROLE)
+    .map((member) => member.id);
+
+  if (deletableIds.length > 0) {
+    await db
+      .delete(tenantMembers)
+      .where(and(eq(tenantMembers.orgId, orgId), inArray(tenantMembers.id, deletableIds)));
+  }
+
+  return {
+    deletedCount: deletableIds.length,
+    skippedProtectedCount: members.length - deletableIds.length,
+  };
+}
+
 export async function purgeDeletedMembers() {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - MEMBER_SOFT_DELETE_RETENTION_DAYS);
