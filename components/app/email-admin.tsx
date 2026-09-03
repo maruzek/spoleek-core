@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { resendMemberInviteAction } from "@/server/actions/member-admin";
+import type { EmailKind } from "@/server/db/schema";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
@@ -51,7 +52,7 @@ import { cn } from "@/lib/utils";
 type EmailActivityRow = {
   id: string;
   direction: "outbound" | "inbound";
-  kind: "member_activation_invite" | "workspace_welcome";
+  kind: EmailKind;
   currentStatus:
     | "sent"
     | "delivered"
@@ -96,7 +97,7 @@ type EmailActivityRow = {
 type EmailActivityDetail = {
   id: string;
   direction: "outbound" | "inbound";
-  kind: "member_activation_invite" | "workspace_welcome";
+  kind: EmailKind;
   currentStatus:
     | "sent"
     | "delivered"
@@ -175,6 +176,10 @@ function getStatusVariant(
 function getKindLabel(kind: EmailActivityRow["kind"] | EmailActivityDetail["kind"]) {
   if (kind === "member_activation_invite") {
     return "Member activation invite";
+  }
+
+  if (kind === "registration_submitted") {
+    return "New application";
   }
 
   if (kind === "workspace_welcome") {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { parseBankAccount } from "@/lib/iban";
+import { optionalNotificationEmailSchema } from "@/lib/notifications";
 import { workspaceLinkSettingsSchema } from "@/lib/workspace-group-links";
 import type {
   GroupCategorySelectionMode,
@@ -76,6 +77,8 @@ export const groupCategorySchema = z
     showInMembersTable: z.boolean().default(false),
     groupAdminsManageMembers: z.boolean().default(false),
     managesMembershipFees: z.boolean().default(false),
+    notifyOnRegistration: z.boolean().default(false),
+    notificationEmail: optionalNotificationEmailSchema,
     selectionMode: z.enum(["single", "multiple"]).default("multiple"),
     selectionRequired: z.boolean().default(false),
     maxSelections: z.union([z.number().int().min(1), z.null()]).default(null),
@@ -139,6 +142,8 @@ export const groupSchema = z
         }
       }),
     workspaceOrgUnitPath: nullableTrimmedString,
+    notifyViaWorkspaceGroup: z.boolean().default(false),
+    notificationEmail: optionalNotificationEmailSchema,
     /**
      * Only used when creating a group — an existing group's links are managed
      * from its own settings, where a preview is available first.

@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "email_notify_registration_org_admins" boolean DEFAULT true NOT NULL;

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { optionalNotificationEmailSchema } from "@/lib/notifications";
 import { saveEmailNotificationSettingsAction } from "@/server/actions/organization-settings";
 
 export type EmailNotificationSettingsState = {
@@ -21,6 +22,9 @@ export type EmailNotificationSettingsState = {
   emailNotifyRenewalHeadsupDaysBefore: number;
   emailNotifyOverdue: boolean;
   emailNotifyPaymentConfirmed: boolean;
+  emailNotifyRegistration: boolean;
+  emailNotifyRegistrationOrgAdmins: boolean;
+  registrationNotificationEmail: string | null;
 };
 
 export function EmailNotificationSettingsCard({
@@ -34,6 +38,20 @@ export function EmailNotificationSettingsCard({
   const [headsupDaysBefore, setHeadsupDaysBefore] = useState(state.emailNotifyRenewalHeadsupDaysBefore);
   const [notifyOverdue, setNotifyOverdue] = useState(state.emailNotifyOverdue);
   const [notifyPaymentConfirmed, setNotifyPaymentConfirmed] = useState(state.emailNotifyPaymentConfirmed);
+  const [notifyRegistration, setNotifyRegistration] = useState(state.emailNotifyRegistration);
+  const [notifyRegistrationOrgAdmins, setNotifyRegistrationOrgAdmins] = useState(
+    state.emailNotifyRegistrationOrgAdmins,
+  );
+  const [registrationEmail, setRegistrationEmail] = useState(
+    state.registrationNotificationEmail ?? "",
+  );
+
+  // Validated here rather than only on the server so an admin is not told about
+  // a typo after a round trip that also saved four unrelated toggles.
+  const registrationEmailError = optionalNotificationEmailSchema.safeParse(registrationEmail)
+    .success
+    ? null
+    : "Enter a valid email address.";
 
   const saveAction = useAction(saveEmailNotificationSettingsAction, {
     onSuccess() {
@@ -117,6 +135,78 @@ export function EmailNotificationSettingsCard({
         </div>
       </div>
 
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Admin alerts
+      </p>
+
+      <div className="flex flex-col gap-4 rounded-xl border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">New application</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Send an alert when someone applies to join. Which group and
+              category admins are included is set per category.
+            </p>
+          </div>
+          <Switch
+            checked={notifyRegistration}
+            onCheckedChange={setNotifyRegistration}
+            aria-label="Enable new application alert"
+          />
+        </div>
+
+        {notifyRegistration && (
+          <div className="flex items-start justify-between gap-4 border-l-2 pl-4">
+            <div>
+              <p className="text-sm font-medium">Include all organization admins</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Every org admin is emailed about every application. Turn this off
+                to leave applications to the group admins who handle them.
+              </p>
+            </div>
+            <Switch
+              checked={notifyRegistrationOrgAdmins}
+              onCheckedChange={setNotifyRegistrationOrgAdmins}
+              aria-label="Email all organization admins about new applications"
+            />
+          </div>
+        )}
+
+        {notifyRegistration && !notifyRegistrationOrgAdmins && !registrationEmail.trim() && (
+          <p className="text-sm text-muted-foreground border-l-2 pl-4">
+            Nobody is notified unless a category opts in below, or you add a
+            shared address.
+          </p>
+        )}
+
+        {notifyRegistration && (
+          <Field data-invalid={registrationEmailError !== null}>
+            <FieldLabel htmlFor="registration-notification-email">
+              Shared address
+            </FieldLabel>
+            <FieldContent>
+              <Input
+                id="registration-notification-email"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                placeholder="committee@example.org"
+                value={registrationEmail}
+                onChange={(e) => setRegistrationEmail(e.target.value)}
+                aria-invalid={registrationEmailError !== null}
+                aria-describedby="registration-notification-email-description"
+                className="max-w-sm"
+              />
+              <FieldDescription id="registration-notification-email-description">
+                {registrationEmailError ??
+                  "Optional. A committee mailbox or mailing list that is emailed alongside the admins."}
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+        )}
+      </div>
+
+
       <div>
         <Button
           onClick={() =>
@@ -125,9 +215,12 @@ export function EmailNotificationSettingsCard({
               emailNotifyRenewalHeadsupDaysBefore: headsupDaysBefore,
               emailNotifyOverdue: notifyOverdue,
               emailNotifyPaymentConfirmed: notifyPaymentConfirmed,
+              emailNotifyRegistration: notifyRegistration,
+              emailNotifyRegistrationOrgAdmins: notifyRegistrationOrgAdmins,
+              registrationNotificationEmail: registrationEmail,
             })
           }
-          disabled={saveAction.isPending}
+          disabled={saveAction.isPending || registrationEmailError !== null}
         >
           {saveAction.isPending ? "Saving…" : "Save notification settings"}
         </Button>

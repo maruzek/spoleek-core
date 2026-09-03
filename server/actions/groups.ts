@@ -175,6 +175,8 @@ export const saveGroupCategoryAction = orgAdminActionClient
             showInMembersTable: parsedInput.showInMembersTable,
             groupAdminsManageMembers: parsedInput.groupAdminsManageMembers,
             managesMembershipFees: parsedInput.managesMembershipFees,
+            notifyOnRegistration: parsedInput.notifyOnRegistration,
+            notificationEmail: parsedInput.notificationEmail,
             selectionMode: parsedInput.selectionMode,
             selectionRequired: parsedInput.selectionRequired,
             maxSelections: parsedInput.maxSelections,
@@ -222,6 +224,8 @@ export const saveGroupCategoryAction = orgAdminActionClient
           showInMembersTable: parsedInput.showInMembersTable,
           groupAdminsManageMembers: parsedInput.groupAdminsManageMembers,
           managesMembershipFees: parsedInput.managesMembershipFees,
+          notifyOnRegistration: parsedInput.notifyOnRegistration,
+          notificationEmail: parsedInput.notificationEmail,
           selectionMode: parsedInput.selectionMode,
           selectionRequired: parsedInput.selectionRequired,
           maxSelections: parsedInput.maxSelections,
@@ -308,6 +312,8 @@ export const saveGroupAction = authActionClient
           sortOrder: parsedInput.sortOrder,
           ...feeFields,
           workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
+          notifyViaWorkspaceGroup: parsedInput.notifyViaWorkspaceGroup,
+          notificationEmail: parsedInput.notificationEmail,
           updatedAt: new Date(),
         })
         .where(and(eq(groups.id, parsedInput.id), eq(groups.orgId, organization.id)));
@@ -354,6 +360,8 @@ export const saveGroupAction = authActionClient
           sortOrder: parsedInput.sortOrder,
           ...feeFields,
           workspaceOrgUnitPath: parsedInput.workspaceOrgUnitPath,
+          notifyViaWorkspaceGroup: parsedInput.notifyViaWorkspaceGroup,
+          notificationEmail: parsedInput.notificationEmail,
         })
         .returning({ id: groups.id });
 

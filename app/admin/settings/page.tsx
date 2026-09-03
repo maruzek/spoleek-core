@@ -83,6 +83,9 @@ export default async function AdminSettingsPage({
     emailNotifyRenewalHeadsupDaysBefore: organization.emailNotifyRenewalHeadsupDaysBefore,
     emailNotifyOverdue: organization.emailNotifyOverdue,
     emailNotifyPaymentConfirmed: organization.emailNotifyPaymentConfirmed,
+    emailNotifyRegistration: organization.emailNotifyRegistration,
+    emailNotifyRegistrationOrgAdmins: organization.emailNotifyRegistrationOrgAdmins,
+    registrationNotificationEmail: organization.registrationNotificationEmail,
   };
 
   const workspaceOrgUnitCategory = categories.find(

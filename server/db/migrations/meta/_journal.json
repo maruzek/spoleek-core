@@ -225,6 +225,20 @@
       "when": 1788380359807,
       "tag": "0031_colossal_sunspot",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788416616750,
+      "tag": "0032_steady_patch",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788418987557,
+      "tag": "0033_magenta_scarecrow",
+      "breakpoints": true
     }
   ]
 }

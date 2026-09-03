@@ -5,6 +5,7 @@ import {
   emailActivities,
   emailActivityEvents,
   type EmailActivityEventType,
+  type EmailKind,
   type EmailActivityStatus,
 } from "@/server/db/schema";
 import { getMemberInviteByMemberId } from "@/server/lib/member-invites";
@@ -283,6 +284,73 @@ export async function updateEmailActivityStatusByProviderEmailId(params: {
     eventType: eventTypeMap[params.status],
     providerEventType: params.providerEventType,
     message: params.message ?? null,
+    metadata: params.metadata ?? null,
+    occurredAt: now,
+  });
+
+  return activity.id;
+}
+
+type NotificationEmailActivityPayload = {
+  orgId: string;
+  kind: EmailKind;
+  memberId?: string | null;
+  fromEmail: string;
+  toEmail: string;
+  toName?: string | null;
+  subject: string;
+  providerEmailId?: string | null;
+  error?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/**
+ * Logs an admin-facing notification email. Unlike the invite recorder this one
+ * is not backed by a member invite, so `inviteId` stays null and the row is
+ * never offered as resendable.
+ */
+export async function recordNotificationEmail(
+  params: NotificationEmailActivityPayload,
+) {
+  const now = new Date();
+  const failed = Boolean(params.error);
+
+  const [activity] = await db
+    .insert(emailActivities)
+    .values({
+      orgId: params.orgId,
+      direction: "outbound",
+      kind: params.kind,
+      currentStatus: failed ? "failed" : "sent",
+      memberId: params.memberId ?? null,
+      inviteId: null,
+      providerEmailId: params.providerEmailId ?? null,
+      fromEmail: params.fromEmail,
+      toEmail: params.toEmail,
+      toName: params.toName ?? null,
+      subject: params.subject,
+      providerEventType: failed ? "api.failed" : "api.accepted",
+      lastError: params.error ?? null,
+      problemAt: failed ? now : null,
+      failedAt: failed ? now : null,
+      sentAt: failed ? null : now,
+      lastStatusAt: now,
+      metadata: params.metadata ?? null,
+    })
+    .returning({ id: emailActivities.id, orgId: emailActivities.orgId });
+
+  if (!activity) {
+    return null;
+  }
+
+  await createEmailActivityEvent({
+    orgId: activity.orgId,
+    emailActivityId: activity.id,
+    eventType: failed ? "failed" : "api_accepted",
+    providerEventType: failed ? "api.failed" : "api.accepted",
+    message: failed
+      ? params.error
+      : "The notification email was accepted for delivery by Resend.",
     metadata: params.metadata ?? null,
     occurredAt: now,
   });

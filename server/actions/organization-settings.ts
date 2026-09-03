@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { joinPageSettingsSchema } from "@/lib/join";
 import { membershipSettingsSchema } from "@/lib/membership";
+import { optionalNotificationEmailSchema } from "@/lib/notifications";
 import { decryptSecret } from "@/lib/crypto";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
@@ -168,6 +169,9 @@ const emailNotificationSettingsSchema = z.object({
   emailNotifyRenewalHeadsupDaysBefore: z.number().int().min(1).max(30),
   emailNotifyOverdue: z.boolean(),
   emailNotifyPaymentConfirmed: z.boolean(),
+  emailNotifyRegistration: z.boolean(),
+  emailNotifyRegistrationOrgAdmins: z.boolean(),
+  registrationNotificationEmail: optionalNotificationEmailSchema,
 });
 
 export const saveEmailNotificationSettingsAction = orgAdminActionClient
@@ -183,6 +187,9 @@ export const saveEmailNotificationSettingsAction = orgAdminActionClient
         emailNotifyRenewalHeadsupDaysBefore: parsedInput.emailNotifyRenewalHeadsupDaysBefore,
         emailNotifyOverdue: parsedInput.emailNotifyOverdue,
         emailNotifyPaymentConfirmed: parsedInput.emailNotifyPaymentConfirmed,
+        emailNotifyRegistration: parsedInput.emailNotifyRegistration,
+        emailNotifyRegistrationOrgAdmins: parsedInput.emailNotifyRegistrationOrgAdmins,
+        registrationNotificationEmail: parsedInput.registrationNotificationEmail,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

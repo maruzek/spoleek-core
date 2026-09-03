@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { joinApplicationSchema } from "@/lib/join";
@@ -12,6 +13,7 @@ import {
   validateRegistrationGroupSelections,
 } from "@/server/lib/group-registration";
 import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
+import { notifyRegistrationSubmitted } from "@/server/notifications/registration";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { findTenantMemberByEmail } from "@/server/queries/members";
@@ -101,6 +103,7 @@ export const submitJoinApplicationAction = actionClient
       if (Object.keys(answerResult.errors).length > 0) {
         return {
           success: false as const,
+          memberId: null,
           customFieldErrors: answerResult.errors,
           registrationGroupErrors: {} as Record<string, string[]>,
         };
@@ -115,10 +118,31 @@ export const submitJoinApplicationAction = actionClient
 
       return {
         success: true as const,
+        memberId: targetMemberId,
         customFieldErrors: {} as Record<string, string[]>,
         registrationGroupErrors: {} as Record<string, string[]>,
       };
     });
 
-    return result;
+    // Only once the application is committed, and never blocking the response:
+    // the applicant should not wait on Resend, nor see an error if it is down.
+    if (result.success) {
+      const memberId = result.memberId;
+
+      after(() =>
+        notifyRegistrationSubmitted({
+          orgId: organization.id,
+          memberId,
+          groupIds: registrationSelections.normalizedSelections.map(
+            (selection) => selection.groupId,
+          ),
+        }),
+      );
+    }
+
+    return {
+      success: result.success,
+      customFieldErrors: result.customFieldErrors,
+      registrationGroupErrors: result.registrationGroupErrors,
+    };
   });

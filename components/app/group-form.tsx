@@ -70,6 +70,8 @@ function toDefaultValues(
     feeCurrency: group?.feeCurrency ?? null,
     feeBankAccount: group?.feeBankAccount ?? null,
     workspaceOrgUnitPath: group?.workspaceOrgUnitPath ?? null,
+    notifyViaWorkspaceGroup: group?.notifyViaWorkspaceGroup ?? false,
+    notificationEmail: group?.notificationEmail ?? null,
     workspaceLink: group?.workspaceLink ?? null,
   };
 }
@@ -106,6 +108,8 @@ export function GroupForm({
   workspaceConnected,
   canManageWorkspaceIntegration = false,
   isWorkspaceOrgUnitCategory,
+  linkedWorkspaceGroupEmail = null,
+  categoryNotifiesOnRegistration = false,
   onSubmit,
   onCancel,
   submitLabel,
@@ -119,6 +123,9 @@ export function GroupForm({
   workspaceConnected?: boolean;
   canManageWorkspaceIntegration?: boolean;
   isWorkspaceOrgUnitCategory?: boolean;
+  /** Address of this group's enabled Google group link, when it has one. */
+  linkedWorkspaceGroupEmail?: string | null;
+  categoryNotifiesOnRegistration?: boolean;
   onSubmit: (value: GroupFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -349,6 +356,71 @@ export function GroupForm({
           </form.Field>
         </div>
       </FieldGroup>
+      <FieldSet>
+        <FieldLegend>Notifications</FieldLegend>
+        <FieldDescription>
+          {categoryNotifiesOnRegistration
+            ? "This group's admins are emailed when an applicant picks this group on the join form."
+            : "This category does not notify anyone about new applications yet — turn that on in the category settings to use what follows."}
+        </FieldDescription>
+
+        <div className="flex flex-col gap-5">
+          {linkedWorkspaceGroupEmail ? (
+            <form.Field name="notifyViaWorkspaceGroup">
+              {(formField) => (
+                <SwitchChoiceField
+                  id="group-notify-via-workspace-group"
+                  title="Send to the linked Google group"
+                  description={`One email to ${linkedWorkspaceGroupEmail} instead of one to each group admin. Google fans it out, and admins are already members of that group — so nobody loses the message.`}
+                  checked={formField.state.value}
+                  onCheckedChange={formField.handleChange}
+                />
+              )}
+            </form.Field>
+          ) : null}
+
+          <form.Field name="notificationEmail">
+            {(formField) => (
+              <Field data-invalid={getFieldError("notificationEmail").length > 0}>
+                <FieldLabel htmlFor="group-notification-email">
+                  Extra address
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="group-notification-email"
+                    type="email"
+                    inputMode="email"
+                    autoComplete="off"
+                    placeholder="team@example.org"
+                    value={formField.state.value ?? ""}
+                    onBlur={formField.handleBlur}
+                    onChange={(event) =>
+                      formField.handleChange(
+                        event.target.value.length > 0 ? event.target.value : null,
+                      )
+                    }
+                    aria-invalid={getFieldError("notificationEmail").length > 0}
+                  />
+                  <FieldDescription>
+                    Optional. Always emailed alongside whoever is resolved above.
+                  </FieldDescription>
+                  <FieldError
+                    errors={[
+                      ...getClientFieldErrors(formField.state.meta.errors).map(
+                        (message) => ({ message }),
+                      ),
+                      ...getFieldError("notificationEmail").map((message) => ({
+                        message,
+                      })),
+                    ]}
+                  />
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
+        </div>
+      </FieldSet>
+
       {workspaceConnected && canManageWorkspaceIntegration && !group?.id ? (
         <FieldSet>
           <FieldLegend>Linked Google group</FieldLegend>

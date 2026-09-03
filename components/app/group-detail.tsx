@@ -71,12 +71,15 @@ type GroupDetailProps = {
     feeCurrency: string | null;
     feeBankAccount: string | null;
     workspaceOrgUnitPath: string | null;
+    notifyViaWorkspaceGroup: boolean;
+    notificationEmail: string | null;
     categorySpecialCapability: string | null;
     createdAt: Date;
     updatedAt: Date;
     categoryName: string;
     categorySlug: string;
     categoryManagesFees: boolean;
+    categoryNotifiesOnRegistration: boolean;
   };
   members: Array<{
     membershipId: string;
@@ -491,6 +494,10 @@ export function GroupDetail({
                 workspaceConnected={workspaceConnected}
                 canManageWorkspaceIntegration={canManageWorkspaceIntegration}
                 isWorkspaceOrgUnitCategory={group.categorySpecialCapability === "workspace_org_unit"}
+                linkedWorkspaceGroupEmail={
+                  workspaceLinks.find((link) => link.isEnabled)?.workspaceGroupEmail ?? null
+                }
+                categoryNotifiesOnRegistration={group.categoryNotifiesOnRegistration}
                 submitLabel="Save group"
                 onSubmit={async (value: GroupFormValues) => {
                   const result = await saveGroup.executeAsync(value);

@@ -76,6 +76,7 @@ export const emailDirectionEnum = pgEnum("email_direction", [
 export const emailKindEnum = pgEnum("email_kind", [
   "member_activation_invite",
   "workspace_welcome",
+  "registration_submitted",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -362,6 +363,20 @@ export const organizations = pgTable(
       .default(7),
     emailNotifyOverdue: boolean("email_notify_overdue").notNull().default(true),
     emailNotifyPaymentConfirmed: boolean("email_notify_payment_confirmed").notNull().default(true),
+    /**
+     * Master switch for the "someone applied to join" alert. Off means nobody is
+     * mailed, whatever the category and group settings say.
+     */
+    emailNotifyRegistration: boolean("email_notify_registration").notNull().default(true),
+    /**
+     * Whether every org admin is on that list. Kept separate from the master
+     * switch so a large organization can route applications to the group admins
+     * who actually handle them without mailing the whole board.
+     */
+    emailNotifyRegistrationOrgAdmins: boolean("email_notify_registration_org_admins")
+      .notNull()
+      .default(true),
+    registrationNotificationEmail: text("registration_notification_email"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -472,6 +487,14 @@ export const groupCategories = pgTable(
     groupAdminsManageMembers: boolean("group_admins_manage_members")
       .notNull()
       .default(false),
+    /**
+     * Only meaningful together with `showInRegistration`: when an applicant
+     * picks a group from this category on the join form, the admins responsible
+     * for that group are told. Kept as a dormant flag when the category leaves
+     * the join form so turning it back on restores the previous choice.
+     */
+    notifyOnRegistration: boolean("notify_on_registration").notNull().default(false),
+    notificationEmail: text("notification_email"),
     managesMembershipFees: boolean("manages_membership_fees")
       .notNull()
       .default(false),
@@ -525,6 +548,13 @@ export const groups = pgTable(
     feeBankAccount: text("fee_bank_account"),
     feePaymentWindowDays: integer("fee_payment_window_days"),
     workspaceOrgUnitPath: text("workspace_org_unit_path"),
+    /**
+     * Send to the linked Google group instead of to each group admin. The sync
+     * already pushes group admins into that Google group, so this is one Resend
+     * send instead of N with the same reach — not a narrower audience.
+     */
+    notifyViaWorkspaceGroup: boolean("notify_via_workspace_group").notNull().default(false),
+    notificationEmail: text("notification_email"),
     ...timestamps,
   },
   (table) => [

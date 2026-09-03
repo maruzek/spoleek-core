@@ -54,6 +54,8 @@ function toDefaultValues(
     showInMembersTable: category?.showInMembersTable ?? false,
     groupAdminsManageMembers: category?.groupAdminsManageMembers ?? false,
     managesMembershipFees: category?.managesMembershipFees ?? false,
+    notifyOnRegistration: category?.notifyOnRegistration ?? false,
+    notificationEmail: category?.notificationEmail ?? null,
     selectionMode: category?.selectionMode ?? "multiple",
     selectionRequired: category?.selectionRequired ?? false,
     maxSelections: category?.maxSelections ?? null,
@@ -420,6 +422,95 @@ export function GroupCategoryForm({
                   </Field>
                 )}
               </form.Field>
+            ) : null
+          }
+        </form.Subscribe>
+
+        {/*
+          Scoped to the join form on purpose: a category that applicants never
+          see cannot produce an application, so the setting would be dead.
+        */}
+        <form.Subscribe selector={(state) => state.values.showInRegistration}>
+          {(showInRegistration) =>
+            showInRegistration ? (
+              <FieldSet>
+                <FieldLegend>Application notifications</FieldLegend>
+                <FieldDescription>
+                  Organization admins are always told about a new application.
+                  This adds the people responsible for this category.
+                </FieldDescription>
+
+                <div className="flex flex-col gap-5">
+                  <form.Field name="notifyOnRegistration">
+                    {(formField) => (
+                      <SwitchChoiceField
+                        id="group-category-notify-on-registration"
+                        title="Notify this category's admins"
+                        description="When an applicant picks a group from this category, its category admins and that group's admins are emailed."
+                        checked={formField.state.value}
+                        onCheckedChange={formField.handleChange}
+                      />
+                    )}
+                  </form.Field>
+
+                  <form.Subscribe
+                    selector={(state) => state.values.notifyOnRegistration}
+                  >
+                    {(notifyOnRegistration) =>
+                      notifyOnRegistration ? (
+                        <form.Field name="notificationEmail">
+                          {(formField) => (
+                            <Field
+                              data-invalid={
+                                getFieldError("notificationEmail").length > 0
+                              }
+                            >
+                              <FieldLabel htmlFor="group-category-notification-email">
+                                Shared address
+                              </FieldLabel>
+                              <FieldContent>
+                                <Input
+                                  id="group-category-notification-email"
+                                  type="email"
+                                  inputMode="email"
+                                  autoComplete="off"
+                                  placeholder="committee@example.org"
+                                  value={formField.state.value ?? ""}
+                                  onBlur={formField.handleBlur}
+                                  onChange={(event) =>
+                                    formField.handleChange(
+                                      event.target.value.length > 0
+                                        ? event.target.value
+                                        : null,
+                                    )
+                                  }
+                                  aria-invalid={
+                                    getFieldError("notificationEmail").length > 0
+                                  }
+                                />
+                                <FieldDescription>
+                                  Optional. A mailing list or shared mailbox that
+                                  is emailed in addition to the admins above.
+                                </FieldDescription>
+                                <FieldError
+                                  errors={[
+                                    ...getClientFieldErrors(
+                                      formField.state.meta.errors,
+                                    ).map((message) => ({ message })),
+                                    ...getFieldError("notificationEmail").map(
+                                      (message) => ({ message }),
+                                    ),
+                                  ]}
+                                />
+                              </FieldContent>
+                            </Field>
+                          )}
+                        </form.Field>
+                      ) : null
+                    }
+                  </form.Subscribe>
+                </div>
+              </FieldSet>
             ) : null
           }
         </form.Subscribe>
