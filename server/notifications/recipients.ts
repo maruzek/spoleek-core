@@ -22,7 +22,9 @@ export type NotificationRecipient = {
     | "category_address"
     | "group_admin"
     | "group_address"
-    | "workspace_group";
+    | "workspace_group"
+    | "applicant"
+    | "account_owner";
 };
 
 /**

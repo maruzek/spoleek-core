@@ -182,6 +182,14 @@ function getKindLabel(kind: EmailActivityRow["kind"] | EmailActivityDetail["kind
     return "New application";
   }
 
+  if (kind === "registration_acknowledgement") {
+    return "Application received";
+  }
+
+  if (kind === "registration_duplicate_notice") {
+    return "Address already registered";
+  }
+
   if (kind === "workspace_welcome") {
     return "Workspace welcome";
   }

@@ -239,6 +239,13 @@
       "when": 1788418987557,
       "tag": "0033_magenta_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788423878583,
+      "tag": "0034_unusual_logan",
+      "breakpoints": true
     }
   ]
 }

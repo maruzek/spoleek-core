@@ -77,6 +77,8 @@ export const emailKindEnum = pgEnum("email_kind", [
   "member_activation_invite",
   "workspace_welcome",
   "registration_submitted",
+  "registration_acknowledgement",
+  "registration_duplicate_notice",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -445,6 +447,12 @@ export const tenantMembers = pgTable(
     status: membershipStatusEnum("status").notNull().default("pending"),
     acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
     acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
+    /**
+     * The `organization_policies.version` in force when this member accepted.
+     * Stored so the acknowledgement email states something checkable, and so a
+     * later version bump can tell who still needs to re-consent.
+     */
+    acceptedPolicyVersion: text("accepted_policy_version"),
     linkedAt: timestamp("linked_at", { withTimezone: true }),
     workspaceUserEmail: text("workspace_user_email"),
     workspaceUserId: text("workspace_user_id"),
