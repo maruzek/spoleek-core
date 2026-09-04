@@ -87,6 +87,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/format";
+import { describeMemberInvite } from "@/lib/member-invite-summary";
 import { cn } from "@/lib/utils";
 import {
   type UpdateMemberValues,
@@ -272,40 +273,10 @@ export function MemberEditSheet({
       : [];
 
   const accountType = member.userId ? "Linked account" : "Shadow profile";
-  const inviteSummary = useMemo(() => {
-    if (!member.email) {
-      return {
-        value: "No email on file",
-        description:
-          "Invites stay disabled until the member has an email address.",
-      };
-    }
-
-    if (!metadata.inviteState.status) {
-      return {
-        value: "No invite sent",
-        description: "This member has not received an activation email yet.",
-      };
-    }
-
-    const issue =
-      metadata.inviteState.deliveryStatus &&
-      metadata.inviteState.deliveryStatus !== "pending" &&
-      metadata.inviteState.deliveryStatus !== "sent"
-        ? `Delivery ${metadata.inviteState.deliveryStatus.replace("_", " ")}.`
-        : undefined;
-
-    return {
-      value: metadata.inviteState.status.replace("_", " "),
-      description:
-        metadata.inviteState.lastError ?? issue ?? "Invite state is healthy.",
-    };
-  }, [
-    member.email,
-    metadata.inviteState.deliveryStatus,
-    metadata.inviteState.lastError,
-    metadata.inviteState.status,
-  ]);
+  const inviteSummary = useMemo(
+    () => describeMemberInvite(member, metadata.inviteState),
+    [member, metadata.inviteState],
+  );
 
   const metadataRows = [
     {

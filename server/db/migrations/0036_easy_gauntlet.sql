@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "members_sort_locale" text DEFAULT 'und' NOT NULL;

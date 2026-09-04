@@ -253,6 +253,13 @@
       "when": 1788437651378,
       "tag": "0035_volatile_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788536444867,
+      "tag": "0036_easy_gauntlet",
+      "breakpoints": true
     }
   ]
 }

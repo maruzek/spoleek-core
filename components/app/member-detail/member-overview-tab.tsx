@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/format";
+import { describeMemberInvite } from "@/lib/member-invite-summary";
 import { cn } from "@/lib/utils";
 import { syncWorkspaceMemberAction } from "@/server/actions/member-admin";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
@@ -38,37 +39,6 @@ import type {
 type OverviewMember = Omit<TenantMember, "status"> & {
   status: Exclude<TenantMember["status"], "deleted">;
 };
-
-function describeInvite(
-  member: OverviewMember,
-  inviteState: MemberEditorMetadata["inviteState"],
-) {
-  if (!member.email) {
-    return {
-      value: "No email on file",
-      description: "Invites stay disabled until the member has an email address.",
-    };
-  }
-
-  if (!inviteState.status) {
-    return {
-      value: "No invite sent",
-      description: "This member has not received an activation email yet.",
-    };
-  }
-
-  const issue =
-    inviteState.deliveryStatus &&
-    inviteState.deliveryStatus !== "pending" &&
-    inviteState.deliveryStatus !== "sent"
-      ? `Delivery ${inviteState.deliveryStatus.replace("_", " ")}.`
-      : undefined;
-
-  return {
-    value: inviteState.status.replace("_", " "),
-    description: inviteState.lastError ?? issue ?? "Invite state is healthy.",
-  };
-}
 
 export function MemberOverviewTab({
   member,
@@ -88,7 +58,7 @@ export function MemberOverviewTab({
 }) {
   const router = useRouter();
   const { organization } = useAppShell();
-  const invite = describeInvite(member, metadata.inviteState);
+  const invite = describeMemberInvite(member, metadata.inviteState);
   const effectivePreferredEmail =
     member.preferredEmail ?? organization.defaultEmailPreference;
 

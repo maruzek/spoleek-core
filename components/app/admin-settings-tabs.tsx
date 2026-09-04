@@ -6,6 +6,7 @@ import {
   BellIcon,
   FileTextIcon,
   GlobeIcon,
+  LanguagesIcon,
   Link2Icon,
   UsersIcon,
 } from "lucide-react";
@@ -24,6 +25,10 @@ import {
   WorkspaceSettingsCard,
   type WorkspaceSettingsState,
 } from "@/components/app/workspace-settings-card";
+import {
+  LocalizationSettingsCard,
+  type LocalizationSettingsState,
+} from "@/components/app/localization-settings-card";
 import { GroupLinksSettingsCard } from "@/components/app/group-links-settings-card";
 import type { GroupWorkspaceLinkRow } from "@/server/queries/workspace-group-links";
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
@@ -40,6 +45,7 @@ type AdminSettingsTabsProps = {
     | "privacyPolicyText"
   >;
   membershipState: MembershipSettingsState;
+  localizationState: LocalizationSettingsState;
   emailNotificationState: EmailNotificationSettingsState;
   workspaceState: WorkspaceSettingsState;
   workspaceLinks: GroupWorkspaceLinkRow[];
@@ -52,6 +58,7 @@ const VALID_TABS = [
   "notifications",
   "groups",
   "workspace",
+  "localization",
 ] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
@@ -63,6 +70,7 @@ export function AdminSettingsTabs({
   organization,
   policy,
   membershipState,
+  localizationState,
   emailNotificationState,
   workspaceState,
   workspaceLinks,
@@ -100,6 +108,10 @@ export function AdminSettingsTabs({
           <GlobeIcon data-icon="inline-start" />
           Workspace
         </TabsTrigger>
+        <TabsTrigger value="localization">
+          <LanguagesIcon data-icon="inline-start" />
+          Localization
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="join">
@@ -132,6 +144,12 @@ export function AdminSettingsTabs({
       <TabsContent value="workspace">
         <div className="max-w-2xl pt-6">
           <WorkspaceSettingsCard state={workspaceState} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="localization">
+        <div className="max-w-2xl pt-6">
+          <LocalizationSettingsCard state={localizationState} />
         </div>
       </TabsContent>
     </Tabs>

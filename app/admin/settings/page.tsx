@@ -3,6 +3,7 @@ import { SlidersHorizontalIcon } from "lucide-react";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { AppPage } from "@/components/app/app-page";
+import { DEFAULT_SORT_LOCALE, isSortLocaleTag } from "@/lib/collation";
 import { AdminSettingsTabs } from "@/components/app/admin-settings-tabs";
 import { Button } from "@/components/ui/button";
 import { requireAdminAccess } from "@/server/queries/access";
@@ -110,6 +111,12 @@ export default async function AdminSettingsPage({
     customFields,
   };
 
+  const localizationState = {
+    membersSortLocale: isSortLocaleTag(organization.membersSortLocale)
+      ? organization.membersSortLocale
+      : DEFAULT_SORT_LOCALE,
+  };
+
   return (
     <AppPage
       eyebrow="Administration"
@@ -128,6 +135,7 @@ export default async function AdminSettingsPage({
         organization={organization}
         policy={policy}
         membershipState={membershipState}
+        localizationState={localizationState}
         emailNotificationState={emailNotificationState}
         workspaceState={workspaceState}
         workspaceLinks={workspaceLinks}

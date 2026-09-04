@@ -329,6 +329,7 @@ export const organizations = pgTable(
     ),
     countryCode: text("country_code").notNull().default("CZ"),
     locale: text("locale").notNull().default("en"),
+    membersSortLocale: text("members_sort_locale").notNull().default("und"),
     timezone: text("timezone").notNull().default("Europe/Prague"),
     setupDeploymentTrack: text("setup_deployment_track"),
     setupAuthStrategy: text("setup_auth_strategy"),

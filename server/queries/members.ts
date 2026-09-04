@@ -1,10 +1,12 @@
-import { and, asc, eq, ilike, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
   buildMemberCustomFieldDisplayItems,
   extractAnswerValue,
 } from "@/lib/member-custom-fields";
+import { memberStatusSortRank } from "@/lib/member-ordering";
 import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
+import { collateFor } from "@/server/lib/collation";
 import type { CustomFieldValue } from "@/server/db/schema";
 import { db } from "@/server/db";
 import {
@@ -474,6 +476,16 @@ export async function findTenantMemberByEmail(orgId: string, email: string) {
   return member ?? null;
 }
 
+async function getMembersSortCollation(orgId: string) {
+  const [organization] = await db
+    .select({ membersSortLocale: organizationsTable.membersSortLocale })
+    .from(organizationsTable)
+    .where(eq(organizationsTable.id, orgId))
+    .limit(1);
+
+  return collateFor(organization?.membersSortLocale);
+}
+
 export async function listTenantMembers(
   orgId: string,
   options?: {
@@ -488,42 +500,50 @@ export async function listTenantMembers(
     return [];
   }
 
-  const [members, groupAssignmentsByMember, customFieldDisplayByMember] = await Promise.all([
-    db
-      .select({
-        id: tenantMembers.id,
-        firstName: tenantMembers.firstName,
-        lastName: tenantMembers.lastName,
-        email: tenantMembers.email,
-        role: tenantMembers.role,
-        status: tenantMembers.status,
-        userId: tenantMembers.userId,
-        workspaceUserEmail: tenantMembers.workspaceUserEmail,
-        workspaceUserId: tenantMembers.workspaceUserId,
-        preferredEmail: tenantMembers.preferredEmail,
-        createdAt: tenantMembers.createdAt,
-        linkedUserName: users.name,
-        inviteStatus: memberInvites.status,
-        inviteDeliveryStatus: memberInvites.deliveryStatus,
-        inviteLastError: memberInvites.lastError,
-      })
-      .from(tenantMembers)
-      .leftJoin(users, eq(users.id, tenantMembers.userId))
-      .leftJoin(memberInvites, eq(memberInvites.memberId, tenantMembers.id))
-      .where(
-        and(
-          eq(tenantMembers.orgId, orgId),
-          ne(tenantMembers.status, "deleted"),
-          visibleMemberIds ? inArray(tenantMembers.id, visibleMemberIds) : undefined,
+  const collate = await getMembersSortCollation(orgId);
+
+  const [members, groupAssignmentsByMember, customFieldDisplayByMember] =
+    await Promise.all([
+      db
+        .select({
+          id: tenantMembers.id,
+          firstName: tenantMembers.firstName,
+          lastName: tenantMembers.lastName,
+          email: tenantMembers.email,
+          role: tenantMembers.role,
+          status: tenantMembers.status,
+          userId: tenantMembers.userId,
+          workspaceUserEmail: tenantMembers.workspaceUserEmail,
+          workspaceUserId: tenantMembers.workspaceUserId,
+          preferredEmail: tenantMembers.preferredEmail,
+          createdAt: tenantMembers.createdAt,
+          linkedUserName: users.name,
+          inviteStatus: memberInvites.status,
+          inviteDeliveryStatus: memberInvites.deliveryStatus,
+          inviteLastError: memberInvites.lastError,
+        })
+        .from(tenantMembers)
+        .leftJoin(users, eq(users.id, tenantMembers.userId))
+        .leftJoin(memberInvites, eq(memberInvites.memberId, tenantMembers.id))
+        .where(
+          and(
+            eq(tenantMembers.orgId, orgId),
+            ne(tenantMembers.status, "deleted"),
+            visibleMemberIds ? inArray(tenantMembers.id, visibleMemberIds) : undefined,
+          ),
+        )
+        .orderBy(
+          asc(memberStatusSortRank(tenantMembers.status)),
+          asc(sql`${tenantMembers.lastName} ${collate}`),
+          asc(sql`${tenantMembers.firstName} ${collate}`),
+          asc(tenantMembers.createdAt),
         ),
-      )
-      .orderBy(asc(tenantMembers.createdAt)),
-    listMemberGroupAssignments(orgId, {
-      memberIds: visibleMemberIds ?? undefined,
-      visibleGroupIds,
-    }),
-    listMemberCustomFieldDisplayMap(orgId, visibleMemberIds ?? undefined),
-  ]);
+      listMemberGroupAssignments(orgId, {
+        memberIds: visibleMemberIds ?? undefined,
+        visibleGroupIds,
+      }),
+      listMemberCustomFieldDisplayMap(orgId, visibleMemberIds ?? undefined),
+    ]);
 
   return members.map((member) => {
     const groupAssignments = groupAssignmentsByMember.get(member.id) ?? [];

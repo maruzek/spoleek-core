@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { organizationLocalizationSettingsSchema } from "@/lib/collation";
 import { joinPageSettingsSchema } from "@/lib/join";
 import { membershipSettingsSchema } from "@/lib/membership";
 import { optionalNotificationEmailSchema } from "@/lib/notifications";
@@ -323,6 +324,23 @@ export const saveWorkspaceProvisionFieldsAction = orgAdminActionClient
       .update(organizations)
       .set({
         workspaceProvisionFields: validated,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, organization.id));
+
+    return { success: true };
+  });
+
+export const saveLocalizationSettingsAction = orgAdminActionClient
+  .metadata({ actionName: "saveLocalizationSettings" })
+  .inputSchema(organizationLocalizationSettingsSchema)
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    await db
+      .update(organizations)
+      .set({
+        membersSortLocale: parsedInput.membersSortLocale,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));
