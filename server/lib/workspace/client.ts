@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import { organizations, workspaceConnections } from "@/server/db/schema";
 import {
   buildGoogleApiExtraFields,
+  normalizeOrgUnitPath,
   normalizeWorkspaceFieldValues,
   validateWorkspaceFieldValues,
   type WorkspaceFieldValues,
@@ -554,7 +555,7 @@ export async function updateWorkspaceUserOrgUnit(
     `/users/${encodeURIComponent(userEmail)}`,
     {
       method: "PUT",
-      body: JSON.stringify({ orgUnitPath }),
+      body: JSON.stringify({ orgUnitPath: normalizeOrgUnitPath(orgUnitPath) }),
     },
   );
 

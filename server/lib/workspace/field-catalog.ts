@@ -251,6 +251,20 @@ export function buildGoogleApiExtraFields(
  * given in local form. Anything that cannot be completed is left as-is and
  * caught by `validateWorkspaceFieldValues`.
  */
+/**
+ * Google's Directory API only accepts absolute org-unit paths ("/Praha"); a
+ * bare unit name is rejected with INVALID_OU_ID. Admins (and group configs)
+ * routinely write the name without the leading slash, so add it here, drop a
+ * trailing slash, and collapse any doubled or space-padded separators.
+ */
+export function normalizeOrgUnitPath(value: string): string {
+  const collapsed = value.trim().replace(/\s*\/\s*/g, "/").replace(/\/{2,}/g, "/");
+  if (!collapsed) return "";
+  const trimmed = collapsed.replace(/\/+$/, "");
+  if (!trimmed) return "/";
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
 export function normalizeWorkspaceFieldValues(
   values: WorkspaceFieldValues,
   defaultCountry?: string | null,
@@ -265,7 +279,9 @@ export function normalizeWorkspaceFieldValues(
       continue;
     }
 
-    if (def.type === "phone") {
+    if (def.key === "orgUnitPath") {
+      normalized[key] = normalizeOrgUnitPath(value);
+    } else if (def.type === "phone") {
       normalized[key] = normalizeToE164(value, defaultCountry);
     } else if (def.type === "email") {
       normalized[key] = value.trim().toLowerCase();
