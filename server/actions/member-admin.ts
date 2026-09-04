@@ -348,6 +348,12 @@ export const approveMemberAction = authActionClient
           ),
         );
 
+      // Must run before provisioning: provisionWorkspaceAccountForMember sends
+      // the welcome email, and that email carries the payment details. If
+      // provisioning then fails, the pending row is reused on the next attempt
+      // (generatePaymentForMember conflicts on periodKey), so no duplicate.
+      await generatePaymentForMember(parsedInput.memberId, organization.id);
+
       const provision = await provisionWorkspaceAccountForMember({
         orgId: organization.id,
         memberId: parsedInput.memberId,
@@ -381,8 +387,6 @@ export const approveMemberAction = authActionClient
             eq(tenantMembers.orgId, organization.id),
           ),
         );
-
-      await generatePaymentForMember(parsedInput.memberId, organization.id);
 
       await logMemberAuthEvent({
         orgId: organization.id,
@@ -438,9 +442,11 @@ export const approveMemberAction = authActionClient
         ),
       );
 
-    if (nextStatus === "active") {
-      await generatePaymentForMember(parsedInput.memberId, organization.id);
-    }
+    // Also for members left in "invited": the approval email carries the
+    // payment details, so the row (and its variable symbol) must exist before
+    // the invite is sent. generatePaymentForMember no-ops when the org isn't on
+    // periodic renewal or has fees switched off.
+    await generatePaymentForMember(parsedInput.memberId, organization.id);
 
     await logMemberAuthEvent({
       orgId: organization.id,
@@ -1236,6 +1242,8 @@ export const createWorkspaceAccountAction = authActionClient
               workspaceEmail: primaryEmail,
               temporaryPassword: password,
               signInUrl,
+              // No member record is involved here, so there is no fee to quote.
+              payment: null,
             }),
           },
           {

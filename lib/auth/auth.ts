@@ -82,6 +82,7 @@ export const auth = betterAuth({
                 body: emailContent.body,
                 activationUrl: url,
                 memberName: emailContent.memberName || user.name,
+                payment: emailContent.payment,
               }),
             },
             {

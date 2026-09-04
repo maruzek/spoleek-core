@@ -45,6 +45,7 @@ import {
   WorkspaceLinkSettingsFields,
 } from "@/components/app/workspace-link-fields";
 import { getWorkspaceOrgUnitsAction } from "@/server/actions/workspace";
+import { feeToMajorUnits, feeToMinorUnits } from "@/lib/payments";
 import type { WorkspaceOrgUnit } from "@/server/lib/workspace/client";
 
 export type GroupValidationErrors = Partial<
@@ -66,9 +67,11 @@ function toDefaultValues(
     sortOrder: group?.sortOrder ?? 0,
     feeRenewalMonth: group?.feeRenewalMonth ?? null,
     feeRenewalDay: group?.feeRenewalDay ?? null,
-    feeAmount: group?.feeAmount ?? null,
+    // Stored in minor units; the input edits whole currency units.
+    feeAmount: feeToMajorUnits(group?.feeAmount) ?? null,
     feeCurrency: group?.feeCurrency ?? null,
     feeBankAccount: group?.feeBankAccount ?? null,
+    feePaymentWindowDays: group?.feePaymentWindowDays ?? null,
     workspaceOrgUnitPath: group?.workspaceOrgUnitPath ?? null,
     notifyViaWorkspaceGroup: group?.notifyViaWorkspaceGroup ?? false,
     notificationEmail: group?.notificationEmail ?? null,
@@ -137,7 +140,10 @@ export function GroupForm({
   const form = useForm({
     defaultValues: toDefaultValues(group, categoryId),
     onSubmit: async ({ value }) => {
-      const parsed = groupSchema.safeParse(value);
+      const parsed = groupSchema.safeParse({
+        ...value,
+        feeAmount: feeToMinorUnits(value.feeAmount),
+      });
 
       if (!parsed.success) {
         return;
@@ -683,14 +689,14 @@ export function GroupForm({
                       }
                       placeholder={
                         orgFeeDefaults?.feeAmount != null
-                          ? String(orgFeeDefaults.feeAmount)
+                          ? String(feeToMajorUnits(orgFeeDefaults.feeAmount))
                           : ""
                       }
                     />
                     <FieldDescription>
                       {formatOrgDefault(
                         orgFeeDefaults?.feeAmount != null
-                          ? `${orgFeeDefaults.feeAmount} ${orgFeeDefaults.feeCurrency}`
+                          ? `${feeToMajorUnits(orgFeeDefaults.feeAmount)} ${orgFeeDefaults.feeCurrency}`
                           : "",
                         orgFeeDefaults?.feeAmount,
                       )}
@@ -741,6 +747,61 @@ export function GroupForm({
               )}
             </form.Field>
           </div>
+
+          <form.Field name="feePaymentWindowDays">
+            {(formField) => (
+              <Field
+                data-invalid={
+                  (formField.state.meta.isTouched ||
+                    form.state.submissionAttempts > 0) &&
+                  (formField.state.meta.errors.length > 0 ||
+                    getFieldError("feePaymentWindowDays").length > 0)
+                }
+              >
+                <FieldLabel htmlFor="group-fee-payment-window">
+                  Payment window (days)
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="group-fee-payment-window"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={formField.state.value ?? ""}
+                    onBlur={formField.handleBlur}
+                    onChange={(e) =>
+                      formField.handleChange(
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                    placeholder={
+                      orgFeeDefaults?.paymentWindowDays != null
+                        ? String(orgFeeDefaults.paymentWindowDays)
+                        : ""
+                    }
+                  />
+                  <FieldDescription>
+                    {formatOrgDefault(
+                      orgFeeDefaults?.paymentWindowDays != null
+                        ? `${orgFeeDefaults.paymentWindowDays} days`
+                        : "",
+                      orgFeeDefaults?.paymentWindowDays,
+                    )}
+                  </FieldDescription>
+                  <FieldError
+                    errors={[
+                      ...getClientFieldErrors(formField.state.meta.errors).map(
+                        (m) => ({ message: m }),
+                      ),
+                      ...getFieldError("feePaymentWindowDays").map((m) => ({
+                        message: m,
+                      })),
+                    ]}
+                  />
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
 
           <form.Field name="feeBankAccount">
             {(formField) => (

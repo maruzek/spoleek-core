@@ -2,6 +2,7 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 
 import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
 import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
+import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -41,6 +42,88 @@ function getPeriodLabel(renewalMonth: number, renewalDay: number, today: Date): 
   const renewalThisYear = new Date(currentYear, renewalMonth - 1, renewalDay);
   const periodStartYear = today >= renewalThisYear ? currentYear : currentYear - 1;
   return `${periodStartYear}/${periodStartYear + 1}`;
+}
+
+/** The group columns that may override the organization's fee settings. */
+export type GroupFeeOverrides = {
+  groupId: string;
+  feeAmount: number | null;
+  feeCurrency: string | null;
+  feeBankAccount: string | null;
+  feePaymentWindowDays: number | null;
+  feeRenewalMonth: number | null;
+  feeRenewalDay: number | null;
+};
+
+export type ResolvedFee = {
+  amount: number;
+  currency: string;
+  bankAccount: string | null;
+  periodLabel: string;
+  periodKey: string;
+  dueAt: Date;
+};
+
+/**
+ * Resolves what a member owes, merging a fee-managing group's overrides over
+ * the organization defaults.
+ *
+ * The merge is per field, matching what the group form promises ("Leave fields
+ * empty to use the organization defaults. Fill in only the values this group
+ * should override."). The previous all-or-nothing check meant a group that set
+ * only an amount silently dropped the org's IBAN, and a group that set an
+ * amount but left the currency empty fell back to the org fee entirely.
+ *
+ * Renewal month and day move as a pair because the group form validates them
+ * that way — half a date is never meaningful.
+ */
+export function resolveMembershipFee(
+  org: typeof organizations.$inferSelect,
+  groupFee: GroupFeeOverrides | null | undefined,
+  today: Date,
+): ResolvedFee | null {
+  const amount = groupFee?.feeAmount ?? org.membershipFeeAmount;
+  const currency = groupFee?.feeCurrency ?? org.membershipFeeCurrency;
+
+  if (!amount || !currency) return null;
+
+  const hasGroupRenewal =
+    groupFee?.feeRenewalMonth != null && groupFee.feeRenewalDay != null;
+  const renewalMonth = hasGroupRenewal
+    ? groupFee.feeRenewalMonth!
+    : org.membershipRenewalMonth!;
+  const renewalDay = hasGroupRenewal
+    ? groupFee.feeRenewalDay!
+    : org.membershipRenewalDay!;
+
+  const windowDays =
+    groupFee?.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
+  const dueAt = new Date(today);
+  dueAt.setDate(dueAt.getDate() + windowDays);
+
+  const periodLabel = getPeriodLabel(renewalMonth, renewalDay, today);
+
+  // A group that overrides nothing bills exactly the org fee, so it keeps the
+  // org period key. Scoping it to the group regardless would let the same
+  // member accumulate an :org: row and a :grp: row for one period.
+  const overridesAnything =
+    groupFee != null &&
+    (groupFee.feeAmount != null ||
+      groupFee.feeCurrency != null ||
+      groupFee.feeBankAccount != null ||
+      groupFee.feePaymentWindowDays != null ||
+      hasGroupRenewal);
+
+  return {
+    amount,
+    currency,
+    bankAccount: groupFee?.feeBankAccount ?? org.membershipFeeBankAccount,
+    periodLabel,
+    periodKey: overridesAnything
+      ? `${periodLabel}:grp:${groupFee.groupId}`
+      : `${periodLabel}:org:${org.id}`,
+    dueAt,
+  };
 }
 
 function isInRenewalWindow(renewalMonth: number, renewalDay: number, today: Date): boolean {
@@ -98,7 +181,7 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
             organizationName: row.orgName,
             memberName,
             periodLabel: row.periodLabel,
-            amount: (row.amount / 100).toFixed(2),
+            amount: feeAmountToDecimal(row.amount),
             currency: row.currency,
             dueAt: row.dueAt.toLocaleDateString("en-GB", {
               day: "numeric",
@@ -178,7 +261,7 @@ async function sendRenewalHeadsupEmails(
             memberName,
             periodLabel,
             renewalDate,
-            amount: (feeAmount / 100).toFixed(2),
+            amount: feeAmountToDecimal(feeAmount),
             currency: feeCurrency,
             bankAccount: org.membershipFeeBankAccount,
           }),
@@ -235,7 +318,6 @@ export async function generatePaymentForMember(
   }
 
   const today = new Date();
-  const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
 
   const [groupFee] = await db
     .select({
@@ -262,57 +344,27 @@ export async function generatePaymentForMember(
     .orderBy(groupMemberships.createdAt)
     .limit(1);
 
-  let payment: typeof memberPayments.$inferInsert;
+  const fee = resolveMembershipFee(org, groupFee, today);
 
-  if (groupFee?.feeAmount != null && groupFee.feeCurrency) {
-    const groupPeriodLabel =
-      groupFee.feeRenewalMonth && groupFee.feeRenewalDay
-        ? getPeriodLabel(groupFee.feeRenewalMonth, groupFee.feeRenewalDay, today)
-        : periodLabel;
-    const windowDays = groupFee.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
-    const dueAt = new Date(today);
-    dueAt.setDate(dueAt.getDate() + windowDays);
-
-    payment = {
-
-      orgId,
-      memberId,
-      type: "membership_fee",
-      status: "pending",
-      amount: groupFee.feeAmount,
-      currency: groupFee.feeCurrency,
-      bankAccount: groupFee.feeBankAccount,
-      periodLabel: groupPeriodLabel,
-      periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
-      variableSymbol: await generateVariableSymbol(orgId),
-      dueAt,
-      createdAt: today,
-      updatedAt: today,
-    };
-  } else {
-    if (!org.membershipFeeAmount || !org.membershipFeeCurrency) {
-      return { created: false };
-    }
-    const dueAt = new Date(today);
-    dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
-
-    payment = {
-
-      orgId,
-      memberId,
-      type: "membership_fee",
-      status: "pending",
-      amount: org.membershipFeeAmount,
-      currency: org.membershipFeeCurrency,
-      bankAccount: org.membershipFeeBankAccount,
-      periodLabel,
-      periodKey: `${periodLabel}:org:${orgId}`,
-      variableSymbol: await generateVariableSymbol(orgId),
-      dueAt,
-      createdAt: today,
-      updatedAt: today,
-    };
+  if (!fee) {
+    return { created: false };
   }
+
+  const payment: typeof memberPayments.$inferInsert = {
+    orgId,
+    memberId,
+    type: "membership_fee",
+    status: "pending",
+    amount: fee.amount,
+    currency: fee.currency,
+    bankAccount: fee.bankAccount,
+    periodLabel: fee.periodLabel,
+    periodKey: fee.periodKey,
+    variableSymbol: await generateVariableSymbol(orgId),
+    dueAt: fee.dueAt,
+    createdAt: today,
+    updatedAt: today,
+  };
 
   const inserted = await db
     .insert(memberPayments)
@@ -405,8 +457,6 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
     result.orgsProcessed++;
 
     try {
-      const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
-
       // Load active members (suspended members are excluded — they must pay first)
       const activeMembers = await db
         .select({ id: tenantMembers.id })
@@ -462,53 +512,26 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
       // Build payment records to insert — VS uniqueness checked per-org above
       const paymentsToInsert = await Promise.all(
         activeMembers.map(async (member) => {
-          const groupFee = memberGroupMap.get(member.id);
+          const fee = resolveMembershipFee(
+            org,
+            memberGroupMap.get(member.id),
+            today,
+          );
 
-          if (groupFee?.feeAmount != null && groupFee.feeCurrency) {
-            const groupPeriodLabel = groupFee.feeRenewalMonth && groupFee.feeRenewalDay
-              ? getPeriodLabel(groupFee.feeRenewalMonth, groupFee.feeRenewalDay, today)
-              : periodLabel;
-            const windowDays = groupFee.feePaymentWindowDays ?? org.membershipFeePaymentWindowDays;
-            const dueAt = new Date(today);
-            dueAt.setDate(dueAt.getDate() + windowDays);
-
-            return {
-        
-              orgId: org.id,
-              memberId: member.id,
-              type: "membership_fee" as const,
-              status: "pending" as const,
-              amount: groupFee.feeAmount,
-              currency: groupFee.feeCurrency,
-              bankAccount: groupFee.feeBankAccount,
-              periodLabel: groupPeriodLabel,
-              periodKey: `${groupPeriodLabel}:grp:${groupFee.groupId}`,
-              variableSymbol: await generateVariableSymbol(org.id),
-              dueAt,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-          }
-
-          // Org-level fee
-          if (!org.membershipFeeAmount || !org.membershipFeeCurrency) return null;
-
-          const dueAt = new Date(today);
-          dueAt.setDate(dueAt.getDate() + org.membershipFeePaymentWindowDays);
+          if (!fee) return null;
 
           return {
-      
             orgId: org.id,
             memberId: member.id,
             type: "membership_fee" as const,
             status: "pending" as const,
-            amount: org.membershipFeeAmount,
-            currency: org.membershipFeeCurrency,
-            bankAccount: org.membershipFeeBankAccount,
-            periodLabel,
-            periodKey: `${periodLabel}:org:${org.id}`,
+            amount: fee.amount,
+            currency: fee.currency,
+            bankAccount: fee.bankAccount,
+            periodLabel: fee.periodLabel,
+            periodKey: fee.periodKey,
             variableSymbol: await generateVariableSymbol(org.id),
-            dueAt,
+            dueAt: fee.dueAt,
             createdAt: new Date(),
             updatedAt: new Date(),
           };

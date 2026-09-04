@@ -5,10 +5,11 @@ import * as RechartsPrimitive from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { PaymentStats } from "@/server/queries/payments";
+import { feeToMajorUnits } from "@/lib/payments";
 
 function formatCents(cents: number, currency: string): string {
   return new Intl.NumberFormat("cs-CZ", { style: "currency", currency, maximumFractionDigits: 0 }).format(
-    cents / 100,
+    feeToMajorUnits(cents) ?? 0,
   );
 }
 

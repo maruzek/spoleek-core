@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { PaymentConfirmedEmail } from "@/emails/payment-confirmed-email";
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
+import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import { memberPayments, organizations, tenantMembers, users } from "@/server/db/schema";
 import { requireAdminAccess, listScopedGroupIds } from "@/server/queries/access";
@@ -125,7 +126,7 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
         organizationName: row.orgName,
         memberName,
         periodLabel: row.periodLabel,
-        amount: (row.amount / 100).toFixed(2),
+        amount: feeAmountToDecimal(row.amount),
         currency: row.currency,
         paidAt: paidAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
       }),

@@ -70,6 +70,7 @@ type GroupDetailProps = {
     feeAmount: number | null;
     feeCurrency: string | null;
     feeBankAccount: string | null;
+    feePaymentWindowDays: number | null;
     workspaceOrgUnitPath: string | null;
     notifyViaWorkspaceGroup: boolean;
     notificationEmail: string | null;

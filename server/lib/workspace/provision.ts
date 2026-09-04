@@ -6,6 +6,7 @@ import { generateRandomPassword } from "@/lib/crypto";
 import { db } from "@/server/db";
 import { organizations, tenantMembers } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
+import { getApprovalPaymentDetails } from "@/server/lib/approval-payment-details";
 import { logMemberAuthEvent } from "@/server/lib/member-invites";
 import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 import {
@@ -114,6 +115,9 @@ export async function provisionWorkspaceAccountForMember(
     .join(" ")
     .trim() || primaryEmail;
   const signInUrl = buildAbsoluteAppUrl("/auth");
+  // Null when the org charges no membership fee; the approval flow creates the
+  // payment row before calling this so the details are already available.
+  const payment = await getApprovalPaymentDetails(input.orgId, input.memberId);
 
   try {
     const resend = getResendClient();
@@ -129,6 +133,7 @@ export async function provisionWorkspaceAccountForMember(
           workspaceEmail: primaryEmail,
           temporaryPassword: password,
           signInUrl,
+          payment,
         }),
       },
       {

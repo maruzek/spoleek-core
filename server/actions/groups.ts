@@ -285,6 +285,7 @@ export const saveGroupAction = authActionClient
           feeAmount: parsedInput.feeAmount,
           feeCurrency: parsedInput.feeCurrency,
           feeBankAccount: parsedInput.feeBankAccount,
+          feePaymentWindowDays: parsedInput.feePaymentWindowDays,
         }
       : {
           feeRenewalMonth: null,
@@ -292,6 +293,7 @@ export const saveGroupAction = authActionClient
           feeAmount: null,
           feeCurrency: null,
           feeBankAccount: null,
+          feePaymentWindowDays: null,
         };
 
     if (parsedInput.id) {

@@ -1,4 +1,5 @@
 "use client";
+import { formatFeeAmount } from "@/lib/payments";
 
 import { ColumnDef } from "@tanstack/react-table";
 
@@ -22,11 +23,9 @@ const columns: ColumnDef<MemberPayment>[] = [
     accessorKey: "amount",
     header: "Amount",
     cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("amount")) / 100;
-      const currency = row.original.currency;
       return (
         <span className="tabular-nums">
-          {amount.toFixed(2)} {currency}
+          {formatFeeAmount(row.original.amount, row.original.currency)}
         </span>
       );
     },

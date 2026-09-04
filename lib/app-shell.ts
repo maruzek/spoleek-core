@@ -42,6 +42,7 @@ export type AppShellContext = {
       feeAmount: number | null;
       feeCurrency: string;
       feeBankAccount: string | null;
+      paymentWindowDays: number;
     };
   };
   member: {

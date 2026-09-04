@@ -32,7 +32,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/format";
 import { DatePicker } from "@/components/ui/date-picker";
-import { getPaymentTitle } from "@/lib/payments";
+import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
   cancelPaymentAction,
@@ -133,7 +133,7 @@ function MarkPaidDialog({
           <AlertDialogTitle>Mark payment as paid</AlertDialogTitle>
           <AlertDialogDescription>
             Confirm that <strong>{payment.memberName}</strong> has paid{" "}
-            <strong>{(payment.amount / 100).toFixed(2)} {payment.currency}</strong> for{" "}
+            <strong>{formatFeeAmount(payment.amount, payment.currency)}</strong> for{" "}
             {getPaymentTitle(payment.type, payment.periodLabel)}.
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -357,7 +357,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       header: "Amount",
       meta: { label: "Amount" },
       cell: ({ row }) =>
-        `${(row.original.amount / 100).toFixed(2)} ${row.original.currency}`,
+        formatFeeAmount(row.original.amount, row.original.currency),
     }),
     columnHelper.accessor("status", {
       header: "Status",

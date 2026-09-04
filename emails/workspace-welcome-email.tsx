@@ -13,12 +13,20 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import {
+  PaymentDetailsSection,
+  previewPaymentDetails,
+  type ActivationPaymentDetails,
+} from "./payment-details-section";
+
 type WorkspaceWelcomeEmailProps = {
   organizationName: string;
   memberName: string;
   workspaceEmail: string;
   temporaryPassword: string;
   signInUrl: string;
+  /** Omitted when the organization does not charge a membership fee. */
+  payment?: ActivationPaymentDetails | null;
 };
 
 export function WorkspaceWelcomeEmail({
@@ -27,6 +35,7 @@ export function WorkspaceWelcomeEmail({
   workspaceEmail,
   temporaryPassword,
   signInUrl,
+  payment = null,
 }: WorkspaceWelcomeEmailProps) {
   const subject = `Your ${organizationName} Google Workspace account is ready`;
 
@@ -92,8 +101,10 @@ export function WorkspaceWelcomeEmail({
               </Button>
             </Section>
 
+            {payment ? <PaymentDetailsSection payment={payment} /> : null}
+
             <Section>
-              <Text className="m-0 text-[14px] leading-[24px] text-muted">
+              <Text className="m-0 mt-[24px] text-[14px] leading-[24px] text-muted">
                 On the sign-in page, choose <strong>Continue with Google</strong>
                 {" "}and use the email and temporary password above. Google will
                 ask you to create a new password immediately afterwards.
@@ -118,6 +129,7 @@ WorkspaceWelcomeEmail.PreviewProps = {
   workspaceEmail: "alex.member@spoleek.org",
   temporaryPassword: "Xy7!Qa4mNp2R",
   signInUrl: "https://example.com/auth",
+  payment: previewPaymentDetails,
 } satisfies WorkspaceWelcomeEmailProps;
 
 export default WorkspaceWelcomeEmail;

@@ -15,6 +15,7 @@ import {
 } from "@/server/db/schema";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { findUserByEmail } from "@/server/queries/members";
+import { getApprovalPaymentDetails } from "@/server/lib/approval-payment-details";
 
 const INVITE_MODE = "member-activation";
 const RESET_TOKEN_TTL_SECONDS = 60 * 60;
@@ -630,12 +631,17 @@ export async function getMemberInviteEmailContent(memberId: string) {
     throw new Error("Organization settings are incomplete for member invite emails.");
   }
 
+  // Null whenever the org charges no membership fee, so the email simply omits
+  // the payment block rather than rendering an empty one.
+  const payment = await getApprovalPaymentDetails(member.orgId, member.id);
+
   return {
     organizationName: organization.name,
     subject: policy.memberInviteEmailSubject,
     body: policy.memberInviteEmailBody,
     memberName: `${member.firstName} ${member.lastName}`.trim(),
     email: member.email,
+    payment,
   };
 }
 

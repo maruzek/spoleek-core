@@ -6,6 +6,7 @@ import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { feeToMajorUnits, feeToMinorUnits } from "@/lib/payments";
 import {
   feeCurrencyOptions,
   membershipManagementModeOptions,
@@ -56,7 +57,9 @@ export function MembershipSettingsCard({
     state.membershipRenewalDay ?? 1,
   );
   const [feeEnabled, setFeeEnabled] = useState(state.membershipFeeEnabled);
-  const [feeAmount, setFeeAmount] = useState((state.membershipFeeAmount ?? 0) / 100);
+  const [feeAmount, setFeeAmount] = useState(
+    feeToMajorUnits(state.membershipFeeAmount) ?? 0,
+  );
   const [feeCurrency, setFeeCurrency] = useState(state.membershipFeeCurrency);
   const [bankAccount, setBankAccount] = useState(
     state.membershipFeeBankAccount ?? "",
@@ -248,7 +251,9 @@ export function MembershipSettingsCard({
               membershipRenewalDay: isPeriodicRenewal ? renewalDay : null,
               membershipFeeEnabled: isPeriodicRenewal ? feeEnabled : false,
               membershipFeeAmount:
-                isPeriodicRenewal && feeEnabled ? Math.round(feeAmount * 100) : null,
+                isPeriodicRenewal && feeEnabled
+                  ? feeToMinorUnits(feeAmount)
+                  : null,
               membershipFeeCurrency: feeCurrency,
               membershipFeeBankAccount:
                 isPeriodicRenewal && feeEnabled && bankAccount.trim()

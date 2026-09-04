@@ -20,6 +20,7 @@ import {
 } from "@/lib/bootstrap/setup-schemas";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { splitMemberName } from "@/lib/member-custom-fields";
+import { feeToMinorUnits } from "@/lib/payments";
 import { actionClient } from "@/lib/safe-action";
 import { slugify } from "@/lib/slugify";
 import {
@@ -449,7 +450,7 @@ export const createBootstrapOrganizationAction = actionClient
           : false,
         membershipFeeAmount:
           isPeriodicRenewal && parsedInput.membershipFeeEnabled
-            ? Math.round((parsedInput.membershipFeeAmount ?? 0) * 100)
+            ? feeToMinorUnits(parsedInput.membershipFeeAmount ?? 0)
             : null,
         membershipFeeCurrency: parsedInput.membershipFeeCurrency,
         membershipFeeBankAccount:

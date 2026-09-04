@@ -13,13 +13,23 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import {
+  PaymentDetailsSection,
+  previewPaymentDetails,
+  type ActivationPaymentDetails,
+} from "./payment-details-section";
+
+
 type MemberActivationEmailProps = {
   organizationName: string;
   subject: string;
   body: string;
   activationUrl: string;
   memberName: string;
+  /** Omitted when the organization does not charge a membership fee. */
+  payment?: ActivationPaymentDetails | null;
 };
+
 
 export function MemberActivationEmail({
   organizationName,
@@ -27,6 +37,7 @@ export function MemberActivationEmail({
   body,
   activationUrl,
   memberName,
+  payment = null,
 }: MemberActivationEmailProps) {
   return (
     <Html lang="en">
@@ -81,8 +92,11 @@ export function MemberActivationEmail({
               </Button>
             </Section>
 
+            {payment ? <PaymentDetailsSection payment={payment} /> : null}
+
+
             <Section>
-              <Text className="m-0 text-[14px] leading-[24px] text-[#52605a]">
+              <Text className="m-0 mt-[24px] text-[14px] leading-[24px] text-[#52605a]">
                 This link expires in 1 hour. If it stops working, ask an administrator to send a
                 fresh invitation.
               </Text>
@@ -107,6 +121,7 @@ MemberActivationEmail.PreviewProps = {
     "Your membership request has been approved. Use the button below to create your password and complete the remaining profile fields before signing in to the app.",
   activationUrl: "https://example.com/activate-account?member=123&token=token",
   memberName: "Alex Member",
+  payment: previewPaymentDetails,
 } satisfies MemberActivationEmailProps;
 
 export default MemberActivationEmail;

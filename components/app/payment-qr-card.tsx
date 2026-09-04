@@ -8,7 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
 import { formatIban } from "@/lib/iban";
-import { buildSpdString, getPaymentTitle } from "@/lib/payments";
+import {
+  buildSpdString,
+  feeToMajorUnits,
+  formatFeeAmount,
+  getPaymentTitle,
+} from "@/lib/payments";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { cn } from "@/lib/utils";
 import type { MemberPayment } from "@/server/db/schema";
@@ -30,7 +35,7 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
     const parts = [
       payment.bankAccount ? `IBAN: ${payment.bankAccount}` : null,
       payment.variableSymbol ? `VS: ${payment.variableSymbol}` : null,
-      `Amount: ${(payment.amount / 100).toFixed(2)} ${payment.currency}`,
+      `Amount: ${formatFeeAmount(payment.amount, payment.currency)}`,
     ].filter(Boolean);
     navigator.clipboard.writeText(parts.join(" | ")).then(() => {
       setCopied(true);
@@ -91,7 +96,7 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
               isOverdue ? "text-destructive" : "text-foreground",
             )}
           >
-            {(payment.amount / 100).toLocaleString("cs-CZ", {
+            {(feeToMajorUnits(payment.amount) ?? 0).toLocaleString("cs-CZ", {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}

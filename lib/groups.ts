@@ -129,6 +129,9 @@ export const groupSchema = z
       .union([z.number().int().min(1).max(31), z.null()])
       .default(null),
     feeAmount: z.union([z.number().int().min(0), z.null()]).default(null),
+    feePaymentWindowDays: z
+      .union([z.number().int().min(1).max(365), z.null()])
+      .default(null),
     feeCurrency: z.union([z.string().trim(), z.null()]).default(null),
     feeBankAccount: z
       .union([z.string(), z.null(), z.undefined()])
