@@ -1,9 +1,11 @@
 import * as React from "react";
 import { Column, Heading, Hr, Img, Row, Section, Text } from "react-email";
+import { formatBankAccount } from "@/lib/iban";
 
 export type ActivationPaymentDetails = {
   title: string;
   amount: string;
+  /** Canonical IBAN as stored; rendered as local format + IBAN. */
   bankAccount: string | null;
   variableSymbol: string | null;
   dueDate: string;
@@ -45,6 +47,10 @@ export function PaymentDetailsSection({
 }: {
   payment: ActivationPaymentDetails;
 }) {
+  const account = payment.bankAccount
+    ? formatBankAccount(payment.bankAccount)
+    : null;
+
   return (
     <Section className="rounded-[20px] bg-surface px-[24px] py-[24px]">
       <Text className="m-0 text-[12px] uppercase tracking-[2px] text-brand">
@@ -64,8 +70,13 @@ export function PaymentDetailsSection({
 
       <DetailRow label="Amount" value={payment.amount} />
       <DetailRow label="Due date" value={payment.dueDate} />
-      {payment.bankAccount ? (
-        <DetailRow label="Bank account" value={payment.bankAccount} />
+      {account ? (
+        <>
+          <DetailRow label="Bank account" value={account.primary} />
+          {account.secondary ? (
+            <DetailRow label="IBAN" value={account.secondary} />
+          ) : null}
+        </>
       ) : null}
       {payment.variableSymbol ? (
         <DetailRow label="Variable symbol" value={payment.variableSymbol} />
@@ -101,7 +112,7 @@ export function PaymentDetailsSection({
 export const previewPaymentDetails: ActivationPaymentDetails = {
   title: "Membership payment for 2026",
   amount: "100.00 CZK",
-  bankAccount: "CZ65 0800 0000 1920 0014 5399",
+  bankAccount: "CZ6508000000192000145399",
   variableSymbol: "20260042",
   dueDate: "1 October 2026",
   periodLabel: "2026",

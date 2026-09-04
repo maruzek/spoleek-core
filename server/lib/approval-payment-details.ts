@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 
-import { formatIban } from "@/lib/iban";
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import { db } from "@/server/db";
 import { groups, memberPayments } from "@/server/db/schema";
@@ -67,7 +66,8 @@ export async function getApprovalPaymentDetails(
   return {
     title: getPaymentTitle(payment.type, payment.periodLabel),
     amount: formatFeeAmount(payment.amount, payment.currency),
-    bankAccount: payment.bankAccount ? formatIban(payment.bankAccount) : null,
+    // Raw IBAN — the email template renders the local format alongside it.
+    bankAccount: payment.bankAccount,
     variableSymbol: payment.variableSymbol,
     dueDate: payment.dueAt.toLocaleDateString("en-GB", {
       day: "numeric",

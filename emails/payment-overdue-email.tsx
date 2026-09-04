@@ -11,6 +11,7 @@ import {
   Text,
   pixelBasedPreset,
 } from "react-email";
+import { formatBankAccount } from "@/lib/iban";
 
 type PaymentOverdueEmailProps = {
   organizationName: string;
@@ -33,6 +34,8 @@ export function PaymentOverdueEmail({
   bankAccount,
   variableSymbol,
 }: PaymentOverdueEmailProps) {
+  const account = bankAccount ? formatBankAccount(bankAccount) : null;
+
   const subject = `Action required: membership fee overdue — ${periodLabel}`;
 
   return (
@@ -79,10 +82,17 @@ export function PaymentOverdueEmail({
               <Text className="m-0 mt-[8px] text-[24px] font-semibold text-ink">
                 {amount} {currency}
               </Text>
-              {bankAccount ? (
-                <Text className="m-0 mt-[4px] text-[14px] text-[#52605a]">
-                  Bank account: {bankAccount}
-                </Text>
+              {account ? (
+                <>
+                  <Text className="m-0 mt-[4px] text-[14px] text-[#52605a]">
+                    Bank account: {account.primary}
+                  </Text>
+                  {account.secondary ? (
+                    <Text className="m-0 text-[14px] text-[#52605a]">
+                      IBAN: {account.secondary}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
               {variableSymbol ? (
                 <Text className="m-0 text-[14px] text-[#52605a]">

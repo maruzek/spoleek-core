@@ -11,6 +11,7 @@ import {
   Text,
   pixelBasedPreset,
 } from "react-email";
+import { formatBankAccount } from "@/lib/iban";
 
 type PaymentRenewalHeadsupEmailProps = {
   organizationName: string;
@@ -31,6 +32,8 @@ export function PaymentRenewalHeadsupEmail({
   currency,
   bankAccount,
 }: PaymentRenewalHeadsupEmailProps) {
+  const account = bankAccount ? formatBankAccount(bankAccount) : null;
+
   const subject = `Membership renewal coming up — ${periodLabel}`;
 
   return (
@@ -76,10 +79,17 @@ export function PaymentRenewalHeadsupEmail({
               <Text className="m-0 mt-[8px] text-[24px] font-semibold text-ink">
                 {amount} {currency}
               </Text>
-              {bankAccount ? (
-                <Text className="m-0 mt-[4px] text-[14px] text-[#52605a]">
-                  Bank account: {bankAccount}
-                </Text>
+              {account ? (
+                <>
+                  <Text className="m-0 mt-[4px] text-[14px] text-[#52605a]">
+                    Bank account: {account.primary}
+                  </Text>
+                  {account.secondary ? (
+                    <Text className="m-0 text-[14px] text-[#52605a]">
+                      IBAN: {account.secondary}
+                    </Text>
+                  ) : null}
+                </>
               ) : null}
             </Section>
 

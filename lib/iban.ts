@@ -82,3 +82,44 @@ export function parseBankAccount(input: string): string {
 export function formatIban(iban: string): string {
   return iban.replace(/\s/g, "").replace(/(.{4})/g, "$1 ").trim();
 }
+
+/**
+ * Czech IBAN layout: CZ + 2 check digits + 4 bank code + 6 prefix + 10 account.
+ * The local format is a pure reformatting of those digits — no lookup, no data
+ * loss — so it is derived from the stored IBAN rather than configured. The
+ * account's country is the only thing that decides the format; the payment
+ * currency is unrelated (a Czech account can be billed in EUR).
+ *
+ * Returns null for anything that is not a Czech IBAN.
+ */
+export function ibanToCzechLocal(iban: string): string | null {
+  const normalized = iban.replace(/\s/g, "").toUpperCase();
+
+  if (!/^CZ\d{22}$/.test(normalized)) return null;
+
+  const bankCode = normalized.slice(4, 8);
+  const prefix = normalized.slice(8, 14).replace(/^0+/, "");
+  const account = normalized.slice(14).replace(/^0+/, "");
+
+  return `${prefix ? `${prefix}-` : ""}${account}/${bankCode}`;
+}
+
+export type FormattedBankAccount = {
+  /** What the member types into their banking app. */
+  primary: string;
+  /** The IBAN, shown as a secondary line — null when it is already primary. */
+  secondary: string | null;
+};
+
+/**
+ * Presentation for a stored bank account. Czech accounts lead with the local
+ * format and keep the IBAN underneath so a transfer from a foreign bank is
+ * still possible; everything else shows the grouped IBAN alone.
+ */
+export function formatBankAccount(iban: string): FormattedBankAccount {
+  const local = ibanToCzechLocal(iban);
+
+  return local
+    ? { primary: local, secondary: formatIban(iban) }
+    : { primary: formatIban(iban), secondary: null };
+}

@@ -7,7 +7,7 @@ import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
-import { formatIban } from "@/lib/iban";
+import { formatBankAccount } from "@/lib/iban";
 import {
   buildSpdString,
   feeToMajorUnits,
@@ -27,13 +27,16 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
     : undefined;
 
   const spdString = buildSpdString(payment, memberName);
+  const account = payment.bankAccount
+    ? formatBankAccount(payment.bankAccount)
+    : null;
   const isOverdue = payment.status === "overdue";
   const isPending = payment.status === "pending";
 
   // todo: remove handleCopy, implement the general copy button, use DropdownMenu for multiple data fields
   function handleCopy() {
     const parts = [
-      payment.bankAccount ? `IBAN: ${payment.bankAccount}` : null,
+      account ? `Account: ${account.primary}` : null,
       payment.variableSymbol ? `VS: ${payment.variableSymbol}` : null,
       `Amount: ${formatFeeAmount(payment.amount, payment.currency)}`,
     ].filter(Boolean);
@@ -118,14 +121,19 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
 
       {/* Payment details */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-5">
-        {payment.bankAccount && (
+        {account && (
           <div className="col-span-2">
             <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
               Bank account
             </p>
             <p className="font-mono text-sm tracking-wide text-foreground">
-              {formatIban(payment.bankAccount)}
+              {account.primary}
             </p>
+            {account.secondary ? (
+              <p className="mt-0.5 font-mono text-xs tracking-wide text-muted-foreground">
+                {account.secondary}
+              </p>
+            ) : null}
           </div>
         )}
 
