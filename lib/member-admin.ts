@@ -24,7 +24,26 @@ export const adminMemberIdentitySchema = z.object({
   groupIds: z.array(z.uuid()).default([]),
 });
 
-export const createMemberSchema = adminMemberIdentitySchema;
+/**
+ * Workspace account details the admin confirmed in the provisioning dialog.
+ * Provisioning is always a separate step from creating or approving a member,
+ * so skipping it is a supported outcome rather than a failure.
+ */
+export const workspaceProvisionInputSchema = z.object({
+  primaryEmail: z.email(),
+  extraFields: z
+    .record(z.string(), z.union([z.string(), z.boolean()]))
+    .optional(),
+});
+
+export const createMemberSchema = adminMemberIdentitySchema.extend({
+  customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
+});
+
+export const provisionMemberWorkspaceAccountSchema =
+  workspaceProvisionInputSchema.extend({
+    memberId: z.uuid(),
+  });
 
 export const updateMemberSchema = adminMemberIdentitySchema.extend({
   memberId: z.uuid(),
@@ -59,6 +78,9 @@ export const resendMemberInviteSchema = z.object({
 });
 
 export type CreateMemberValues = z.infer<typeof createMemberSchema>;
+export type ProvisionMemberWorkspaceAccountValues = z.infer<
+  typeof provisionMemberWorkspaceAccountSchema
+>;
 export type UpdateMemberValues = z.infer<typeof updateMemberSchema>;
 export type DeleteMemberValues = z.infer<typeof deleteMemberSchema>;
 export type RejectMemberValues = z.infer<typeof rejectMemberSchema>;

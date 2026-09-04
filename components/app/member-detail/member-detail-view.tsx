@@ -54,6 +54,7 @@ import { cn } from "@/lib/utils";
 import {
   approveMemberAction,
   deleteMemberAction,
+  provisionMemberWorkspaceAccountAction,
   rejectMemberAction,
   resendMemberInviteAction,
   updateMemberAction,
@@ -138,6 +139,10 @@ export function MemberDetailView({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [workspaceApproveOpen, setWorkspaceApproveOpen] = useState(false);
+  const [workspaceProvisionOpen, setWorkspaceProvisionOpen] = useState(false);
+  const [workspaceProvisionError, setWorkspaceProvisionError] = useState<
+    string | null
+  >(null);
   const [unconnectedWarningOpen, setUnconnectedWarningOpen] = useState(false);
   const [workspaceApproveError, setWorkspaceApproveError] = useState<
     string | null
@@ -262,6 +267,28 @@ export function MemberDetailView({
         setWorkspaceApproveError(error.serverError);
         toast.error(error.serverError);
       }
+    },
+  });
+
+  const provisionAction = useAction(provisionMemberWorkspaceAccountAction, {
+    onSuccess({ data: result }) {
+      if (!result?.success) {
+        const error = result?.error ?? "Could not create the account.";
+        setWorkspaceProvisionError(error);
+        toast.error(error);
+        return;
+      }
+
+      setWorkspaceProvisionOpen(false);
+      setWorkspaceProvisionError(null);
+      toast.success(`Workspace account created for ${result.primaryEmail}.`);
+      router.refresh();
+    },
+    onError({ error }) {
+      const message =
+        error.serverError ?? "Could not create the Workspace account.";
+      setWorkspaceProvisionError(message);
+      toast.error(message);
     },
   });
 
@@ -555,6 +582,13 @@ export function MemberDetailView({
                 metadata={editor.metadata}
                 customFields={data.customFields}
                 workspaceEnabled={workspace.enabled}
+                canCreateWorkspaceAccount={
+                  workspaceReady && !member.workspaceUserId
+                }
+                onCreateWorkspaceAccount={() => {
+                  setWorkspaceProvisionError(null);
+                  setWorkspaceProvisionOpen(true);
+                }}
               />
             )}
           </TabBody>
@@ -747,12 +781,45 @@ export function MemberDetailView({
         isPending={approveAction.isPending}
         submitError={workspaceApproveError}
         provisionFields={workspaceProvisionFields}
+        onSkip={() => {
+          setWorkspaceApproveError(null);
+          approveAction.execute({
+            memberId: member.id,
+            role: member.role,
+            skipWorkspaceAccount: true,
+          });
+        }}
         onConfirm={async ({ primaryEmail, extraFields }) => {
           setWorkspaceApproveError(null);
           await approveAction.executeAsync({
             memberId: member.id,
             role: member.role,
             workspace: { primaryEmail, extraFields },
+          });
+        }}
+      />
+
+      <MemberApproveWorkspaceDialog
+        mode="provision"
+        open={workspaceProvisionOpen}
+        onOpenChange={(open) => {
+          setWorkspaceProvisionOpen(open);
+          if (!open) {
+            setWorkspaceProvisionError(null);
+          }
+        }}
+        member={workspaceProvisionOpen ? approvalMember : null}
+        workspaceDomain={workspace.domain ?? ""}
+        defaultPhoneCountry={workspace.countryCode}
+        isPending={provisionAction.isPending}
+        submitError={workspaceProvisionError}
+        provisionFields={workspaceProvisionFields}
+        onConfirm={async ({ primaryEmail, extraFields }) => {
+          setWorkspaceProvisionError(null);
+          await provisionAction.executeAsync({
+            memberId: member.id,
+            primaryEmail,
+            extraFields,
           });
         }}
       />

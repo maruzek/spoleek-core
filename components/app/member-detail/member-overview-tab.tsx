@@ -5,6 +5,7 @@ import {
   EllipsisVerticalIcon,
   ExternalLinkIcon,
   RefreshCwIcon,
+  UserRoundPlusIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAction } from "next-safe-action/hooks";
@@ -74,11 +75,16 @@ export function MemberOverviewTab({
   metadata,
   customFields,
   workspaceEnabled,
+  canCreateWorkspaceAccount = false,
+  onCreateWorkspaceAccount,
 }: {
   member: OverviewMember;
   metadata: MemberEditorMetadata;
   customFields: MemberCustomField[];
   workspaceEnabled: boolean;
+  /** Workspace is connected and this member has no account yet. */
+  canCreateWorkspaceAccount?: boolean;
+  onCreateWorkspaceAccount?: () => void;
 }) {
   const router = useRouter();
   const { organization } = useAppShell();
@@ -141,7 +147,9 @@ export function MemberOverviewTab({
               description={
                 member.workspaceProvisionedAt
                   ? `Provisioned ${formatDateTime(member.workspaceProvisionedAt)}`
-                  : undefined
+                  : canCreateWorkspaceAccount
+                    ? "No Google account yet. Create one whenever you are ready."
+                    : undefined
               }
               action={
                 <div className="flex items-center gap-1">
@@ -151,6 +159,16 @@ export function MemberOverviewTab({
                       className="text-muted-foreground hover:text-foreground"
                       aria-label="Copy workspace email"
                     />
+                  ) : null}
+                  {canCreateWorkspaceAccount && onCreateWorkspaceAccount ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onCreateWorkspaceAccount}
+                    >
+                      <UserRoundPlusIcon data-icon="inline-start" />
+                      Create account
+                    </Button>
                   ) : null}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -173,6 +191,12 @@ export function MemberOverviewTab({
                             <ExternalLinkIcon />
                             Admin Console
                           </a>
+                        </DropdownMenuItem>
+                      ) : null}
+                      {canCreateWorkspaceAccount && onCreateWorkspaceAccount ? (
+                        <DropdownMenuItem onClick={onCreateWorkspaceAccount}>
+                          <UserRoundPlusIcon />
+                          Create account
                         </DropdownMenuItem>
                       ) : null}
                       <DropdownMenuItem

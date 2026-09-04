@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
@@ -48,6 +48,7 @@ import {
   approveMemberAction,
   bulkDeleteMembersAction,
   createShadowMemberAction,
+  provisionMemberWorkspaceAccountAction,
   rejectMemberAction,
   resendMemberInviteAction,
 } from "@/server/actions/member-admin";
@@ -219,6 +220,20 @@ export function MemberAdmin({
   const [importOpen, setImportOpen] = useState(false);
   const [workspaceApproveMember, setWorkspaceApproveMember] =
     useState<WorkspaceApprovalMember | null>(null);
+  // The member whose Workspace account is being set up right after creation.
+  const [workspaceProvisionMember, setWorkspaceProvisionMember] =
+    useState<WorkspaceApprovalMember | null>(null);
+  const [workspaceProvisionError, setWorkspaceProvisionError] = useState<
+    string | null
+  >(null);
+  /**
+   * Survives the create round-trip: the identity is known from the submitted
+   * form, but the member id only comes back from the action.
+   */
+  const pendingProvisionRef = useRef<Omit<
+    WorkspaceApprovalMember,
+    "id"
+  > | null>(null);
   const [workspaceApproveError, setWorkspaceApproveError] = useState<
     string | null
   >(null);
@@ -254,9 +269,53 @@ export function MemberAdmin({
   );
 
   const createAction = useAction(createShadowMemberAction, {
-    onSuccess() {
+    onSuccess({ data }) {
+      // A rejected custom-field answer means nothing was created — keep the
+      // sheet open with the errors attached to their fields.
+      if (data && !data.success) {
+        // Show the message itself, not just "check the fields" — an error the
+        // form has no input for would otherwise be invisible.
+        const messages = Object.values(data.customFieldErrors ?? {}).flat();
+        toast.error(messages[0] ?? "Some custom field answers were rejected.");
+        return;
+      }
+
+      const pending = pendingProvisionRef.current;
+      pendingProvisionRef.current = null;
+
       setSheetOpen(false);
+      toast.success("Member created.");
       router.refresh();
+
+      // The admin asked for a Workspace account while creating the member. The
+      // member exists now, so the ordinary provisioning dialog can take over —
+      // same fields, same auto-fill, as when approving someone.
+      if (pending && data?.memberId && workspaceReady) {
+        setWorkspaceProvisionError(null);
+        setWorkspaceProvisionMember({ id: data.memberId, ...pending });
+      }
+    },
+  });
+
+  const provisionAction = useAction(provisionMemberWorkspaceAccountAction, {
+    onSuccess({ data }) {
+      if (!data?.success) {
+        const error = data?.error ?? "Could not create the account.";
+        setWorkspaceProvisionError(error);
+        toast.error(error);
+        return;
+      }
+
+      setWorkspaceProvisionMember(null);
+      setWorkspaceProvisionError(null);
+      toast.success(`Workspace account created for ${data.primaryEmail}.`);
+      router.refresh();
+    },
+    onError({ error }) {
+      const message =
+        error.serverError ?? "Could not create the Workspace account.";
+      setWorkspaceProvisionError(message);
+      toast.error(message);
     },
   });
   const approveAction = useAction(approveMemberAction, {
@@ -281,6 +340,10 @@ export function MemberAdmin({
         router.refresh();
         return;
       }
+      // Approved without a Google account (skipped, or module not connected).
+      setWorkspaceApproveMember(null);
+      setWorkspaceApproveError(null);
+
       if (data.inviteReason === "cooldown") {
         toast.error(
           "The invite was not resent because the resend cooldown is still active.",
@@ -855,10 +918,52 @@ export function MemberAdmin({
         accessLevel={access.level}
         roleOptions={access.roleOptions}
         manageableGroupCategories={manageableGroupCategories}
+        customFields={customFields}
+        customFieldErrors={createAction.result.data?.customFieldErrors}
+        workspaceReady={workspaceReady}
         serverError={createAction.result.serverError}
         validationErrors={createAction.result.validationErrors}
-        onSubmit={async (value) => {
-          await createAction.executeAsync(value);
+        onSubmit={async (value, options) => {
+          pendingProvisionRef.current = options.createWorkspaceAccount
+            ? {
+                firstName: value.firstName,
+                lastName: value.lastName,
+                email: value.email || null,
+                role: value.role,
+              }
+            : null;
+          const result = await createAction.executeAsync(value);
+          return Boolean(result?.data?.success);
+        }}
+      />
+
+      <MemberApproveWorkspaceDialog
+        mode="provision"
+        open={Boolean(workspaceProvisionMember)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWorkspaceProvisionMember(null);
+            setWorkspaceProvisionError(null);
+          }
+        }}
+        member={workspaceProvisionMember}
+        workspaceDomain={workspace.domain ?? ""}
+        defaultPhoneCountry={workspace.countryCode}
+        isPending={provisionAction.isPending}
+        submitError={workspaceProvisionError}
+        provisionFields={workspaceProvisionFields}
+        onSkip={() => {
+          setWorkspaceProvisionMember(null);
+          setWorkspaceProvisionError(null);
+        }}
+        onConfirm={async ({ primaryEmail, extraFields }) => {
+          if (!workspaceProvisionMember) return;
+          setWorkspaceProvisionError(null);
+          await provisionAction.executeAsync({
+            memberId: workspaceProvisionMember.id,
+            primaryEmail,
+            extraFields,
+          });
         }}
       />
 
@@ -941,6 +1046,16 @@ export function MemberAdmin({
         isPending={approveAction.isPending}
         submitError={workspaceApproveError}
         provisionFields={workspaceProvisionFields}
+        onSkip={() => {
+          if (!workspaceApproveMember) return;
+          setWorkspaceApproveError(null);
+          setApprovingMemberId(workspaceApproveMember.id);
+          approveAction.execute({
+            memberId: workspaceApproveMember.id,
+            role: workspaceApproveMember.role,
+            skipWorkspaceAccount: true,
+          });
+        }}
         onConfirm={async ({ primaryEmail, extraFields }) => {
           if (!workspaceApproveMember) return;
           setWorkspaceApproveError(null);

@@ -15,6 +15,7 @@ import {
   createWorkspaceAccountSchema,
   deleteMemberSchema,
   importMembersSchema,
+  provisionMemberWorkspaceAccountSchema,
   resendMemberInviteSchema,
   searchWorkspaceUsersSchema,
   updateMemberSchema,
@@ -42,7 +43,10 @@ import {
 import { hardDeleteMembers, softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
-import { upsertMemberCustomFieldAnswers } from "@/server/lib/member-custom-field-values";
+import {
+  upsertMemberCustomFieldAnswers,
+  validateMemberCustomFieldAnswers,
+} from "@/server/lib/member-custom-field-values";
 import {
   WorkspaceApiError,
   WorkspaceNotConnectedError,
@@ -259,13 +263,44 @@ export const createShadowMemberAction = authActionClient
       }
     }
 
-    await db.transaction(async (tx) => {
-      const [{ id: memberId }] = await tx.insert(tenantMembers).values({
+    const customFields = await listMemberCustomFields(organization.id);
+    /**
+     * Only the fields the create form actually shows, and "required" enforced
+     * exactly where the join form enforces it. Validating against every stored
+     * field rejected the submission over inactive or post-approval answers the
+     * admin was never offered — an error with no input to attach it to.
+     */
+    const creationFields = customFields
+      .filter((field) => field.isActive)
+      .map((field) =>
+        field.stage === "registration" ? field : { ...field, required: false },
+      );
+
+    // Validated before the insert, not inside it: a bad answer should leave no
+    // member row behind for the admin to clean up.
+    const answerValidation = await validateMemberCustomFieldAnswers(
+      creationFields,
+      parsedInput.customFieldAnswers,
+    );
+
+    if (Object.keys(answerValidation.errors).length > 0) {
+      return {
+        success: false as const,
+        customFieldErrors: answerValidation.errors,
+        createdBy: ctx.auth.user.email,
+      };
+    }
+
+    const firstName = parsedInput.firstName.trim();
+    const lastName = parsedInput.lastName.trim();
+
+    const memberId = await db.transaction(async (tx) => {
+      const [{ id }] = await tx.insert(tenantMembers).values({
         orgId: organization.id,
         userId: matchedUser?.id ?? null,
         email,
-        firstName: parsedInput.firstName.trim(),
-        lastName: parsedInput.lastName.trim(),
+        firstName,
+        lastName,
         role: resolveAllowedRole(
           parsedInput.role,
           scope.canAssignElevatedRoles,
@@ -279,16 +314,30 @@ export const createShadowMemberAction = authActionClient
       await syncManageableGroupMemberships({
         tx,
         orgId: organization.id,
-        memberId,
+        memberId: id,
         allowedGroupIds: scope.manageableGroupCategories.flatMap((category) =>
           category.groups.map((group) => group.id),
         ),
         nextGroupIds: groupIds,
       });
+
+      await upsertMemberCustomFieldAnswers(tx, {
+        orgId: organization.id,
+        memberId: id,
+        fields: creationFields,
+        answers: parsedInput.customFieldAnswers,
+      });
+
+      return id;
     });
 
+    // Workspace accounts are never created here. The member has to exist first
+    // for the provisioning dialog to resolve its auto-filled fields, so the
+    // caller re-opens that dialog with `memberId` when the admin asked for one.
     return {
-      success: true,
+      success: true as const,
+      memberId,
+      customFieldErrors: {} as Record<string, string[]>,
       createdBy: ctx.auth.user.email,
     };
   });
@@ -305,6 +354,13 @@ export const approveMemberAction = authActionClient
        * approval is refused rather than silently skipping provisioning.
        */
       acknowledgeWorkspaceUnavailable: z.boolean().default(false),
+      /**
+       * The admin deliberately approved without provisioning a Google account.
+       * Distinct from `acknowledgeWorkspaceUnavailable`, which is about a
+       * broken connection — this one is a choice, and it stands even when
+       * Workspace is perfectly healthy.
+       */
+      skipWorkspaceAccount: z.boolean().default(false),
       workspace: z
         .object({
           primaryEmail: z.email(),
@@ -329,7 +385,8 @@ export const approveMemberAction = authActionClient
       parsedInput.role,
       scope.canAssignElevatedRoles,
     );
-    const workspaceReady = isWorkspaceModuleReady(organization);
+    const workspaceReady =
+      isWorkspaceModuleReady(organization) && !parsedInput.skipWorkspaceAccount;
 
     if (workspaceReady) {
       if (!parsedInput.workspace?.primaryEmail) {
@@ -415,7 +472,8 @@ export const approveMemberAction = authActionClient
     // the warning rather than letting provisioning be skipped silently.
     if (
       organization.workspaceModuleEnabled &&
-      !parsedInput.acknowledgeWorkspaceUnavailable
+      !parsedInput.acknowledgeWorkspaceUnavailable &&
+      !parsedInput.skipWorkspaceAccount
     ) {
       throw new Error(
         "Google Workspace is enabled but not connected, so no account can be created. Connect it in Settings → Google Workspace, or approve without a Workspace account.",
@@ -1264,6 +1322,62 @@ export const createWorkspaceAccountAction = authActionClient
       welcomeEmailSent,
       /** Set when the caller asked for a welcome email we could not address. */
       welcomeEmailSkipped: parsedInput.sendWelcomeEmail && !canNotify,
+    };
+  });
+
+/**
+ * Creates the Google account for a member who already exists — the case the
+ * approval flow skipped, or a member created without one. Membership status is
+ * left alone on purpose: this is provisioning, not approval.
+ */
+export const provisionMemberWorkspaceAccountAction = authActionClient
+  .metadata({ actionName: "provisionMemberWorkspaceAccount" })
+  .inputSchema(provisionMemberWorkspaceAccountSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+    const member = await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+    });
+
+    if (!isWorkspaceModuleReady(organization)) {
+      throw new Error(
+        "Google Workspace is not connected. Connect it in Settings → Google Workspace first.",
+      );
+    }
+
+    if (member.workspaceUserId) {
+      throw new Error(
+        `This member already has a Workspace account (${member.workspaceUserEmail ?? "linked"}).`,
+      );
+    }
+
+    const provision = await provisionWorkspaceAccountForMember({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      firstName: member.firstName ?? "",
+      lastName: member.lastName ?? "",
+      primaryEmail: parsedInput.primaryEmail.trim().toLowerCase(),
+      toEmail: (member.email ?? "").trim().toLowerCase(),
+      actorUserId: ctx.auth.user.id,
+      extraFields: parsedInput.extraFields,
+    });
+
+    if (!provision.success) {
+      return {
+        success: false as const,
+        error: provision.error,
+        reason: provision.reason ?? null,
+      };
+    }
+
+    return {
+      success: true as const,
+      primaryEmail: provision.primaryEmail,
     };
   });
 

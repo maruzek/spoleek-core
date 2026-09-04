@@ -1,8 +1,11 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 
+import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import { MemberGroupAssignmentField } from "@/components/app/member-group-assignment-field";
+import type { MemberCustomField } from "@/server/db/schema";
 import {
   createMemberSchema,
   type CreateMemberValues,
@@ -17,6 +20,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -52,6 +58,9 @@ export function MemberSheet({
   accessLevel,
   roleOptions,
   manageableGroupCategories,
+  customFields,
+  customFieldErrors,
+  workspaceReady,
   serverError,
   validationErrors,
   onOpenChange,
@@ -62,11 +71,41 @@ export function MemberSheet({
   accessLevel: "full" | "scoped";
   roleOptions: TenantRole[];
   manageableGroupCategories: MemberManagementGroupCategory[];
+  customFields: MemberCustomField[];
+  customFieldErrors?: Record<string, string[]>;
+  /** Workspace module is enabled, connected, and has a domain. */
+  workspaceReady?: boolean;
   serverError?: string;
   validationErrors?: MemberSheetValidationErrors;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (value: ShadowMemberFormValues) => Promise<void>;
+  /** Resolves to `true` when the member was actually created. */
+  onSubmit: (
+    value: ShadowMemberFormValues,
+    options: { createWorkspaceAccount: boolean },
+  ) => Promise<boolean>;
 }) {
+  /**
+   * Only fields the org still collects. Inactive ones stay editable on the
+   * member's own page, but offering them at creation time would ask admins to
+   * fill in something the org has retired.
+   *
+   * "Required" is kept only for registration-stage fields — the same ones the
+   * join form insists on. An admin creating a record up front cannot be
+   * expected to know an answer the member only gives after approval, and the
+   * server enforces the identical rule.
+   */
+  const activeCustomFields = useMemo(
+    () =>
+      customFields
+        .filter((field) => field.isActive)
+        .map((field) =>
+          field.stage === "registration"
+            ? field
+            : { ...field, required: false },
+        ),
+    [customFields],
+  );
+
   const defaultValues: ShadowMemberFormValues = {
     firstName: "",
     lastName: "",
@@ -74,7 +113,17 @@ export function MemberSheet({
     role: "member",
     status: "active",
     groupIds: [],
+    customFieldAnswers: Object.fromEntries(
+      activeCustomFields.map((field) => [field.key, null]),
+    ),
   };
+
+  /**
+   * Opt-in only. The account itself is set up in the provisioning dialog after
+   * the member exists — that dialog can only auto-fill Google's fields from a
+   * saved member record, so asking for the address here would be guesswork.
+   */
+  const [createAccount, setCreateAccount] = useState(false);
 
   const form = useForm({
     defaultValues,
@@ -85,8 +134,18 @@ export function MemberSheet({
         return;
       }
 
-      await onSubmit(parsed.data);
+      const created = await onSubmit(parsed.data, {
+        createWorkspaceAccount: createAccount && Boolean(workspaceReady),
+      });
+
+      // Resetting on failure wiped everything the admin had typed and left the
+      // server's field errors pointing at empty inputs.
+      if (!created) {
+        return;
+      }
+
       form.reset();
+      setCreateAccount(false);
     },
   });
 
@@ -352,6 +411,59 @@ export function MemberSheet({
                 )}
               </form.Field>
 
+              {activeCustomFields.length > 0 ? (
+                <>
+                  <Separator />
+                  <Field>
+                    <FieldLabel>Custom member fields</FieldLabel>
+                    <FieldDescription>
+                      The same fields applicants answer when they join. Leave
+                      any of them empty to collect the answer later.
+                    </FieldDescription>
+                  </Field>
+
+                  {activeCustomFields.map((customField) => (
+                    <form.Field
+                      key={customField.id}
+                      name={`customFieldAnswers.${customField.key}` as never}
+                    >
+                      {(formField) => (
+                        <MemberCustomFieldInput
+                          field={customField}
+                          value={formField.state.value}
+                          error={customFieldErrors?.[customField.key]?.[0]}
+                          onChange={(value) =>
+                            formField.handleChange(value as never)
+                          }
+                        />
+                      )}
+                    </form.Field>
+                  ))}
+                </>
+              ) : null}
+
+              {workspaceReady ? (
+                <>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+                    <div className="flex flex-col gap-0.5">
+                      <Label className="text-sm">
+                        Create a Google Workspace account
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Opens the account setup step right after the member is
+                        created. Leave it off to add the account later from the
+                        member&apos;s page.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={createAccount}
+                      onCheckedChange={setCreateAccount}
+                    />
+                  </div>
+                </>
+              ) : null}
+
               {serverError ? (
                 <div className="mt-4 rounded-2xl border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                   {serverError}
@@ -362,7 +474,11 @@ export function MemberSheet({
 
           <SheetFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating..." : "Create profile"}
+              {isPending
+                ? "Creating..."
+                : createAccount && workspaceReady
+                  ? "Create profile & continue"
+                  : "Create profile"}
             </Button>
           </SheetFooter>
         </form>
