@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
@@ -74,7 +74,14 @@ function getResendAvailability(params: {
   };
 }
 
-export async function listOrganizationEmailActivities(orgId: string) {
+export async function listOrganizationEmailActivities(
+  orgId: string,
+  options?: {
+    /** Narrow to one member so the member record and the org dashboard render
+     *  from identical rows instead of two divergent shapes. */
+    memberId?: string;
+  },
+) {
   const rows = await db
     .select({
       id: emailActivities.id,
@@ -112,7 +119,14 @@ export async function listOrganizationEmailActivities(orgId: string) {
     .from(emailActivities)
     .leftJoin(tenantMembers, eq(tenantMembers.id, emailActivities.memberId))
     .leftJoin(memberInvites, eq(memberInvites.id, emailActivities.inviteId))
-    .where(eq(emailActivities.orgId, orgId))
+    .where(
+      and(
+        eq(emailActivities.orgId, orgId),
+        options?.memberId
+          ? eq(emailActivities.memberId, options.memberId)
+          : undefined,
+      ),
+    )
     .orderBy(emailActivities.lastStatusAt);
 
   return rows
@@ -243,3 +257,16 @@ export async function getOrganizationEmailActivityDetail(orgId: string, activity
     events,
   };
 }
+
+/** One member's outbound email history, in the same row shape the dashboard uses. */
+export async function listMemberEmailActivities(orgId: string, memberId: string) {
+  return listOrganizationEmailActivities(orgId, { memberId });
+}
+
+export type EmailActivityRow = Awaited<
+  ReturnType<typeof listOrganizationEmailActivities>
+>[number];
+
+export type EmailActivityDetail = NonNullable<
+  Awaited<ReturnType<typeof getOrganizationEmailActivityDetail>>
+>;

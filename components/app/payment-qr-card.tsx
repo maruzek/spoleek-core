@@ -14,18 +14,24 @@ import {
   formatFeeAmount,
   getPaymentTitle,
 } from "@/lib/payments";
-import { useAppShell } from "@/components/app/app-shell-provider";
 import { cn } from "@/lib/utils";
 import type { MemberPayment } from "@/server/db/schema";
 
-export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
-  const { member } = useAppShell();
+export function PaymentQrCard({
+  payment,
+  payerName,
+}: {
+  payment: MemberPayment;
+  /**
+   * Who owes this payment. Taken as a prop rather than read from the app shell
+   * so an admin viewing someone else's record does not end up in the SPD
+   * string as the payer.
+   */
+  payerName?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
-  const memberName = member
-    ? [member.firstName, member.lastName].filter(Boolean).join(" ") || undefined
-    : undefined;
-
+  const memberName = payerName?.trim() || undefined;
   const spdString = buildSpdString(payment, memberName);
   const account = payment.bankAccount
     ? formatBankAccount(payment.bankAccount)
@@ -109,7 +115,14 @@ export function PaymentQrCard({ payment }: { payment: MemberPayment }) {
           </span>
         </div>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-          {isOverdue ? `${(<TriangleAlertIcon />)} Overdue since` : "Due by"}{" "}
+          {isOverdue ? (
+            <>
+              <TriangleAlertIcon className="mr-1 inline size-3 align-[-1px]" />
+              Overdue since
+            </>
+          ) : (
+            "Due by"
+          )}{" "}
           <span className={cn("font-medium", isOverdue && "text-destructive")}>
             {formatDateTime(payment.dueAt)}
           </span>

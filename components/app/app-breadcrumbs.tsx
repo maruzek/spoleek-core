@@ -62,9 +62,11 @@ export function AppBreadcrumbs() {
             .slice(0, index + 1)
             .filter((value) => isDynamicId(value)).length;
           const label = isDynamicId(segment)
-            ? dynamicSegmentsBefore === 1
-              ? "Category"
-              : "Group"
+            ? segments[0] === "members"
+              ? "Member"
+              : dynamicSegmentsBefore === 1
+                ? "Category"
+                : "Group"
             : getLabel(segment);
 
           return (

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
   createColumnHelper,
@@ -48,21 +48,17 @@ import {
   approveMemberAction,
   bulkDeleteMembersAction,
   createShadowMemberAction,
-  deleteMemberAction,
   rejectMemberAction,
   resendMemberInviteAction,
-  updateMemberAction,
 } from "@/server/actions/member-admin";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
 import type {
   MemberAdminAccess,
-  MemberEditorMetadata,
   MemberGroupAssignment,
   MemberInviteState,
   MembersTableCategory,
 } from "@/server/queries/members";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
-import { MemberEditSheet } from "./member-edit-sheet";
 import { MemberImportDialog } from "./member-import/index";
 import { MailingListAction } from "./mailing-list-action";
 import {
@@ -97,12 +93,6 @@ type MemberRow = {
   customFieldValues: Record<string, string>;
   groupAssignmentsByCategory: Record<string, MemberGroupAssignment[]>;
   inviteState: MemberInviteState;
-};
-
-type MemberEditorData = {
-  member: Omit<TenantMember, "status"> & { status: VisibleMemberStatus };
-  customFieldAnswers: Record<string, unknown>;
-  metadata: MemberEditorMetadata;
 };
 
 function resolvePreferredEmailForRow(
@@ -208,7 +198,6 @@ export function MemberAdmin({
   customFields,
   memberCategories,
   manageableGroupCategories,
-  selectedMember,
   workspace,
   workspaceProvisionFields = [],
   groupsById,
@@ -219,15 +208,12 @@ export function MemberAdmin({
   customFields: MemberCustomField[];
   memberCategories: MembersTableCategory[];
   manageableGroupCategories: MemberManagementGroupCategory[];
-  selectedMember: MemberEditorData | null;
   workspace: WorkspaceModuleProp;
   workspaceProvisionFields?: EnabledProvisionField[];
   groupsById?: Map<string, { id: string; name: string; categoryId: string; workspaceOrgUnitPath: string | null }>;
   orgUnitCategoryId?: string | null;
 }) {
-  const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -259,21 +245,12 @@ export function MemberAdmin({
   const { organization } = useAppShell();
   const { defaultEmailPreference } = organization;
 
-  const updateSearchParam = useCallback(
-    (memberId: string | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-
-      if (memberId) {
-        params.set("edit", memberId);
-      } else {
-        params.delete("edit");
-      }
-
-      const nextUrl =
-        params.toString().length > 0 ? `${pathname}?${params}` : pathname;
-      router.replace(nextUrl, { scroll: false });
+  /** The member record lives on its own route now, not in a side sheet. */
+  const openMember = useCallback(
+    (memberId: string) => {
+      router.push(`/admin/members/${memberId}`);
     },
-    [pathname, router, searchParams],
+    [router],
   );
 
   const createAction = useAction(createShadowMemberAction, {
@@ -333,15 +310,8 @@ export function MemberAdmin({
    * through here so the Workspace provisioning dialog is never skipped.
    */
   const startApproval = useCallback(
-    (member: WorkspaceApprovalMember, { fromEditSheet = false } = {}) => {
+    (member: WorkspaceApprovalMember) => {
       setWorkspaceApproveError(null);
-
-      // The provisioning dialog and the edit sheet are both z-50 modals, so a
-      // dialog opened while the sheet is up renders underneath it. Close the
-      // sheet first — approval reloads the record anyway.
-      if (fromEditSheet) {
-        updateSearchParam(null);
-      }
 
       if (workspaceReady) {
         setWorkspaceApproveMember(member);
@@ -356,15 +326,9 @@ export function MemberAdmin({
       setApprovingMemberId(member.id);
       approveAction.execute({ memberId: member.id, role: member.role });
     },
-    [approveAction, updateSearchParam, workspaceMisconfigured, workspaceReady],
+    [approveAction, workspaceMisconfigured, workspaceReady],
   );
 
-  const updateAction = useAction(updateMemberAction, {
-    onSuccess() {
-      updateSearchParam(null);
-      router.refresh();
-    },
-  });
   const resendInviteAction = useAction(resendMemberInviteAction, {
     onSuccess({ data }) {
       if (!data) {
@@ -401,34 +365,11 @@ export function MemberAdmin({
 
       setRejectMember(null);
       setRejectReason("");
-      updateSearchParam(null);
       toast.success("Application rejected. The applicant has been emailed.");
       router.refresh();
     },
     onError({ error }) {
       toast.error(error.serverError ?? "Could not reject this application.");
-    },
-  });
-  const deleteAction = useAction(deleteMemberAction, {
-    onSuccess({ data }) {
-      if (!data) {
-        return;
-      }
-
-      if (data.deletedCount > 0) {
-        setBulkDeleteOpen(false);
-        updateSearchParam(null);
-        toast.success("Member deleted.");
-        router.refresh();
-        return;
-      }
-
-      if (data.skippedProtectedCount > 0) {
-        toast.error("Org admins cannot be deleted.");
-        return;
-      }
-
-      toast.error("Member was already deleted or unavailable.");
     },
   });
   const bulkDeleteAction = useAction(bulkDeleteMembersAction, {
@@ -510,18 +451,14 @@ export function MemberAdmin({
             const member = row.original;
 
             return (
-              <button
-                type="button"
-                onClick={() => updateSearchParam(member.id)}
+              <Link
+                href={`/admin/members/${member.id}`}
                 className="flex min-w-0 max-w-[18rem] flex-col gap-1 rounded-md text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
               >
                 <span className="truncate font-medium text-foreground underline-offset-4 hover:underline">
                   {getMemberDisplayName(member)}
                 </span>
-                {/* <span className="truncate text-sm text-muted-foreground">
-                    {member.email || "No email yet"}
-                  </span> */}
-              </button>
+              </Link>
             );
           },
         },
@@ -774,14 +711,11 @@ export function MemberAdmin({
                     : "Send invite"}
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => updateSearchParam(member.id)}
-              >
-                <PencilIcon data-icon="inline-start" />
-                Edit
+              <Button size="sm" variant="outline" asChild>
+                <Link href={`/admin/members/${member.id}`}>
+                  <PencilIcon data-icon="inline-start" />
+                  Open
+                </Link>
               </Button>
             </div>
           );
@@ -802,7 +736,6 @@ export function MemberAdmin({
     customFields,
     memberCategories,
     resendInviteAction,
-    updateSearchParam,
     workspaceReady,
   ]);
 
@@ -912,6 +845,7 @@ export function MemberAdmin({
         }
         initialColumnVisibility={initialColumnVisibility}
         toolbarActions={renderToolbarActions}
+        onRowClick={(member) => openMember(member.id)}
       />
 
       <MemberSheet
@@ -940,64 +874,6 @@ export function MemberAdmin({
         defaultPhoneCountry={workspace.countryCode}
         onDone={() => router.refresh()}
       />
-
-      {selectedMember ? (
-        <MemberEditSheet
-          key={selectedMember.member.id}
-          open={true}
-          onOpenChange={(open) => {
-            if (!open) {
-              updateSearchParam(null);
-            }
-          }}
-          member={selectedMember.member}
-          metadata={selectedMember.metadata}
-          canDelete={selectedMember.member.role !== "org_admin"}
-          accessLevel={access.level}
-          customFields={customFields}
-          customFieldAnswers={selectedMember.customFieldAnswers}
-          manageableGroupCategories={manageableGroupCategories}
-          roleOptions={access.roleOptions}
-          isDeletePending={deleteAction.isPending}
-          isPending={updateAction.isPending}
-          isApprovePending={approvingMemberId === selectedMember.member.id}
-          isRejectPending={rejectAction.isPending}
-          onReject={() => {
-            setRejectReason("");
-            setRejectMember({
-              id: selectedMember.member.id,
-              name:
-                `${selectedMember.member.firstName} ${selectedMember.member.lastName}`.trim() ||
-                selectedMember.member.email ||
-                "this applicant",
-              email: selectedMember.member.email,
-            });
-          }}
-          onApprove={() =>
-            startApproval(
-              {
-                id: selectedMember.member.id,
-                firstName: selectedMember.member.firstName,
-                lastName: selectedMember.member.lastName,
-                email: selectedMember.member.email,
-                role: selectedMember.member.role,
-              },
-              { fromEditSheet: true },
-            )
-          }
-          serverError={updateAction.result.serverError}
-          validationErrors={updateAction.result.validationErrors}
-          customFieldErrors={updateAction.result.data?.customFieldErrors}
-          onDelete={async () => {
-            await deleteAction.executeAsync({
-              memberId: selectedMember.member.id,
-            });
-          }}
-          onSubmit={async (value) => {
-            await updateAction.executeAsync(value);
-          }}
-        />
-      ) : null}
 
       <AlertDialog
         open={Boolean(unconnectedWarningMember)}

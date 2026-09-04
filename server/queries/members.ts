@@ -37,6 +37,9 @@ export type MemberGroupAssignment = {
   name: string;
   categoryId: string;
   categoryName: string;
+  /** The category earns its own column in the members table, so it is also
+   *  promoted onto the member's overview instead of living only in the tab. */
+  categoryShowInMembersTable: boolean;
   role: "member" | "group_admin";
   assignedAt: Date;
 };
@@ -268,6 +271,7 @@ async function listMemberGroupAssignments(
       name: groups.name,
       categoryId: groupCategories.id,
       categoryName: groupCategories.name,
+      categoryShowInMembersTable: groupCategories.showInMembersTable,
       role: groupMemberships.role,
       assignedAt: groupMemberships.createdAt,
     })
@@ -284,6 +288,7 @@ async function listMemberGroupAssignments(
       name: row.name,
       categoryId: row.categoryId,
       categoryName: row.categoryName,
+      categoryShowInMembersTable: row.categoryShowInMembersTable,
       role: row.role,
       assignedAt: row.assignedAt,
     });
@@ -687,10 +692,57 @@ export async function getMembersByIds(orgId: string, memberIds: string[]) {
     );
 }
 
+/**
+ * Workspace module snapshot shared by the members table and the member detail
+ * page. Both need the same "is provisioning even possible right now" answer,
+ * so it lives in one query instead of being re-derived per route.
+ */
+export async function getWorkspaceModuleState(
+  orgId: string,
+): Promise<WorkspaceModuleState> {
+  const [organization, ouCategory] = await Promise.all([
+    db
+      .select({
+        workspaceModuleEnabled: organizationsTable.workspaceModuleEnabled,
+        workspaceConnectedAt: organizationsTable.workspaceConnectedAt,
+        workspaceDomain: organizationsTable.workspaceDomain,
+        workspaceEmailTemplate: organizationsTable.workspaceEmailTemplate,
+        workspaceProvisionFields: organizationsTable.workspaceProvisionFields,
+        countryCode: organizationsTable.countryCode,
+      })
+      .from(organizationsTable)
+      .where(eq(organizationsTable.id, orgId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+    db
+      .select({ id: groupCategories.id })
+      .from(groupCategories)
+      .where(
+        and(
+          eq(groupCategories.orgId, orgId),
+          eq(groupCategories.specialCapability, "workspace_org_unit"),
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
+  ]);
+
+  return {
+    enabled: Boolean(organization?.workspaceModuleEnabled),
+    connected: Boolean(organization?.workspaceConnectedAt),
+    domain: organization?.workspaceDomain ?? null,
+    emailTemplate: organization?.workspaceEmailTemplate ?? "{first}.{last}",
+    orgUnitCategoryId: ouCategory?.id ?? null,
+    countryCode: organization?.countryCode ?? DEFAULT_PHONE_COUNTRY,
+    provisionFields: (organization?.workspaceProvisionFields ??
+      []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[],
+  };
+}
+
 export async function getMembersAdminPageData(editMemberId: string | null) {
   const scope = await resolveMemberManagementScope();
 
-  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, organization, ouCategory] =
+  const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, workspace] =
     await Promise.all([
       listTenantMembers(scope.organizationId, {
         visibleGroupIds: scope.managedGroupIds,
@@ -705,30 +757,7 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
             visibleGroupIds: scope.managedGroupIds,
           })
         : Promise.resolve(null),
-      db
-        .select({
-          workspaceModuleEnabled: organizationsTable.workspaceModuleEnabled,
-          workspaceConnectedAt: organizationsTable.workspaceConnectedAt,
-          workspaceDomain: organizationsTable.workspaceDomain,
-          workspaceEmailTemplate: organizationsTable.workspaceEmailTemplate,
-          workspaceProvisionFields: organizationsTable.workspaceProvisionFields,
-          countryCode: organizationsTable.countryCode,
-        })
-        .from(organizationsTable)
-        .where(eq(organizationsTable.id, scope.organizationId))
-        .limit(1)
-        .then((rows) => rows[0] ?? null),
-      db
-        .select({ id: groupCategories.id })
-        .from(groupCategories)
-        .where(
-          and(
-            eq(groupCategories.orgId, scope.organizationId),
-            eq(groupCategories.specialCapability, "workspace_org_unit"),
-          ),
-        )
-        .limit(1)
-        .then((rows) => rows[0] ?? null),
+      getWorkspaceModuleState(scope.organizationId),
     ]);
 
   return {
@@ -743,15 +772,6 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
     memberCategories,
     manageableGroupCategories,
     selectedMember,
-    workspace: {
-      enabled: Boolean(organization?.workspaceModuleEnabled),
-      connected: Boolean(organization?.workspaceConnectedAt),
-      domain: organization?.workspaceDomain ?? null,
-      emailTemplate:
-        organization?.workspaceEmailTemplate ?? "{first}.{last}",
-      orgUnitCategoryId: ouCategory?.id ?? null,
-      countryCode: organization?.countryCode ?? DEFAULT_PHONE_COUNTRY,
-      provisionFields: (organization?.workspaceProvisionFields ?? []) as import("@/server/lib/workspace/field-catalog").WorkspaceProvisionFieldConfig[],
-    },
+    workspace,
   } satisfies MembersAdminPageData;
 }

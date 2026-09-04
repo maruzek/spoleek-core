@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { AppPage } from "@/components/app/app-page";
@@ -19,14 +20,16 @@ export default async function AdminMembersPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = searchParams ? await searchParams : {};
-  const editMemberId =
-    typeof params.edit === "string" && params.edit.length > 0
-      ? params.edit
-      : null;
+
+  // `?edit=<id>` was how the old side sheet opened. Keep old links working by
+  // forwarding them to the member's own route.
+  if (typeof params.edit === "string" && params.edit.length > 0) {
+    redirect(`/admin/members/${params.edit}`);
+  }
 
   const organization = await getAppOrganization();
   const [data, orgGroups] = await Promise.all([
-    getMembersAdminPageData(editMemberId),
+    getMembersAdminPageData(null),
     organization
       ? db
           .select({
@@ -79,18 +82,6 @@ export default async function AdminMembersPage({
         customFields={data.customFields}
         memberCategories={data.memberCategories}
         manageableGroupCategories={data.manageableGroupCategories}
-        selectedMember={
-          data.selectedMember
-            ? {
-                ...data.selectedMember,
-                member: {
-                  ...data.selectedMember.member,
-                  status: data.selectedMember.member
-                    .status as VisibleMemberStatus,
-                },
-              }
-            : null
-        }
         workspace={data.workspace}
         workspaceProvisionFields={enabledProvisionFields}
         groupsById={groupsById}

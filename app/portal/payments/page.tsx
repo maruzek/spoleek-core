@@ -43,7 +43,13 @@ export default async function PortalPaymentsPage() {
           </div>
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {overduePayments.map((payment) => (
-              <PaymentQrCard key={payment.id} payment={payment} />
+              <PaymentQrCard
+                key={payment.id}
+                payment={payment}
+                payerName={[member.firstName, member.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
             ))}
           </div>
         </div>
@@ -59,7 +65,13 @@ export default async function PortalPaymentsPage() {
           </div>
           <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {pendingPayments.map((payment) => (
-              <PaymentQrCard key={payment.id} payment={payment} />
+              <PaymentQrCard
+                key={payment.id}
+                payment={payment}
+                payerName={[member.firstName, member.lastName]
+                  .filter(Boolean)
+                  .join(" ")}
+              />
             ))}
           </div>
         </div>

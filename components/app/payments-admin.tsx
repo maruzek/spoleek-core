@@ -4,63 +4,25 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CheckIcon, RefreshCwIcon, XIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+import { PaymentActions } from "@/components/app/payments/payment-actions";
+import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-dialog";
+import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/format";
-import { DatePicker } from "@/components/ui/date-picker";
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
-  cancelPaymentAction,
   generatePaymentsAction,
-  markPaymentPaidAction,
-  type CancellationReason,
 } from "@/server/actions/payments";
 import type { MemberPaymentStatus } from "@/server/db/schema";
 import type { PaymentRow } from "@/server/queries/payments";
 
 const columnHelper = createColumnHelper<PaymentRow>();
-
-const CANCELLATION_REASON_LABELS: Record<CancellationReason, string> = {
-  duplicate: "Duplicate payment",
-  waived: "Fee waived",
-  admin_error: "Admin error",
-  other: "Other",
-};
-
-function PaymentStatusBadge({ status }: { status: MemberPaymentStatus }) {
-  const variantMap: Record<MemberPaymentStatus, "destructive" | "secondary" | "default" | "outline"> = {
-    overdue: "destructive",
-    pending: "secondary",
-    paid: "default",
-    cancelled: "outline",
-  };
-  return <Badge variant={variantMap[status]}>{status}</Badge>;
-}
 
 function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
   const counts = payments.reduce(
@@ -100,206 +62,9 @@ function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
   );
 }
 
-function MarkPaidDialog({
-  open,
-  onOpenChange,
-  payment,
-  onSuccess,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  payment: PaymentRow;
-  onSuccess: () => void;
-}) {
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const [paidDate, setPaidDate] = useState(todayIso);
-  const [adminNote, setAdminNote] = useState("");
-
-  const markPaid = useAction(markPaymentPaidAction, {
-    onSuccess() {
-      toast.success("Payment marked as paid.");
-      onOpenChange(false);
-      onSuccess();
-    },
-    onError({ error }) {
-      toast.error(error.serverError ?? "Could not update payment.");
-    },
-  });
-
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Mark payment as paid</AlertDialogTitle>
-          <AlertDialogDescription>
-            Confirm that <strong>{payment.memberName}</strong> has paid{" "}
-            <strong>{formatFeeAmount(payment.amount, payment.currency)}</strong> for{" "}
-            {getPaymentTitle(payment.type, payment.periodLabel)}.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel>Payment date</FieldLabel>
-            <DatePicker
-              id="payment-paid-date"
-              value={paidDate}
-              endMonth={new Date()}
-              disabledDates={{ after: new Date() }}
-              onChange={setPaidDate}
-            />
-          </Field>
-          <Field>
-            <FieldLabel>Note (optional)</FieldLabel>
-            <Textarea
-              placeholder="Optional note (e.g. bank reference, receipt ID)"
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              rows={2}
-            />
-          </Field>
-        </FieldGroup>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() =>
-              markPaid.execute({
-                paymentId: payment.id,
-                paidAt: paidDate ? new Date(paidDate).toISOString() : undefined,
-                adminNote: adminNote.trim() || undefined,
-              })
-            }
-            disabled={markPaid.isPending}
-          >
-            <CheckIcon data-icon="inline-start" />
-            Mark as paid
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-function CancelDialog({
-  open,
-  onOpenChange,
-  payment,
-  onSuccess,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  payment: PaymentRow;
-  onSuccess: () => void;
-}) {
-  const [reason, setReason] = useState<CancellationReason | "">("");
-  const [adminNote, setAdminNote] = useState("");
-
-  const cancel = useAction(cancelPaymentAction, {
-    onSuccess() {
-      toast.success("Payment cancelled.");
-      onOpenChange(false);
-      onSuccess();
-    },
-    onError({ error }) {
-      toast.error(error.serverError ?? "Could not cancel payment.");
-    },
-  });
-
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Cancel payment</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently cancel the payment record for{" "}
-            <strong>{payment.memberName}</strong>. This cannot be undone.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel>Reason</FieldLabel>
-            <Select value={reason} onValueChange={(v) => setReason(v as CancellationReason)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a reason..." />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(CANCELLATION_REASON_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field>
-            <FieldLabel>Note (optional)</FieldLabel>
-            <Textarea
-              placeholder="Optional note"
-              value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
-              rows={2}
-            />
-          </Field>
-        </FieldGroup>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Go back</AlertDialogCancel>
-          <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            onClick={() =>
-              cancel.execute({
-                paymentId: payment.id,
-                cancellationReason: reason as CancellationReason,
-                adminNote: adminNote.trim() || undefined,
-              })
-            }
-            disabled={!reason || cancel.isPending}
-          >
-            <XIcon data-icon="inline-start" />
-            Cancel payment
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
-function PaymentRowActions({ payment, onSuccess }: { payment: PaymentRow; onSuccess: () => void }) {
-  const [markPaidOpen, setMarkPaidOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-
-  if (payment.status === "paid" || payment.status === "cancelled") {
-    return null;
-  }
-
-  return (
-    <>
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="outline" onClick={() => setMarkPaidOpen(true)}>
-          <CheckIcon data-icon="inline-start" />
-          Mark paid
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setCancelOpen(true)}>
-          <XIcon data-icon="inline-start" />
-          Cancel
-        </Button>
-      </div>
-      <MarkPaidDialog
-        open={markPaidOpen}
-        onOpenChange={setMarkPaidOpen}
-        payment={payment}
-        onSuccess={onSuccess}
-      />
-      <CancelDialog
-        open={cancelOpen}
-        onOpenChange={setCancelOpen}
-        payment={payment}
-        onSuccess={onSuccess}
-      />
-    </>
-  );
-}
-
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
   const router = useRouter();
+  const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
 
   const generate = useAction(generatePaymentsAction, {
     onSuccess({ data }) {
@@ -389,7 +154,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       id: "actions",
       header: "",
       cell: ({ row }) => (
-        <PaymentRowActions
+        <PaymentActions
           payment={row.original}
           onSuccess={() => router.refresh()}
         />
@@ -408,6 +173,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         searchPlaceholder="Filter by member..."
         emptyStateTitle="No payment records"
         emptyStateDescription="Generate payment records for the current renewal period or wait for the nightly cron."
+        onRowClick={(payment) => setDetailPayment(payment)}
         toolbarActions={(table) => {
           const selected = table
             .getFilteredSelectedRowModel()
@@ -439,6 +205,18 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
               )}
             </>
           );
+        }}
+      />
+
+      <PaymentDetailDialog
+        payment={detailPayment}
+        open={detailPayment !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailPayment(null);
+        }}
+        onSuccess={() => {
+          setDetailPayment(null);
+          router.refresh();
         }}
       />
     </div>

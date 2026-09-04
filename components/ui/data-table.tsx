@@ -66,7 +66,16 @@ interface DataTableProps<TData, TValue> {
   emptyStateDescription?: string;
   initialColumnVisibility?: VisibilityState;
   toolbarActions?: (table: TanStackTable<TData>) => React.ReactNode;
+  /**
+   * Opt-in row navigation. Clicks that land on an interactive element inside
+   * the row (checkbox, button, link, menu) are ignored, so selection and
+   * per-row actions keep working.
+   */
+  onRowClick?: (row: TData) => void;
 }
+
+const INTERACTIVE_SELECTOR =
+  "a,button,input,select,textarea,label,[role='button'],[role='checkbox'],[role='menuitem'],[data-slot='checkbox']";
 
 function getColumnMenuLabel(column: {
   id: string;
@@ -97,6 +106,7 @@ export function DataTable<TData, TValue>({
   emptyStateDescription = "Try adjusting your filters.",
   initialColumnVisibility = {},
   toolbarActions,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -193,6 +203,21 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className={onRowClick ? "cursor-pointer" : undefined}
+                  onClick={
+                    onRowClick
+                      ? (event) => {
+                          if (
+                            (event.target as HTMLElement).closest(
+                              INTERACTIVE_SELECTOR,
+                            )
+                          ) {
+                            return;
+                          }
+                          onRowClick(row.original);
+                        }
+                      : undefined
+                  }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
