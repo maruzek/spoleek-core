@@ -13,6 +13,7 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
+import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
@@ -150,9 +151,15 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
     const rows = await db
       .select({
         memberEmail: tenantMembers.email,
+        memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
+        memberPreferredEmail: tenantMembers.preferredEmail,
         memberFirstName: tenantMembers.firstName,
         memberLastName: tenantMembers.lastName,
         orgName: organizations.name,
+        defaultEmailPreference: organizations.defaultEmailPreference,
+        workspaceModuleEnabled: organizations.workspaceModuleEnabled,
+        workspaceConnectedAt: organizations.workspaceConnectedAt,
+        workspaceDomain: organizations.workspaceDomain,
         amount: memberPayments.amount,
         currency: memberPayments.currency,
         periodLabel: memberPayments.periodLabel,
@@ -169,13 +176,27 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
     const from = getResendFromEmail();
 
     for (const row of rows) {
-      if (!row.memberEmail) continue;
+      const toEmail = resolveMemberEmailForOrg({
+        member: {
+          email: row.memberEmail,
+          workspaceUserEmail: row.memberWorkspaceEmail,
+          preferredEmail: row.memberPreferredEmail,
+        },
+        organization: {
+          defaultEmailPreference: row.defaultEmailPreference,
+          workspaceModuleEnabled: row.workspaceModuleEnabled,
+          workspaceConnectedAt: row.workspaceConnectedAt,
+          workspaceDomain: row.workspaceDomain,
+        },
+      });
+
+      if (!toEmail) continue;
       const memberName =
-        [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || row.memberEmail;
+        [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || toEmail;
       try {
         await resend.emails.send({
           from,
-          to: [row.memberEmail],
+          to: [toEmail],
           subject: `Action required: membership fee overdue — ${row.periodLabel}`,
           react: PaymentOverdueEmail({
             organizationName: row.orgName,
@@ -227,6 +248,8 @@ async function sendRenewalHeadsupEmails(
       .select({
         id: tenantMembers.id,
         email: tenantMembers.email,
+        workspaceUserEmail: tenantMembers.workspaceUserEmail,
+        preferredEmail: tenantMembers.preferredEmail,
         firstName: tenantMembers.firstName,
         lastName: tenantMembers.lastName,
       })
@@ -248,13 +271,24 @@ async function sendRenewalHeadsupEmails(
     const from = getResendFromEmail();
 
     for (const member of activeMembers) {
-      if (!member.email || alreadyHasPayment.has(member.id)) continue;
+      if (alreadyHasPayment.has(member.id)) continue;
+
+      const toEmail = resolveMemberEmailForOrg({
+        member: {
+          email: member.email,
+          workspaceUserEmail: member.workspaceUserEmail,
+          preferredEmail: member.preferredEmail,
+        },
+        organization: org,
+      });
+
+      if (!toEmail) continue;
       const memberName =
-        [member.firstName, member.lastName].filter(Boolean).join(" ") || member.email;
+        [member.firstName, member.lastName].filter(Boolean).join(" ") || toEmail;
       try {
         await resend.emails.send({
           from,
-          to: [member.email],
+          to: [toEmail],
           subject: `Membership renewal coming up — ${periodLabel}`,
           react: PaymentRenewalHeadsupEmail({
             organizationName: org.name,
@@ -385,26 +419,20 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
 
   const today = new Date();
 
-  // Mark overdue and collect IDs + memberIds for suspension + notification emails
+  // Mark overdue and collect IDs for the notification emails.
+  //
+  // Deliberately does NOT touch tenant_members.status. Having overdue fees is
+  // derived state — it is `exists(member_payments where status = 'overdue')`
+  // and nothing else. Writing it into the status column conflated it with
+  // administrative suspension, which is a decision a human made: a member
+  // suspended by an admin who then settled a fee was silently reactivated,
+  // erasing that decision with no audit trail. It is now read from these rows
+  // wherever it is displayed (see getOverdueFeesByMember).
   const nowOverdue = await db
     .update(memberPayments)
     .set({ status: "overdue", updatedAt: new Date() })
     .where(and(eq(memberPayments.status, "pending"), lt(memberPayments.dueAt, today)))
     .returning({ id: memberPayments.id, memberId: memberPayments.memberId, orgId: memberPayments.orgId });
-
-  // Suspend active members whose payment just became overdue
-  if (nowOverdue.length > 0) {
-    const overdueMemberIds = [...new Set(nowOverdue.map((r) => r.memberId))];
-    await db
-      .update(tenantMembers)
-      .set({ status: "suspended", updatedAt: new Date() })
-      .where(
-        and(
-          inArray(tenantMembers.id, overdueMemberIds),
-          eq(tenantMembers.status, "active"),
-        ),
-      );
-  }
 
   // Load orgs eligible for payment generation
   const eligibleOrgs = await db

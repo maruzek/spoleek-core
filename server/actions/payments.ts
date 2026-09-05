@@ -14,35 +14,7 @@ import { requireAdminAccess, listScopedGroupIds } from "@/server/queries/access"
 import { listMemberIdsInGroups } from "@/server/queries/payments";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
-
-async function reactivateMemberIfNoMoreOverdue(orgId: string, memberId: string): Promise<void> {
-  const [member] = await db
-    .select({ status: tenantMembers.status })
-    .from(tenantMembers)
-    .where(and(eq(tenantMembers.id, memberId), eq(tenantMembers.orgId, orgId)))
-    .limit(1);
-
-  if (member?.status !== "suspended") return;
-
-  const remainingOverdue = await db
-    .select({ id: memberPayments.id })
-    .from(memberPayments)
-    .where(
-      and(
-        eq(memberPayments.orgId, orgId),
-        eq(memberPayments.memberId, memberId),
-        eq(memberPayments.status, "overdue"),
-      ),
-    )
-    .limit(1);
-
-  if (remainingOverdue.length === 0) {
-    await db
-      .update(tenantMembers)
-      .set({ status: "active", updatedAt: new Date() })
-      .where(and(eq(tenantMembers.id, memberId), eq(tenantMembers.orgId, orgId)));
-  }
-}
+import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 
 const CANCELLATION_REASONS = [
   "duplicate",
@@ -53,7 +25,16 @@ const CANCELLATION_REASONS = [
 
 export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
 
-async function resolvePaymentAccess(userId: string, paymentId: string) {
+/**
+ * Resolves what this admin may touch.
+ *
+ * `allowedMemberIds` is null for a full org admin (or system admin) and an
+ * explicit allowlist for a scoped group admin. Callers acting on many payments
+ * must intersect against it — checking one representative id and then trusting
+ * an org-wide guard let a scoped admin smuggle out-of-scope ids through in the
+ * same array.
+ */
+async function resolvePaymentScope(userId: string) {
   const [user] = await db
     .select({ systemRole: users.systemRole })
     .from(users)
@@ -61,35 +42,48 @@ async function resolvePaymentAccess(userId: string, paymentId: string) {
     .limit(1);
 
   const access = await requireAdminAccess({ capability: "canManagePayments" });
+  const orgId = access.organization.id;
 
   if (access.adminAccessLevel === "full" || user?.systemRole === "system_admin") {
-    return { orgId: access.organization.id };
+    return { orgId, allowedMemberIds: null as string[] | null };
   }
 
   if (!access.member) {
     forbidden();
   }
 
-  // Scoped group admin: verify the payment's member is in one of their groups
-  const groupIds = await listScopedGroupIds(access.organization.id, access.member.id);
-  const allowedMemberIds = await listMemberIdsInGroups(access.organization.id, groupIds);
+  const groupIds = await listScopedGroupIds(orgId, access.member.id);
+  const allowedMemberIds = await listMemberIdsInGroups(orgId, groupIds);
 
-  const [payment] = await db
-    .select({ memberId: memberPayments.memberId, status: memberPayments.status })
+  return { orgId, allowedMemberIds };
+}
+
+/** Narrows `paymentIds` to those this admin may act on, in one round trip. */
+async function authorizePaymentIds(userId: string, paymentIds: string[]) {
+  const { orgId, allowedMemberIds } = await resolvePaymentScope(userId);
+
+  const rows = await db
+    .select({ id: memberPayments.id, memberId: memberPayments.memberId })
     .from(memberPayments)
     .where(
-      and(
-        eq(memberPayments.id, paymentId),
-        eq(memberPayments.orgId, access.organization.id),
-      ),
-    )
-    .limit(1);
+      and(inArray(memberPayments.id, paymentIds), eq(memberPayments.orgId, orgId)),
+    );
 
-  if (!payment || !allowedMemberIds.includes(payment.memberId)) {
+  const permitted =
+    allowedMemberIds === null
+      ? rows
+      : rows.filter((row) => allowedMemberIds.includes(row.memberId));
+
+  if (permitted.length === 0) {
     forbidden();
   }
 
-  return { orgId: access.organization.id, currentStatus: payment.status };
+  return { orgId, permittedIds: permitted.map((row) => row.id) };
+}
+
+async function resolvePaymentAccess(userId: string, paymentId: string) {
+  const { orgId } = await authorizePaymentIds(userId, [paymentId]);
+  return { orgId };
 }
 
 async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
@@ -97,10 +91,16 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
     const [row] = await db
       .select({
         memberEmail: tenantMembers.email,
+        memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
+        memberPreferredEmail: tenantMembers.preferredEmail,
         memberFirstName: tenantMembers.firstName,
         memberLastName: tenantMembers.lastName,
         orgName: organizations.name,
         emailNotifyPaymentConfirmed: organizations.emailNotifyPaymentConfirmed,
+        defaultEmailPreference: organizations.defaultEmailPreference,
+        workspaceModuleEnabled: organizations.workspaceModuleEnabled,
+        workspaceConnectedAt: organizations.workspaceConnectedAt,
+        workspaceDomain: organizations.workspaceDomain,
         amount: memberPayments.amount,
         currency: memberPayments.currency,
         periodLabel: memberPayments.periodLabel,
@@ -112,15 +112,31 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
       .where(eq(memberPayments.id, paymentId))
       .limit(1);
 
-    if (!row?.memberEmail || !row.emailNotifyPaymentConfirmed) return;
+    if (!row || !row.emailNotifyPaymentConfirmed) return;
 
-    const memberName = [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || row.memberEmail;
+    const toEmail = resolveMemberEmailForOrg({
+      member: {
+        email: row.memberEmail,
+        workspaceUserEmail: row.memberWorkspaceEmail,
+        preferredEmail: row.memberPreferredEmail,
+      },
+      organization: {
+        defaultEmailPreference: row.defaultEmailPreference,
+        workspaceModuleEnabled: row.workspaceModuleEnabled,
+        workspaceConnectedAt: row.workspaceConnectedAt,
+        workspaceDomain: row.workspaceDomain,
+      },
+    });
+
+    if (!toEmail) return;
+
+    const memberName = [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || toEmail;
     const resend = getResendClient();
     const from = getResendFromEmail();
 
     await resend.emails.send({
       from,
-      to: [row.memberEmail],
+      to: [toEmail],
       subject: `Payment confirmed — ${row.periodLabel}`,
       react: PaymentConfirmedEmail({
         organizationName: row.orgName,
@@ -159,7 +175,7 @@ export const markPaymentPaidAction = authActionClient
 
     const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
 
-    const [updated] = await db
+    await db
       .update(memberPayments)
       .set({
         status: "paid",
@@ -174,12 +190,7 @@ export const markPaymentPaidAction = authActionClient
           eq(memberPayments.orgId, orgId),
           inArray(memberPayments.status, ["pending", "overdue"]),
         ),
-      )
-      .returning({ memberId: memberPayments.memberId });
-
-    if (updated) {
-      await reactivateMemberIfNoMoreOverdue(orgId, updated.memberId);
-    }
+      );
 
     after(() => sendPaymentConfirmedEmail(parsedInput.paymentId, paidAt));
 
@@ -227,11 +238,11 @@ export const bulkMarkPaymentsPaidAction = authActionClient
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    // Verify access for all payment IDs — use first to resolve org, then verify ownership of all
-    await resolvePaymentAccess(ctx.auth.user.id, parsedInput.paymentIds[0]);
-
-    const access = await requireAdminAccess({ capability: "canManagePayments" });
-    const orgId = access.organization.id;
+    // Every id is checked against the caller's scope, not just the first one.
+    const { orgId, permittedIds } = await authorizePaymentIds(
+      ctx.auth.user.id,
+      parsedInput.paymentIds,
+    );
 
     const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
 
@@ -246,17 +257,12 @@ export const bulkMarkPaymentsPaidAction = authActionClient
       })
       .where(
         and(
-          inArray(memberPayments.id, parsedInput.paymentIds),
+          inArray(memberPayments.id, permittedIds),
           eq(memberPayments.orgId, orgId),
           inArray(memberPayments.status, ["pending", "overdue"]),
         ),
       )
       .returning({ id: memberPayments.id, memberId: memberPayments.memberId });
-
-    const uniqueMemberIds = [...new Set(result.map((r) => r.memberId))];
-    for (const memberId of uniqueMemberIds) {
-      await reactivateMemberIfNoMoreOverdue(orgId, memberId);
-    }
 
     after(async () => {
       for (const { id } of result) {
@@ -264,5 +270,9 @@ export const bulkMarkPaymentsPaidAction = authActionClient
       }
     });
 
-    return { updated: result.length };
+    return {
+      updated: result.length,
+      // Ids outside the caller's scope, already paid, or cancelled.
+      skipped: parsedInput.paymentIds.length - result.length,
+    };
   });

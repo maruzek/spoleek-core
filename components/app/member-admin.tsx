@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-table";
 import {
   AlertTriangleIcon,
+  BanknoteIcon,
   MailIcon,
   PencilIcon,
   PlusIcon,
@@ -42,6 +43,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { formatDateTime } from "@/lib/format";
+import { formatFeeAmount } from "@/lib/payments";
 import { copyToClipboard } from "@/utils/copy";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
@@ -55,6 +57,7 @@ import {
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
 import type {
   MemberAdminAccess,
+  MemberOverdueFees,
   MemberGroupAssignment,
   MemberInviteState,
   MembersTableCategory,
@@ -94,6 +97,8 @@ type MemberRow = {
   customFieldValues: Record<string, string>;
   groupAssignmentsByCategory: Record<string, MemberGroupAssignment[]>;
   inviteState: MemberInviteState;
+  /** Derived from member_payments; null when nothing is overdue. */
+  overdueFees: MemberOverdueFees | null;
 };
 
 function resolvePreferredEmailForRow(
@@ -474,6 +479,15 @@ export function MemberAdmin({
     },
   });
 
+  // The unpaid-fees column and its filter both hang off this: with nothing
+  // overdue there is nothing to show, so the column is omitted rather than
+  // rendered as a full stripe of em dashes. Same treatment the workspace-email
+  // column gets.
+  const membersWithOverdueFees = useMemo(
+    () => members.filter((member) => member.overdueFees !== null).length,
+    [members],
+  );
+
   const columns = useMemo(() => {
     const baseColumns = [
       columnHelper.display({
@@ -587,6 +601,44 @@ export function MemberAdmin({
         },
       }),
     ];
+
+    if (membersWithOverdueFees > 0) {
+      baseColumns.push(
+        columnHelper.display({
+          id: "overdue-fees",
+          meta: { label: "Unpaid fees" },
+          header: "Unpaid fees",
+          // Amounts owed are ranked on the payments dashboard; here the column
+          // is a flag and a filter, so sorting it would only fight the status
+          // ordering the roster is built around.
+          enableSorting: false,
+          // Unpaid fees are their own axis, not a member status: a member can
+          // be active and behind on fees, or suspended by an admin and fully
+          // paid up.
+          filterFn: (row, _columnId, filterValue) =>
+            filterValue ? row.original.overdueFees !== null : true,
+          cell: ({ row }) => {
+            const overdueFees = row.original.overdueFees;
+
+            if (!overdueFees) {
+              return <span className="text-sm text-muted-foreground">—</span>;
+            }
+
+            return (
+              <div className="flex min-w-0 flex-col gap-1">
+                <Badge variant="destructive" className="w-fit">
+                  {overdueFees.overdueCount} unpaid
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {formatFeeAmount(overdueFees.overdueAmountCents, overdueFees.currency)}
+                  {overdueFees.daysOverdue > 0 ? ` · ${overdueFees.daysOverdue} days late` : null}
+                </span>
+              </div>
+            );
+          },
+        }),
+      );
+    }
 
     if (workspaceReady) {
       baseColumns.push(
@@ -798,6 +850,7 @@ export function MemberAdmin({
     defaultEmailPreference,
     customFields,
     memberCategories,
+    membersWithOverdueFees,
     resendInviteAction,
     workspaceReady,
   ]);
@@ -818,9 +871,27 @@ export function MemberAdmin({
   const renderToolbarActions = (table: TanStackTable<MemberRow>) => {
     const selectedRows = table.getFilteredSelectedRowModel().rows;
     const selectedCount = selectedRows.length;
+    const overdueColumn = table.getColumn("overdue-fees");
+    const overdueOnly = Boolean(overdueColumn?.getFilterValue());
 
     return (
       <div className="flex items-center gap-2">
+        {overdueColumn ? (
+          <Button
+            type="button"
+            variant={overdueOnly ? "default" : "outline"}
+            aria-pressed={overdueOnly}
+            onClick={() =>
+              overdueColumn?.setFilterValue(overdueOnly ? undefined : true)
+            }
+          >
+            <BanknoteIcon data-icon="inline-start" />
+            Unpaid fees
+            <Badge variant={overdueOnly ? "secondary" : "destructive"} className="ml-2">
+              {membersWithOverdueFees}
+            </Badge>
+          </Button>
+        ) : null}
         <MailingListAction
           scope={{ kind: "members-admin" }}
           table={table}

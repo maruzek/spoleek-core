@@ -31,6 +31,7 @@ import {
   canAccessMemberInScope,
   resolveMemberManagementScope,
 } from "@/server/lib/member-management-scope";
+import { getOverdueFeesByMember } from "@/server/queries/payments";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
 
@@ -51,6 +52,8 @@ export type MemberCustomFieldDisplay = {
   label: string;
   displayValue: string;
 };
+
+export type { MemberOverdueFees } from "@/server/queries/payments";
 
 export type MemberInviteState = {
   status: MemberInviteStatus | null;
@@ -502,7 +505,7 @@ export async function listTenantMembers(
 
   const collate = await getMembersSortCollation(orgId);
 
-  const [members, groupAssignmentsByMember, customFieldDisplayByMember] =
+  const [members, groupAssignmentsByMember, customFieldDisplayByMember, overdueFeesByMember] =
     await Promise.all([
       db
         .select({
@@ -543,6 +546,7 @@ export async function listTenantMembers(
         visibleGroupIds,
       }),
       listMemberCustomFieldDisplayMap(orgId, visibleMemberIds ?? undefined),
+      getOverdueFeesByMember(orgId, visibleMemberIds ?? undefined),
     ]);
 
   return members.map((member) => {
@@ -571,6 +575,9 @@ export async function listTenantMembers(
         deliveryStatus: member.inviteDeliveryStatus,
         lastError: member.inviteLastError,
       },
+      // Derived from member_payments, never stored on the member — see
+      // getOverdueFeesByMember for why.
+      overdueFees: overdueFeesByMember.get(member.id) ?? null,
     };
   });
 }

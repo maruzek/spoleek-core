@@ -182,3 +182,72 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
 
   return { paid, pending, overdue, collectionRate, projectedIncomeCents, debtAging };
 }
+
+export type MemberOverdueFees = {
+  overdueCount: number;
+  overdueAmountCents: number;
+  currency: string;
+  /** Due date of the oldest unpaid overdue payment. */
+  oldestDueAt: Date;
+  /** Age of that oldest payment. Computed here so the table renders off one
+   *  clock — the server's — rather than each viewer's browser. */
+  daysOverdue: number;
+};
+
+/**
+ * Overdue fees per member, derived from `member_payments`.
+ *
+ * This is the single source of truth for "is this member behind on their
+ * fees". It used to be denormalized into `tenant_members.status` as
+ * `suspended`, which collided with administrative suspension — a decision an
+ * admin made — and was silently overwritten whenever a payment was settled.
+ * Reading it here instead keeps the status column meaning exactly one thing,
+ * and makes the question answerable for any set of payment rows rather than
+ * only for "right now".
+ */
+export async function getOverdueFeesByMember(
+  orgId: string,
+  memberIds?: string[],
+): Promise<Map<string, MemberOverdueFees>> {
+  if (memberIds && memberIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      memberId: memberPayments.memberId,
+      count: sql<number>`cast(count(*) as int)`,
+      total: sum(memberPayments.amount),
+      currency: sql<string>`min(${memberPayments.currency})`,
+      oldestDueAt: sql<Date>`min(${memberPayments.dueAt})`,
+    })
+    .from(memberPayments)
+    .where(
+      and(
+        eq(memberPayments.orgId, orgId),
+        eq(memberPayments.status, "overdue"),
+        memberIds?.length ? inArray(memberPayments.memberId, memberIds) : undefined,
+      ),
+    )
+    .groupBy(memberPayments.memberId);
+
+  const now = Date.now();
+
+  return new Map(
+    rows.map((row) => {
+      const oldestDueAt = new Date(row.oldestDueAt);
+
+      return [
+        row.memberId,
+        {
+          overdueCount: row.count,
+          overdueAmountCents: Number(row.total ?? 0),
+          currency: row.currency,
+          oldestDueAt,
+          daysOverdue: Math.max(
+            0,
+            Math.floor((now - oldestDueAt.getTime()) / 86_400_000),
+          ),
+        },
+      ];
+    }),
+  );
+}
