@@ -9,6 +9,7 @@ import {
   CheckIcon,
   ClockIcon,
   ExternalLinkIcon,
+  PencilIcon,
   UndoIcon,
   UsersIcon,
 } from "lucide-react";
@@ -29,10 +30,12 @@ import type {
 import {
   approveGroupReportAction,
   returnGroupReportAction,
+  setReportDeadlineAction,
 } from "@/server/actions/membership-reports";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -66,13 +69,17 @@ function Stat({
   value,
   label,
   tone,
+  action,
 }: {
   value: string;
   label: string;
   tone?: "warning" | "danger";
+  /** Rendered top-right, for a stat the board can edit in place. */
+  action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border p-4">
+    <div className="relative flex flex-col gap-1 rounded-xl border p-4">
+      {action ? <div className="absolute top-2 right-2">{action}</div> : null}
       <span
         className={
           tone === "danger"
@@ -110,6 +117,8 @@ export function MembershipReportBoard({
   const [returnTarget, setReturnTarget] = useState<BoardGroupRow | null>(null);
   const [returnReason, setReturnReason] = useState("");
   const [showUnassigned, setShowUnassigned] = useState(false);
+  const [deadlineOpen, setDeadlineOpen] = useState(false);
+  const [deadlineValue, setDeadlineValue] = useState("");
 
   const onError = ({ error }: { error: { serverError?: string } }) =>
     toast.error(error.serverError ?? "Something went wrong.");
@@ -121,6 +130,14 @@ export function MembershipReportBoard({
           ? "Approved. Recorded as self-approved."
           : "Report approved.",
       );
+      router.refresh();
+    },
+    onError,
+  });
+  const setDeadline = useAction(setReportDeadlineAction, {
+    onSuccess() {
+      toast.success("Deadline updated.");
+      setDeadlineOpen(false);
       router.refresh();
     },
     onError,
@@ -187,6 +204,27 @@ export function MembershipReportBoard({
                 : daysLeft <= 7
                   ? "warning"
                   : undefined
+          }
+          action={
+            isEditable ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Change the confirmation deadline"
+                onClick={() => {
+                  // The column is a calendar date; the picker speaks the same
+                  // timezone-free `yyyy-MM-dd`.
+                  setDeadlineValue(
+                    report.confirmDueAt
+                      ? new Date(report.confirmDueAt).toISOString().slice(0, 10)
+                      : "",
+                  );
+                  setDeadlineOpen(true);
+                }}
+              >
+                <PencilIcon />
+              </Button>
+            ) : null
           }
         />
       </div>
@@ -493,6 +531,51 @@ export function MembershipReportBoard({
               ))}
             </TableBody>
           </Table>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deadlineOpen} onOpenChange={setDeadlineOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Confirmation deadline for {report.periodLabel}
+            </DialogTitle>
+            <DialogDescription>
+              The date every group has to have submitted by. It drives the
+              reminder ladder, and applies to this year only — the
+              organization&rsquo;s default is unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <DatePicker
+            id="report-deadline"
+            value={deadlineValue}
+            onChange={setDeadlineValue}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={setDeadline.isPending || !report.confirmDueAt}
+              onClick={() =>
+                setDeadline.execute({
+                  reportId: report.id,
+                  confirmDueAt: null,
+                })
+              }
+            >
+              Remove the deadline
+            </Button>
+            <Button
+              disabled={setDeadline.isPending || !deadlineValue}
+              onClick={() =>
+                setDeadline.execute({
+                  reportId: report.id,
+                  confirmDueAt: deadlineValue,
+                })
+              }
+            >
+              {setDeadline.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

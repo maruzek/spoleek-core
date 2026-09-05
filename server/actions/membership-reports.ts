@@ -73,6 +73,11 @@ export const setReportDeadlineAction = orgAdminActionClient
   )
   .action(async ({ parsedInput }) => {
     const { organization } = await requireOrgAdminAccess();
+    const report = await loadReportForBoard(organization.id, parsedInput.reportId);
+
+    if (report.status === "closed") {
+      throw new Error("This report is closed. Reopen it before changing anything.");
+    }
 
     await db
       .update(membershipReports)
@@ -82,14 +87,11 @@ export const setReportDeadlineAction = orgAdminActionClient
           : null,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(membershipReports.id, parsedInput.reportId),
-          eq(membershipReports.orgId, organization.id),
-        ),
-      );
+      .where(eq(membershipReports.id, report.id));
 
     revalidatePath("/admin/reports");
+    // The group card shows the same deadline and the reminder copy quotes it.
+    revalidatePath("/admin/groups", "layout");
 
     return { success: true };
   });
