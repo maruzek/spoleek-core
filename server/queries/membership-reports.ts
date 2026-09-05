@@ -617,6 +617,8 @@ export type BoardReportView = {
    * from payments, so the board is told rather than left to notice.
    */
   missingGroups: Array<{ id: string; name: string }>;
+  /** Every year reported, oldest first. Fewer than two points is not a trend. */
+  history: ReportHistoryPoint[];
   totals: {
     groupCount: number;
     submittedCount: number;
@@ -676,6 +678,76 @@ async function getPreviousMemberCounts(params: {
   return byGroup;
 }
 
+export type ReportHistoryPoint = {
+  periodLabel: string;
+  status: "draft" | "open" | "closed";
+  totalMembers: number;
+  byGroup: Array<{
+    groupId: string | null;
+    groupName: string;
+    memberCount: number;
+  }>;
+};
+
+/**
+ * Every year this organization has reported, oldest first.
+ *
+ * Reads the cached counts rather than the rosters: they are recalculated on
+ * every roster write and are what the board's table shows, so the chart and
+ * the numbers beside it cannot disagree.
+ *
+ * A group is absent from a year it did not report, rather than present with a
+ * zero — the difference between "reported nobody" and "did not exist" is the
+ * one thing a trend line must not get wrong.
+ */
+export async function getReportHistory(
+  orgId: string,
+): Promise<ReportHistoryPoint[]> {
+  const rows = await db
+    .select({
+      periodLabel: membershipReports.periodLabel,
+      status: membershipReports.status,
+      groupId: membershipReportGroups.groupId,
+      groupName: membershipReportGroups.groupName,
+      memberCount: membershipReportGroups.memberCount,
+    })
+    .from(membershipReports)
+    .leftJoin(
+      membershipReportGroups,
+      eq(membershipReportGroups.reportId, membershipReports.id),
+    )
+    .where(eq(membershipReports.orgId, orgId))
+    .orderBy(asc(membershipReports.periodLabel), asc(membershipReportGroups.groupName));
+
+  const byPeriod = new Map<string, ReportHistoryPoint>();
+
+  for (const row of rows) {
+    let point = byPeriod.get(row.periodLabel);
+
+    if (!point) {
+      point = {
+        periodLabel: row.periodLabel,
+        status: row.status,
+        totalMembers: 0,
+        byGroup: [],
+      };
+      byPeriod.set(row.periodLabel, point);
+    }
+
+    // A report with no group rows still counts as a year that happened.
+    if (row.groupName === null) continue;
+
+    point.byGroup.push({
+      groupId: row.groupId,
+      groupName: row.groupName,
+      memberCount: row.memberCount ?? 0,
+    });
+    point.totalMembers += row.memberCount ?? 0;
+  }
+
+  return [...byPeriod.values()];
+}
+
 /**
  * The board's view of the whole reporting cycle.
  *
@@ -699,10 +771,11 @@ export async function getBoardReportView(
 
   if (!report) return null;
 
-  const [periods, unassigned, category] = await Promise.all([
+  const [periods, unassigned, category, history] = await Promise.all([
     listReportPeriods(orgId),
     listUnassignedConfirmedMembers(orgId, report.periodLabel),
     getFeeManagingCategory(orgId),
+    getReportHistory(orgId),
   ]);
 
   const groupRows = await db
@@ -850,6 +923,7 @@ export async function getBoardReportView(
     groups: boardGroups,
     unassigned,
     missingGroups,
+    history,
     totals: {
       groupCount: boardGroups.length,
       submittedCount: boardGroups.filter(

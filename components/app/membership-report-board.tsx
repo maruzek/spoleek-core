@@ -10,6 +10,7 @@ import {
   ClockIcon,
   ExternalLinkIcon,
   PencilIcon,
+  TrendingUpIcon,
   UndoIcon,
   UsersIcon,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ReportHistoryChart } from "@/components/app/report-history-chart";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -115,7 +117,7 @@ export function MembershipReportBoard({
   locale: string;
 }) {
   const router = useRouter();
-  const { report, groups, totals, unassigned, missingGroups } = view;
+  const { report, groups, totals, unassigned, missingGroups, history } = view;
   const isEditable = view.isEditable;
 
   const [statusFilter, setStatusFilter] = useState<
@@ -128,6 +130,7 @@ export function MembershipReportBoard({
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [deadlineValue, setDeadlineValue] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const onError = ({ error }: { error: { serverError?: string } }) =>
     toast.error(error.serverError ?? "Something went wrong.");
@@ -251,6 +254,19 @@ export function MembershipReportBoard({
               : "Members confirmed"
           }
           tone={hasBaseline && totalDelta < 0 ? "warning" : undefined}
+          action={
+            // One year is a dot, not a trend.
+            history.length > 1 ? (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Members confirmed over time"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <TrendingUpIcon />
+              </Button>
+            ) : null
+          }
         />
         <Stat
           value={formatFeeAmount(totals.feeTotalCents, totals.currency)}
@@ -709,6 +725,22 @@ export function MembershipReportBoard({
               ))}
             </TableBody>
           </Table>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Members confirmed over time</DialogTitle>
+            <DialogDescription>
+              Every year this organization has reported, for the whole
+              organization or one group.
+            </DialogDescription>
+          </DialogHeader>
+          <ReportHistoryChart
+            history={history}
+            currentPeriodLabel={report.periodLabel}
+          />
         </DialogContent>
       </Dialog>
 

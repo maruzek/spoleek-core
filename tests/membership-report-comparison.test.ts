@@ -16,6 +16,7 @@ import {
 import {
   getBoardReportView,
   getGroupReportView,
+  getReportHistory,
 } from "@/server/queries/membership-reports";
 
 /**
@@ -38,6 +39,7 @@ suite("year-over-year comparison", () => {
   let orgId: string;
   let northId: string;
   let southId: string;
+  let eastId: string;
   let lastYearId: string;
   let thisYearId: string;
 
@@ -164,6 +166,13 @@ suite("year-over-year comparison", () => {
       .returning({ id: groups.id });
     southId = south.id;
 
+    // Added part-way through the history, so it has no 2025 row at all.
+    const [east] = await db
+      .insert(groups)
+      .values({ orgId, categoryId: category.id, name: "East", slug: "east" })
+      .returning({ id: groups.id });
+    eastId = east.id;
+
     // North's cast: one who stays, one who transfers to South, one who leaves
     // the organization, one who simply has not paid, and one who is new.
     await makeMember("Stays", northId);
@@ -171,6 +180,7 @@ suite("year-over-year comparison", () => {
     await makeMember("Departed", northId, "archived");
     await makeMember("Unpaid", northId);
     await makeMember("Fresh", northId);
+    await makeMember("Eastern", eastId);
 
     lastYearId = await makeReport("2025", [northId, southId]);
     await addToRoster(lastYearId, northId, [
@@ -180,9 +190,10 @@ suite("year-over-year comparison", () => {
       "Unpaid",
     ]);
 
-    thisYearId = await makeReport("2026", [northId, southId]);
+    thisYearId = await makeReport("2026", [northId, southId, eastId]);
     await addToRoster(thisYearId, northId, ["Stays", "Fresh"]);
     await addToRoster(thisYearId, southId, ["Transfers"]);
+    await addToRoster(thisYearId, eastId, ["Eastern"]);
   });
 
   afterAll(async () => {
@@ -244,5 +255,25 @@ suite("year-over-year comparison", () => {
       expect(group.previousMemberCount).toBeNull();
       expect(group.previousPeriodLabel).toBeNull();
     }
+  });
+
+  it("returns one point per reported year, oldest first", async () => {
+    const history = await getReportHistory(orgId);
+
+    expect(history.map((point) => point.periodLabel)).toEqual(["2025", "2026"]);
+    expect(history[0].totalMembers).toBe(4);
+    expect(history[1].totalMembers).toBe(4);
+  });
+
+  it("leaves a group out of a year it did not report, rather than showing zero", async () => {
+    // "Did not exist" and "reported nobody" have to look different, or a trend
+    // line draws a collapse where a region was simply not there yet.
+    const history = await getReportHistory(orgId);
+    const names = (index: number) =>
+      history[index].byGroup.map((group) => group.groupName);
+
+    expect(names(0)).not.toContain("East");
+    expect(names(0)).toContain("South");
+    expect(names(1)).toContain("East");
   });
 });
