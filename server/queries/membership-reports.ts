@@ -2,6 +2,10 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
+  listUnassignedConfirmedMembers,
+  type UnassignedConfirmedMember,
+} from "@/server/lib/membership-report";
+import {
   groups,
   membershipReportGroups,
   membershipReportMembers,
@@ -318,6 +322,11 @@ export type BoardReportView = {
     status: "draft" | "open" | "closed";
   };
   groups: BoardGroupRow[];
+  /**
+   * Confirmed for this period but in no group that reports, so in no roster
+   * either. The board's total is short by exactly these people.
+   */
+  unassigned: UnassignedConfirmedMember[];
   totals: {
     groupCount: number;
     submittedCount: number;
@@ -352,7 +361,10 @@ export async function getBoardReportView(
 
   if (!report) return null;
 
-  const periods = await listReportPeriods(orgId);
+  const [periods, unassigned] = await Promise.all([
+    listReportPeriods(orgId),
+    listUnassignedConfirmedMembers(orgId, report.periodLabel),
+  ]);
 
   const groupRows = await db
     .select({
@@ -460,6 +472,7 @@ export async function getBoardReportView(
       status: report.status,
     },
     groups,
+    unassigned,
     totals: {
       groupCount: groups.length,
       submittedCount: groups.filter(
@@ -468,7 +481,8 @@ export async function getBoardReportView(
       approvedCount: groups.filter((group) => group.status === "approved").length,
       memberCount: groups.reduce((sum, group) => sum + group.memberCount, 0),
       feeTotalCents: groups.reduce((sum, group) => sum + group.feeTotalCents, 0),
-      currency: groups.find((group) => group.currency)?.currency ?? "CZK",
+      // Snapshotted on the report; the group rows carry the same value.
+      currency: report.currency ?? "CZK",
       pendingAdditions: groups.reduce(
         (sum, group) => sum + group.pendingAdditions,
         0,

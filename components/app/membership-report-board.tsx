@@ -100,7 +100,7 @@ export function MembershipReportBoard({
   locale: string;
 }) {
   const router = useRouter();
-  const { report, groups, totals } = view;
+  const { report, groups, totals, unassigned } = view;
   const isEditable = view.isEditable;
 
   const [statusFilter, setStatusFilter] = useState<
@@ -109,6 +109,7 @@ export function MembershipReportBoard({
   const [rosterTarget, setRosterTarget] = useState<BoardGroupRow | null>(null);
   const [returnTarget, setReturnTarget] = useState<BoardGroupRow | null>(null);
   const [returnReason, setReturnReason] = useState("");
+  const [showUnassigned, setShowUnassigned] = useState(false);
 
   const onError = ({ error }: { error: { serverError?: string } }) =>
     toast.error(error.serverError ?? "Something went wrong.");
@@ -211,6 +212,30 @@ export function MembershipReportBoard({
           <AlertDescription>
             They are not in any count yet. The group admin has to add them,
             which sends that report back to you for re-approval.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {unassigned.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertTitle>
+            {unassigned.length} confirmed member
+            {unassigned.length === 1 ? "" : "s"} in no group
+          </AlertTitle>
+          <AlertDescription className="flex flex-col items-start gap-2">
+            <span>
+              They paid or were waived for {report.periodLabel}, but belong to
+              no group that reports, so they are in no roster above. The total
+              is short by {unassigned.length}. Put them in a group and refresh
+              from payments.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowUnassigned(true)}
+            >
+              See who
+            </Button>
           </AlertDescription>
         </Alert>
       ) : null}
@@ -463,6 +488,57 @@ export function MembershipReportBoard({
                       row.feeAmountCents ?? 0,
                       row.currency ?? totals.currency,
                     )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showUnassigned} onOpenChange={setShowUnassigned}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Confirmed for {report.periodLabel}, in no group
+            </DialogTitle>
+            <DialogDescription>
+              Nobody is reporting these members. Add each to the group that
+              should count them, then refresh from payments.
+            </DialogDescription>
+          </DialogHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Member</TableHead>
+                <TableHead>Basis</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {unassigned.map((row) => (
+                <TableRow key={row.memberId}>
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="text-sm">
+                        {[row.firstName, row.lastName]
+                          .filter(Boolean)
+                          .join(" ") ||
+                          row.email ||
+                          "Unknown member"}
+                      </span>
+                      {row.email &&
+                      [row.firstName, row.lastName].filter(Boolean).length >
+                        0 ? (
+                        <span className="text-muted-foreground text-xs">
+                          {row.email}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="capitalize">
+                      {row.basis}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}

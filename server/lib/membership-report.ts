@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, notExists, or, sql } from "drizzle-orm";
 
 import {
   resolveConfirmDueDate,
@@ -96,6 +96,96 @@ async function getReportGroupIdByMember(
     if (!byMember.has(row.memberId)) byMember.set(row.memberId, row.groupId);
   }
   return byMember;
+}
+
+/** The payments that confirm membership for one period. */
+function confirmedPaymentsFilter(orgId: string, periodLabel: string) {
+  return and(
+    eq(memberPayments.orgId, orgId),
+    eq(memberPayments.periodLabel, periodLabel),
+    or(
+      eq(memberPayments.status, "paid"),
+      and(
+        eq(memberPayments.status, "cancelled"),
+        eq(memberPayments.cancellationReason, "waived"),
+      ),
+    ),
+  );
+}
+
+export type UnassignedConfirmedMember = {
+  memberId: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  basis: MembershipReportConfirmationBasis;
+};
+
+/**
+ * Members who confirmed for the period but belong to no group that reports.
+ *
+ * Both write paths resolve a member to a report row through the fee-managing
+ * category and quietly drop the ones that resolve to nothing. That is the only
+ * sane thing for a write to do — there is no row to write them to — but it also
+ * means the board's total silently excludes them. Counting them here is what
+ * makes the omission visible, and the fix is to put the member in a region.
+ */
+export async function listUnassignedConfirmedMembers(
+  orgId: string,
+  periodLabel: string,
+): Promise<UnassignedConfirmedMember[]> {
+  const category = await getFeeManagingCategory(orgId);
+  if (!category) return [];
+
+  const rows = await db
+    .select({
+      memberId: memberPayments.memberId,
+      status: memberPayments.status,
+      cancellationReason: memberPayments.cancellationReason,
+      firstName: tenantMembers.firstName,
+      lastName: tenantMembers.lastName,
+      email: tenantMembers.email,
+    })
+    .from(memberPayments)
+    .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    .where(
+      and(
+        confirmedPaymentsFilter(orgId, periodLabel),
+        notExists(
+          db
+            .select({ one: sql`1` })
+            .from(groupMemberships)
+            .innerJoin(groups, eq(groupMemberships.groupId, groups.id))
+            .where(
+              and(
+                eq(groupMemberships.memberId, memberPayments.memberId),
+                eq(groups.categoryId, category.id),
+                eq(groups.isActive, true),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName));
+
+  // A member with both a paid and a waived row for one period would otherwise
+  // be named twice.
+  const seen = new Set<string>();
+
+  return rows.flatMap((row) => {
+    const basis = getConfirmationBasis(row);
+    if (!basis || seen.has(row.memberId)) return [];
+    seen.add(row.memberId);
+    return [
+      {
+        memberId: row.memberId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        basis,
+      },
+    ];
+  });
 }
 
 /**
@@ -479,19 +569,7 @@ async function backfillReportMembers(params: {
     })
     .from(memberPayments)
     .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
-    .where(
-      and(
-        eq(memberPayments.orgId, orgId),
-        eq(memberPayments.periodLabel, periodLabel),
-        or(
-          eq(memberPayments.status, "paid"),
-          and(
-            eq(memberPayments.status, "cancelled"),
-            eq(memberPayments.cancellationReason, "waived"),
-          ),
-        ),
-      ),
-    );
+    .where(confirmedPaymentsFilter(orgId, periodLabel));
 
   if (confirmed.length === 0) return 0;
 
