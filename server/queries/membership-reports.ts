@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
+  getFeeManagingCategory,
   listUnassignedConfirmedMembers,
   type UnassignedConfirmedMember,
 } from "@/server/lib/membership-report";
@@ -374,6 +375,12 @@ export type BoardReportView = {
    * either. The board's total is short by exactly these people.
    */
   unassigned: UnassignedConfirmedMember[];
+  /**
+   * Active groups that have no row in this report — created, activated or
+   * recategorized since it opened. Nothing adds them until somebody refreshes
+   * from payments, so the board is told rather than left to notice.
+   */
+  missingGroups: Array<{ id: string; name: string }>;
   totals: {
     groupCount: number;
     submittedCount: number;
@@ -408,9 +415,10 @@ export async function getBoardReportView(
 
   if (!report) return null;
 
-  const [periods, unassigned] = await Promise.all([
+  const [periods, unassigned, category] = await Promise.all([
     listReportPeriods(orgId),
     listUnassignedConfirmedMembers(orgId, report.periodLabel),
+    getFeeManagingCategory(orgId),
   ]);
 
   const groupRows = await db
@@ -480,7 +488,8 @@ export async function getBoardReportView(
     else rosterByGroup.set(reportGroupId, [member]);
   }
 
-  const groups: BoardGroupRow[] = groupRows.map((row) => {
+  // Not `groups`: that name belongs to the table this function also queries.
+  const boardGroups: BoardGroupRow[] = groupRows.map((row) => {
     const roster = rosterByGroup.get(row.reportGroupId) ?? [];
     return {
       reportGroupId: row.reportGroupId,
@@ -507,6 +516,31 @@ export async function getBoardReportView(
     };
   });
 
+  // Drift is only actionable while the report is collecting; a closed year is
+  // a record of the groups that existed then, not of the ones that exist now.
+  const missingGroups =
+    category && report.status === "open"
+      ? await db
+          .select({ id: groups.id, name: groups.name })
+          .from(groups)
+          .where(
+            and(
+              eq(groups.orgId, orgId),
+              eq(groups.categoryId, category.id),
+              eq(groups.isActive, true),
+              groupRows.length > 0
+                ? notInArray(
+                    groups.id,
+                    groupRows
+                      .map((row) => row.groupId)
+                      .filter((id): id is string => id !== null),
+                  )
+                : undefined,
+            ),
+          )
+          .orderBy(asc(groups.sortOrder), asc(groups.name))
+      : [];
+
   return {
     periods,
     isEditable: report.status === "open",
@@ -518,19 +552,20 @@ export async function getBoardReportView(
       confirmDueAt: report.confirmDueAt,
       status: report.status,
     },
-    groups,
+    groups: boardGroups,
     unassigned,
+    missingGroups,
     totals: {
-      groupCount: groups.length,
-      submittedCount: groups.filter(
+      groupCount: boardGroups.length,
+      submittedCount: boardGroups.filter(
         (group) => group.status === "submitted" || group.status === "approved",
       ).length,
-      approvedCount: groups.filter((group) => group.status === "approved").length,
-      memberCount: groups.reduce((sum, group) => sum + group.memberCount, 0),
-      feeTotalCents: groups.reduce((sum, group) => sum + group.feeTotalCents, 0),
+      approvedCount: boardGroups.filter((group) => group.status === "approved").length,
+      memberCount: boardGroups.reduce((sum, group) => sum + group.memberCount, 0),
+      feeTotalCents: boardGroups.reduce((sum, group) => sum + group.feeTotalCents, 0),
       // Snapshotted on the report; the group rows carry the same value.
       currency: report.currency ?? "CZK",
-      pendingAdditions: groups.reduce(
+      pendingAdditions: boardGroups.reduce(
         (sum, group) => sum + group.pendingAdditions,
         0,
       ),

@@ -107,7 +107,7 @@ export function MembershipReportBoard({
   locale: string;
 }) {
   const router = useRouter();
-  const { report, groups, totals, unassigned } = view;
+  const { report, groups, totals, unassigned, missingGroups } = view;
   const isEditable = view.isEditable;
 
   const [statusFilter, setStatusFilter] = useState<
@@ -250,6 +250,21 @@ export function MembershipReportBoard({
           <AlertDescription>
             They are not in any count yet. The group admin has to add them,
             which sends that report back to you for re-approval.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {missingGroups.length > 0 ? (
+        <Alert>
+          <AlertTitle>
+            {missingGroups.length} group
+            {missingGroups.length === 1 ? " is" : "s are"} not in this report
+          </AlertTitle>
+          <AlertDescription>
+            {missingGroups.map((group) => group.name).join(", ")} joined the
+            fee-managing category after {report.periodLabel} was opened. Nothing
+            adds them on their own — refresh from payments to give them a row
+            and pull in anyone who has paid.
           </AlertDescription>
         </Alert>
       ) : null}
