@@ -53,6 +53,8 @@ export type MembershipSettingsState = {
   membershipPeriodMode: MembershipPeriodMode;
   membershipReportEnabled: boolean;
   membershipReportAllowSelfApproval: boolean;
+  membershipReportConfirmMonth: number | null;
+  membershipReportConfirmDay: number | null;
 };
 
 export function MembershipSettingsCard({
@@ -108,6 +110,17 @@ export function MembershipSettingsCard({
   const [allowSelfApproval, setAllowSelfApproval] = useState(
     state.membershipReportAllowSelfApproval,
   );
+  const [confirmMonth, setConfirmMonth] = useState(
+    state.membershipReportConfirmMonth ?? 3,
+  );
+  const [confirmDayText, setConfirmDayText] = useState(
+    String(state.membershipReportConfirmDay ?? 31),
+  );
+  const [hasDeadline, setHasDeadline] = useState(
+    state.membershipReportConfirmMonth != null,
+  );
+
+  const confirmDay = Math.min(Math.max(Number(confirmDayText) || 1, 1), 31);
 
   const saveAction = useAction(saveMembershipSettingsAction, {
     onSuccess() {
@@ -390,13 +403,77 @@ export function MembershipSettingsCard({
             ) : null}
 
             {reportEnabled && canEnableReport && feeManagingCategoryName ? (
-              <SwitchChoiceField
-                id="membership-report-self-approval"
-                title="Allow self-approval"
-                description="Off means an org admin cannot approve a group report they submitted themselves. Turn it on for a small organization where the same person runs a region and sits on the board — the approval is still recorded and shown as self-approved."
-                checked={allowSelfApproval}
-                onCheckedChange={setAllowSelfApproval}
-              />
+              <>
+                <SwitchChoiceField
+                  id="membership-report-deadline-enabled"
+                  title="Set a confirmation deadline"
+                  description="The date every group must have submitted its report by. Separate from the fee payment window — collecting the money and reporting the roster are different deadlines."
+                  checked={hasDeadline}
+                  onCheckedChange={setHasDeadline}
+                />
+
+                {hasDeadline ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field>
+                      <FieldLabel htmlFor="report-confirm-month">
+                        Deadline month
+                      </FieldLabel>
+                      <FieldContent>
+                        <Select
+                          value={String(confirmMonth)}
+                          onValueChange={(v) => setConfirmMonth(Number(v))}
+                        >
+                          <SelectTrigger id="report-confirm-month">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {MONTH_NAMES.map((name, i) => (
+                              <SelectItem key={i + 1} value={String(i + 1)}>
+                                {name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldContent>
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="report-confirm-day">
+                        Deadline day
+                      </FieldLabel>
+                      <FieldContent>
+                        <Input
+                          id="report-confirm-day"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          maxLength={2}
+                          value={confirmDayText}
+                          onChange={(e) => {
+                            const digits = e.target.value
+                              .replace(/\D/g, "")
+                              .slice(0, 2);
+                            if (Number(digits) > 31) return;
+                            setConfirmDayText(digits);
+                          }}
+                          onBlur={() => setConfirmDayText(String(confirmDay))}
+                        />
+                        <FieldDescription>
+                          Groups must confirm by {MONTH_NAMES[confirmMonth - 1]}{" "}
+                          {confirmDay} each year.
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  </div>
+                ) : null}
+
+                <SwitchChoiceField
+                  id="membership-report-self-approval"
+                  title="Allow self-approval"
+                  description="Off means an org admin cannot approve a group report they submitted themselves. Turn it on for a small organization where the same person runs a region and sits on the board — the approval is still recorded and shown as self-approved."
+                  checked={allowSelfApproval}
+                  onCheckedChange={setAllowSelfApproval}
+                />
+              </>
             ) : null}
           </div>
         </>
@@ -427,6 +504,8 @@ export function MembershipSettingsCard({
                   ? reportEnabled
                   : false,
               membershipReportAllowSelfApproval: allowSelfApproval,
+              membershipReportConfirmMonth: hasDeadline ? confirmMonth : null,
+              membershipReportConfirmDay: hasDeadline ? confirmDay : null,
             })
           }
           disabled={saveAction.isPending}

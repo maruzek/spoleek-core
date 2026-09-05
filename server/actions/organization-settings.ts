@@ -167,6 +167,8 @@ export const saveMembershipSettingsAction = orgAdminActionClient
             : false,
         membershipReportAllowSelfApproval:
           parsedInput.membershipReportAllowSelfApproval,
+        membershipReportConfirmMonth: parsedInput.membershipReportConfirmMonth,
+        membershipReportConfirmDay: parsedInput.membershipReportConfirmDay,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

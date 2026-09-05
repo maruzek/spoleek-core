@@ -435,6 +435,17 @@ export const organizations = pgTable(
     membershipReportAllowSelfApproval: boolean("membership_report_allow_self_approval")
       .notNull()
       .default(false),
+    /**
+     * Month and day by which every group must confirm its report.
+     *
+     * Deliberately its own setting rather than an offset from the fee payment
+     * window: collecting the money and reporting the roster to the board are
+     * different deadlines set by different people, and tying them together
+     * would move one whenever someone adjusted the other. Null means no
+     * deadline. Recurs yearly — the report anchors it to its own period's year.
+     */
+    membershipReportConfirmMonth: integer("membership_report_confirm_month"),
+    membershipReportConfirmDay: integer("membership_report_confirm_day"),
     emailNotifyRenewalHeadsup: boolean("email_notify_renewal_headsup").notNull().default(true),
     emailNotifyRenewalHeadsupDaysBefore: integer("email_notify_renewal_headsup_days_before")
       .notNull()
@@ -477,6 +488,14 @@ export const organizations = pgTable(
     check(
       "organizations_payment_window_check",
       sql`${table.membershipFeePaymentWindowDays} >= 1`,
+    ),
+    check(
+      "organizations_report_confirm_month_check",
+      sql`${table.membershipReportConfirmMonth} IS NULL OR (${table.membershipReportConfirmMonth} >= 1 AND ${table.membershipReportConfirmMonth} <= 12)`,
+    ),
+    check(
+      "organizations_report_confirm_day_check",
+      sql`${table.membershipReportConfirmDay} IS NULL OR (${table.membershipReportConfirmDay} >= 1 AND ${table.membershipReportConfirmDay} <= 31)`,
     ),
   ],
 );

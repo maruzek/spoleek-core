@@ -1,6 +1,9 @@
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 
-import { resolveMembershipPeriod } from "@/lib/membership-period";
+import {
+  resolveConfirmDueDate,
+  resolveMembershipPeriod,
+} from "@/lib/membership-period";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -284,10 +287,11 @@ export type OpenReportResult = {
 export async function openMembershipReport(params: {
   orgId: string;
   userId: string;
-  confirmDueAt: Date | null;
+  /** Overrides the organization's configured deadline for this period only. */
+  confirmDueAt?: Date | null;
   today?: Date;
 }): Promise<OpenReportResult> {
-  const { orgId, userId, confirmDueAt } = params;
+  const { orgId, userId } = params;
   const today = params.today ?? new Date();
 
   const [org] = await db
@@ -314,6 +318,17 @@ export async function openMembershipReport(params: {
     renewalDay: org.membershipRenewalDay,
     today,
   });
+
+  // Falls back to the organization's configured deadline, anchored to this
+  // period's year rather than today's.
+  const confirmDueAt =
+    params.confirmDueAt !== undefined
+      ? params.confirmDueAt
+      : resolveConfirmDueDate({
+          period,
+          month: org.membershipReportConfirmMonth,
+          day: org.membershipReportConfirmDay,
+        });
 
   const [report] = await db
     .insert(membershipReports)

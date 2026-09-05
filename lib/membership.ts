@@ -30,6 +30,22 @@ export const feeCurrencyOptions: Array<{ value: string; label: string }> = [
   { value: "USD", label: "USD" },
 ];
 
+/** February allows 29 so a leap-year date is not rejected outright. */
+const MAX_DAYS_IN_MONTH: Record<number, number> = {
+  1: 31,
+  2: 29,
+  3: 31,
+  4: 30,
+  5: 31,
+  6: 30,
+  7: 31,
+  8: 31,
+  9: 30,
+  10: 31,
+  11: 30,
+  12: 31,
+};
+
 export const membershipSettingsSchema = z
   .object({
     membershipManagementMode: z.enum(["none", "periodic_renewal"]),
@@ -61,6 +77,12 @@ export const membershipSettingsSchema = z
       .default("calendar_year"),
     membershipReportEnabled: z.boolean().default(false),
     membershipReportAllowSelfApproval: z.boolean().default(false),
+    membershipReportConfirmMonth: z
+      .union([z.number().int().min(1).max(12), z.null()])
+      .default(null),
+    membershipReportConfirmDay: z
+      .union([z.number().int().min(1).max(31), z.null()])
+      .default(null),
   })
   .superRefine((value, ctx) => {
     if (value.membershipManagementMode === "periodic_renewal") {
@@ -79,24 +101,11 @@ export const membershipSettingsSchema = z
         });
       }
 
-      const maxDays: Record<number, number> = {
-        1: 31,
-        2: 29,
-        3: 31,
-        4: 30,
-        5: 31,
-        6: 30,
-        7: 31,
-        8: 31,
-        9: 30,
-        10: 31,
-        11: 30,
-        12: 31,
-      };
       if (
         value.membershipRenewalMonth != null &&
         value.membershipRenewalDay != null &&
-        value.membershipRenewalDay > (maxDays[value.membershipRenewalMonth] ?? 31)
+        value.membershipRenewalDay >
+          (MAX_DAYS_IN_MONTH[value.membershipRenewalMonth] ?? 31)
       ) {
         ctx.addIssue({
           code: "custom",
@@ -125,6 +134,31 @@ export const membershipSettingsSchema = z
         path: ["membershipReportEnabled"],
         message:
           "The yearly report needs periodic renewal with fee payment enabled.",
+      });
+    }
+
+    // Both halves of the deadline or neither — a month with no day is not a date.
+    if (
+      (value.membershipReportConfirmMonth == null) !==
+      (value.membershipReportConfirmDay == null)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["membershipReportConfirmDay"],
+        message: "Set both a month and a day for the confirmation deadline.",
+      });
+    }
+
+    if (
+      value.membershipReportConfirmMonth != null &&
+      value.membershipReportConfirmDay != null &&
+      value.membershipReportConfirmDay >
+        (MAX_DAYS_IN_MONTH[value.membershipReportConfirmMonth] ?? 31)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["membershipReportConfirmDay"],
+        message: `Day ${value.membershipReportConfirmDay} is not valid for month ${value.membershipReportConfirmMonth}.`,
       });
     }
 

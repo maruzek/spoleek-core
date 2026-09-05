@@ -6,6 +6,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
+  ClipboardCheckIcon,
   CloudAlertIcon,
   PlusIcon,
   Settings2Icon,
@@ -16,6 +17,9 @@ import { toast } from "sonner";
 
 import { GroupDriftPanel } from "@/components/app/group-drift-panel";
 import { GroupForm } from "@/components/app/group-form";
+import { REPORT_GROUP_STATUS } from "@/lib/membership-report-status";
+import type { GroupReportView } from "@/server/queries/membership-reports";
+import { GroupReportCard } from "@/components/app/group-report-card";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
@@ -124,6 +128,9 @@ type GroupDetailProps = {
   workspaceDomain: string | null;
   workspaceConnected: boolean;
   canManageWorkspaceIntegration: boolean;
+  /** Null when the report module is off or this group is not a reporting group. */
+  reportView: GroupReportView | null;
+  locale: string;
 };
 
 const memberColumnHelper =
@@ -152,6 +159,8 @@ export function GroupDetail({
   workspaceDomain,
   workspaceConnected,
   canManageWorkspaceIntegration,
+  reportView,
+  locale,
 }: GroupDetailProps) {
   const openDriftCount = workspaceDrift.filter(
     (row) => row.status === "open",
@@ -399,11 +408,33 @@ export function GroupDetail({
               ) : null}
             </TabsTrigger>
           ) : null}
+          {reportView ? (
+            <TabsTrigger value="report">
+              <ClipboardCheckIcon data-icon="inline-start" />
+              Yearly report
+              {REPORT_GROUP_STATUS[reportView.reportGroup.status]
+                .needsAttention ? (
+                <Badge variant="destructive" className="ml-2">
+                  !
+                </Badge>
+              ) : null}
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="settings">
             <Settings2Icon data-icon="inline-start" />
             Settings
           </TabsTrigger>
         </TabsList>
+
+        {reportView ? (
+          <TabsContent value="report" className="flex flex-col gap-4 pt-4">
+            <GroupReportCard
+              view={reportView}
+              groupName={group.name}
+              locale={locale}
+            />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="members" className="flex flex-col gap-4 pt-4">
           <DataTable

@@ -1,0 +1,4 @@
+ALTER TABLE "organizations" ADD COLUMN "membership_report_confirm_month" integer;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN "membership_report_confirm_day" integer;--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_report_confirm_month_check" CHECK ("organizations"."membership_report_confirm_month" IS NULL OR ("organizations"."membership_report_confirm_month" >= 1 AND "organizations"."membership_report_confirm_month" <= 12));--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_report_confirm_day_check" CHECK ("organizations"."membership_report_confirm_day" IS NULL OR ("organizations"."membership_report_confirm_day" >= 1 AND "organizations"."membership_report_confirm_day" <= 31));

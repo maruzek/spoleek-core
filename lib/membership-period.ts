@@ -9,9 +9,23 @@ import type { MembershipPeriodMode } from "@/server/db/schema";
  */
 export type MembershipPeriod = {
   label: string;
+  /** Midnight UTC on the first day. See the note on UTC below. */
   start: Date;
+  /** Midnight UTC on the last day. */
   end: Date;
 };
+
+/**
+ * Period bounds are calendar dates, not instants, and are built and read in UTC
+ * throughout.
+ *
+ * `new Date(2026, 0, 1)` is midnight *local* time, which in Europe/Prague is
+ * 2025-12-31T23:00Z. Postgres `date` columns hold no timezone, so that value
+ * round-trips as 2025-12-31 and the year silently starts a day early. Every
+ * construction below goes through `Date.UTC`, and every formatter that renders
+ * one must pass `timeZone: "UTC"` to match.
+ */
+export const PERIOD_DATE_TIMEZONE = "UTC";
 
 /**
  * Resolves the membership period that `today` falls into.
@@ -35,8 +49,8 @@ export function resolveMembershipPeriod(params: {
 
   return {
     label: String(year),
-    start: new Date(year, 0, 1),
-    end: new Date(year, 11, 31),
+    start: new Date(Date.UTC(year, 0, 1)),
+    end: new Date(Date.UTC(year, 11, 31)),
   };
 }
 
@@ -73,6 +87,7 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   day: "numeric",
   month: "long",
   year: "numeric",
+  timeZone: PERIOD_DATE_TIMEZONE,
 };
 
 /**
@@ -102,6 +117,25 @@ export function describeMembershipPeriod(params: {
 /** The day a fee issued at the period start becomes overdue. */
 export function getFeeDueDate(periodStart: Date, paymentWindowDays: number): Date {
   const dueAt = new Date(periodStart);
-  dueAt.setDate(dueAt.getDate() + paymentWindowDays);
+  dueAt.setUTCDate(dueAt.getUTCDate() + paymentWindowDays);
   return dueAt;
+}
+
+/**
+ * The confirmation deadline for a period, from the organization's month/day.
+ *
+ * Returns null when no deadline is configured. The date is anchored to the
+ * period's own year rather than today's, so reopening the 2026 report in 2027
+ * still shows the 2026 deadline.
+ */
+export function resolveConfirmDueDate(params: {
+  period: MembershipPeriod;
+  month: number | null;
+  day: number | null;
+}): Date | null {
+  if (params.month == null || params.day == null) return null;
+
+  return new Date(
+    Date.UTC(params.period.start.getUTCFullYear(), params.month - 1, params.day),
+  );
 }

@@ -7,6 +7,7 @@ import { getGroupDetailData } from "@/server/queries/groups";
 import { listWorkspaceGroupDrift } from "@/server/queries/workspace-group-drift";
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
 import { getAppOrganization } from "@/server/queries/app";
+import { getGroupReportView } from "@/server/queries/membership-reports";
 
 export default async function AdminGroupPage({
   params,
@@ -18,13 +19,18 @@ export default async function AdminGroupPage({
     requireGroupManagementAccess(groupId),
     getAppOrganization(),
   ]);
-  const [detail, workspaceLinks, workspaceDrift] = await Promise.all([
+  const [detail, workspaceLinks, workspaceDrift, reportView] = await Promise.all([
     getGroupDetailData(access.organization.id, groupId),
     listGroupWorkspaceLinks(access.organization.id, { groupId }),
     listWorkspaceGroupDrift(access.organization.id, {
       groupId,
       includeIgnored: true,
     }),
+    // Returns null unless the module is on and this group is a reporting group,
+    // so a group that does not report is never told it has a report to file.
+    organization?.membershipReportEnabled
+      ? getGroupReportView(access.organization.id, groupId)
+      : null,
   ]);
 
   if (!detail || detail.group.categoryId !== categoryId) {
@@ -49,6 +55,8 @@ export default async function AdminGroupPage({
         canManageWorkspaceIntegration={
           access.adminAccessLevel === "full" || access.member?.role === "leader"
         }
+        reportView={reportView}
+        locale={organization?.locale ?? "en"}
       />
     </AppPage>
   );
