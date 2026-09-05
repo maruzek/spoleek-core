@@ -216,6 +216,8 @@ export async function getOverdueFeesByMember(
       memberId: memberPayments.memberId,
       count: sql<number>`cast(count(*) as int)`,
       total: sum(memberPayments.amount),
+      // One currency per organization — groups cannot override it — so every
+      // row in this group shares it and picking one is not a collapse.
       currency: sql<string>`min(${memberPayments.currency})`,
       oldestDueAt: sql<Date>`min(${memberPayments.dueAt})`,
     })

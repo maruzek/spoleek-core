@@ -671,7 +671,6 @@ export const groups = pgTable(
     feeRenewalMonth: integer("fee_renewal_month"),
     feeRenewalDay: integer("fee_renewal_day"),
     feeAmount: integer("fee_amount"),
-    feeCurrency: text("fee_currency"),
     feeBankAccount: text("fee_bank_account"),
     feePaymentWindowDays: integer("fee_payment_window_days"),
     workspaceOrgUnitPath: text("workspace_org_unit_path"),
@@ -1252,6 +1251,15 @@ export const membershipReports = pgTable(
     periodLabel: text("period_label").notNull(),
     periodStart: date("period_start", { mode: "date" }).notNull(),
     periodEnd: date("period_end", { mode: "date" }).notNull(),
+    /**
+     * The organization's fee currency, copied at open time.
+     *
+     * One currency per organization is a hard rule — groups cannot override it
+     * — but the report still snapshots it rather than joining live, for the
+     * same reason it snapshots names and amounts: an organization that switches
+     * currency must not retitle the totals of every year it already reported.
+     */
+    currency: text("currency"),
     /** Date by which every group must have submitted. Null means no deadline. */
     confirmDueAt: date("confirm_due_at", { mode: "date" }),
     status: membershipReportStatusEnum("status").notNull().default("draft"),

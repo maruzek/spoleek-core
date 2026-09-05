@@ -10,7 +10,6 @@ import {
   groupSchema,
   type GroupFormValues,
 } from "@/lib/groups";
-import { feeCurrencyOptions } from "@/lib/membership";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
@@ -69,7 +68,6 @@ function toDefaultValues(
     feeRenewalDay: group?.feeRenewalDay ?? null,
     // Stored in minor units; the input edits whole currency units.
     feeAmount: feeToMajorUnits(group?.feeAmount) ?? null,
-    feeCurrency: group?.feeCurrency ?? null,
     feeBankAccount: group?.feeBankAccount ?? null,
     feePaymentWindowDays: group?.feePaymentWindowDays ?? null,
     workspaceOrgUnitPath: group?.workspaceOrgUnitPath ?? null,
@@ -663,90 +661,57 @@ export function GroupForm({
             </form.Field>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
-            <form.Field name="feeAmount">
-              {(formField) => (
-                <Field
-                  data-invalid={
-                    (formField.state.meta.isTouched ||
-                      form.state.submissionAttempts > 0) &&
-                    (formField.state.meta.errors.length > 0 ||
-                      getFieldError("feeAmount").length > 0)
-                  }
-                >
-                  <FieldLabel htmlFor="group-fee-amount">Fee amount</FieldLabel>
-                  <FieldContent>
-                    <Input
-                      id="group-fee-amount"
-                      type="number"
-                      min={0}
-                      value={formField.state.value ?? ""}
-                      onBlur={formField.handleBlur}
-                      onChange={(e) =>
-                        formField.handleChange(
-                          e.target.value ? Number(e.target.value) : null,
-                        )
-                      }
-                      placeholder={
-                        orgFeeDefaults?.feeAmount != null
-                          ? String(feeToMajorUnits(orgFeeDefaults.feeAmount))
-                          : ""
-                      }
-                    />
-                    <FieldDescription>
-                      {formatOrgDefault(
-                        orgFeeDefaults?.feeAmount != null
-                          ? `${feeToMajorUnits(orgFeeDefaults.feeAmount)} ${orgFeeDefaults.feeCurrency}`
-                          : "",
-                        orgFeeDefaults?.feeAmount,
-                      )}
-                    </FieldDescription>
-                    <FieldError
-                      errors={[
-                        ...getClientFieldErrors(
-                          formField.state.meta.errors,
-                        ).map((m) => ({ message: m })),
-                        ...getFieldError("feeAmount").map((m) => ({
-                          message: m,
-                        })),
-                      ]}
-                    />
-                  </FieldContent>
-                </Field>
-              )}
-            </form.Field>
-
-            <form.Field name="feeCurrency">
-              {(formField) => (
-                <Field>
-                  <FieldLabel htmlFor="group-fee-currency">Currency</FieldLabel>
-                  <FieldContent>
-                    <Select
-                      value={formField.state.value ?? ""}
-                      onValueChange={(v) => formField.handleChange(v || null)}
-                    >
-                      <SelectTrigger id="group-fee-currency">
-                        <SelectValue placeholder="Use org default" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {feeCurrencyOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      {formatOrgDefault(
-                        orgFeeDefaults?.feeCurrency ?? "",
-                        orgFeeDefaults?.feeCurrency,
-                      )}
-                    </FieldDescription>
-                  </FieldContent>
-                </Field>
-              )}
-            </form.Field>
-          </div>
+          <form.Field name="feeAmount">
+            {(formField) => (
+              <Field
+                data-invalid={
+                  (formField.state.meta.isTouched ||
+                    form.state.submissionAttempts > 0) &&
+                  (formField.state.meta.errors.length > 0 ||
+                    getFieldError("feeAmount").length > 0)
+                }
+              >
+                <FieldLabel htmlFor="group-fee-amount">Fee amount</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="group-fee-amount"
+                    type="number"
+                    min={0}
+                    value={formField.state.value ?? ""}
+                    onBlur={formField.handleBlur}
+                    onChange={(e) =>
+                      formField.handleChange(
+                        e.target.value ? Number(e.target.value) : null,
+                      )
+                    }
+                    placeholder={
+                      orgFeeDefaults?.feeAmount != null
+                        ? String(feeToMajorUnits(orgFeeDefaults.feeAmount))
+                        : ""
+                    }
+                  />
+                  <FieldDescription>
+                    {formatOrgDefault(
+                      orgFeeDefaults?.feeAmount != null
+                        ? `${feeToMajorUnits(orgFeeDefaults.feeAmount)} ${orgFeeDefaults.feeCurrency}`
+                        : "",
+                      orgFeeDefaults?.feeAmount,
+                    )}
+                  </FieldDescription>
+                  <FieldError
+                    errors={[
+                      ...getClientFieldErrors(
+                        formField.state.meta.errors,
+                      ).map((m) => ({ message: m })),
+                      ...getFieldError("feeAmount").map((m) => ({
+                        message: m,
+                      })),
+                    ]}
+                  />
+                </FieldContent>
+              </Field>
+            )}
+          </form.Field>
 
           <form.Field name="feePaymentWindowDays">
             {(formField) => (

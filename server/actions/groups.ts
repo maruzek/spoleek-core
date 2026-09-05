@@ -283,7 +283,6 @@ export const saveGroupAction = authActionClient
           feeRenewalMonth: parsedInput.feeRenewalMonth,
           feeRenewalDay: parsedInput.feeRenewalDay,
           feeAmount: parsedInput.feeAmount,
-          feeCurrency: parsedInput.feeCurrency,
           feeBankAccount: parsedInput.feeBankAccount,
           feePaymentWindowDays: parsedInput.feePaymentWindowDays,
         }
@@ -291,7 +290,6 @@ export const saveGroupAction = authActionClient
           feeRenewalMonth: null,
           feeRenewalDay: null,
           feeAmount: null,
-          feeCurrency: null,
           feeBankAccount: null,
           feePaymentWindowDays: null,
         };

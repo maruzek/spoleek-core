@@ -61,7 +61,6 @@ function getPeriodLabel(
 export type GroupFeeOverrides = {
   groupId: string;
   feeAmount: number | null;
-  feeCurrency: string | null;
   feeBankAccount: string | null;
   feePaymentWindowDays: number | null;
   feeRenewalMonth: number | null;
@@ -84,8 +83,11 @@ export type ResolvedFee = {
  * The merge is per field, matching what the group form promises ("Leave fields
  * empty to use the organization defaults. Fill in only the values this group
  * should override."). The previous all-or-nothing check meant a group that set
- * only an amount silently dropped the org's IBAN, and a group that set an
- * amount but left the currency empty fell back to the org fee entirely.
+ * only an amount silently dropped the org's IBAN.
+ *
+ * Currency is deliberately not overridable: it is one value per organization.
+ * A group billing a second currency would make the yearly report's per-group
+ * totals sum two currencies under one label.
  *
  * Renewal month and day move as a pair because the group form validates them
  * that way — half a date is never meaningful.
@@ -96,7 +98,7 @@ export function resolveMembershipFee(
   today: Date,
 ): ResolvedFee | null {
   const amount = groupFee?.feeAmount ?? org.membershipFeeAmount;
-  const currency = groupFee?.feeCurrency ?? org.membershipFeeCurrency;
+  const currency = org.membershipFeeCurrency;
 
   if (!amount || !currency) return null;
 
@@ -127,7 +129,6 @@ export function resolveMembershipFee(
   const overridesAnything =
     groupFee != null &&
     (groupFee.feeAmount != null ||
-      groupFee.feeCurrency != null ||
       groupFee.feeBankAccount != null ||
       groupFee.feePaymentWindowDays != null ||
       hasGroupRenewal);
@@ -375,7 +376,6 @@ export async function generatePaymentForMember(
       memberId: groupMemberships.memberId,
       groupId: groupMemberships.groupId,
       feeAmount: groups.feeAmount,
-      feeCurrency: groups.feeCurrency,
       feeBankAccount: groups.feeBankAccount,
       feePaymentWindowDays: groups.feePaymentWindowDays,
       feeRenewalMonth: groups.feeRenewalMonth,
@@ -529,7 +529,6 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
           groupId: groupMemberships.groupId,
           createdAt: groupMemberships.createdAt,
           feeAmount: groups.feeAmount,
-          feeCurrency: groups.feeCurrency,
           feeBankAccount: groups.feeBankAccount,
           feePaymentWindowDays: groups.feePaymentWindowDays,
           feeRenewalMonth: groups.feeRenewalMonth,

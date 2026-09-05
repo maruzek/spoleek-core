@@ -106,13 +106,31 @@ async function getReportGroupIdByMember(
  * call this after any write to `membership_report_members`.
  */
 export async function recalculateReportGroupCounts(reportGroupId: string) {
+  const [reportRow] = await db
+    .select({ currency: membershipReports.currency })
+    .from(membershipReportGroups)
+    .innerJoin(
+      membershipReports,
+      eq(membershipReportGroups.reportId, membershipReports.id),
+    )
+    .where(eq(membershipReportGroups.id, reportGroupId))
+    .limit(1);
+
+  if (!reportRow) throw new Error("Report group not found.");
+
+  const currency = reportRow.currency;
+
   const [totals] = await db
     .select({
       memberCount: sql<number>`cast(count(*) as int)`,
       paidCount: sql<number>`cast(count(*) filter (where ${membershipReportMembers.confirmationBasis} = 'paid') as int)`,
       waivedCount: sql<number>`cast(count(*) filter (where ${membershipReportMembers.confirmationBasis} = 'waived') as int)`,
       feeTotalCents: sql<number>`cast(coalesce(sum(${membershipReportMembers.feeAmountCents}), 0) as int)`,
-      currency: sql<string | null>`min(${membershipReportMembers.currency})`,
+      // The total carries one currency label, so a row in another currency
+      // would be summed under the wrong one. Currency is organization-wide and
+      // not overridable, so this can only mean a bug — refuse rather than
+      // publish a number that is quietly the sum of two currencies.
+      foreignCurrencyCount: sql<number>`cast(count(*) filter (where ${membershipReportMembers.currency} is not null and ${membershipReportMembers.currency} is distinct from ${currency}) as int)`,
     })
     .from(membershipReportMembers)
     .where(
@@ -123,6 +141,12 @@ export async function recalculateReportGroupCounts(reportGroupId: string) {
       ),
     );
 
+  if (currency && (totals?.foreignCurrencyCount ?? 0) > 0) {
+    throw new Error(
+      `Report group ${reportGroupId} has ${totals!.foreignCurrencyCount} member rows in a currency other than ${currency}.`,
+    );
+  }
+
   await db
     .update(membershipReportGroups)
     .set({
@@ -130,7 +154,7 @@ export async function recalculateReportGroupCounts(reportGroupId: string) {
       paidCount: totals?.paidCount ?? 0,
       waivedCount: totals?.waivedCount ?? 0,
       feeTotalCents: totals?.feeTotalCents ?? 0,
-      currency: totals?.currency ?? null,
+      currency,
       updatedAt: new Date(),
     })
     .where(eq(membershipReportGroups.id, reportGroupId));
@@ -337,6 +361,7 @@ export async function openMembershipReport(params: {
       periodLabel: period.label,
       periodStart: period.start,
       periodEnd: period.end,
+      currency: org.membershipFeeCurrency,
       confirmDueAt,
       status: "open",
       openedAt: today,
@@ -345,6 +370,8 @@ export async function openMembershipReport(params: {
     .onConflictDoUpdate({
       target: [membershipReports.orgId, membershipReports.periodLabel],
       // Reopening a closed period is how the board handles a late correction.
+      // `currency` is absent on purpose: it is snapshotted when the period is
+      // first opened and a later refresh must not rewrite the totals' label.
       set: { status: "open", confirmDueAt, closedAt: null, updatedAt: new Date() },
     })
     .returning({ id: membershipReports.id });

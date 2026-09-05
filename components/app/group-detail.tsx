@@ -72,7 +72,6 @@ type GroupDetailProps = {
     feeRenewalMonth: number | null;
     feeRenewalDay: number | null;
     feeAmount: number | null;
-    feeCurrency: string | null;
     feeBankAccount: string | null;
     feePaymentWindowDays: number | null;
     workspaceOrgUnitPath: string | null;

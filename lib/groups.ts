@@ -132,7 +132,6 @@ export const groupSchema = z
     feePaymentWindowDays: z
       .union([z.number().int().min(1).max(365), z.null()])
       .default(null),
-    feeCurrency: z.union([z.string().trim(), z.null()]).default(null),
     feeBankAccount: z
       .union([z.string(), z.null(), z.undefined()])
       .transform((value) => {
