@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -16,6 +16,7 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import {
+  listUnassignedConfirmedMembers,
   openMembershipReport,
   recalculateReportGroupCounts,
 } from "@/server/lib/membership-report";
@@ -93,25 +94,143 @@ export const setReportDeadlineAction = orgAdminActionClient
     return { success: true };
   });
 
+/** The report row, scoped to the caller's organization. */
+async function loadReportForBoard(orgId: string, reportId: string) {
+  const [report] = await db
+    .select({
+      id: membershipReports.id,
+      periodLabel: membershipReports.periodLabel,
+      status: membershipReports.status,
+    })
+    .from(membershipReports)
+    .where(
+      and(eq(membershipReports.id, reportId), eq(membershipReports.orgId, orgId)),
+    )
+    .limit(1);
+
+  if (!report) forbidden();
+
+  return report;
+}
+
+/**
+ * What is still unfinished about a report, for the close confirmation.
+ *
+ * Recomputed server-side rather than trusted from the client: the dialog names
+ * these numbers, and closing is permanent.
+ */
+async function getReportClosePreconditions(
+  orgId: string,
+  reportId: string,
+  periodLabel: string,
+) {
+  const [[unapproved], unassigned] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(membershipReportGroups)
+      .where(
+        and(
+          eq(membershipReportGroups.reportId, reportId),
+          ne(membershipReportGroups.status, "approved"),
+        ),
+      ),
+    listUnassignedConfirmedMembers(orgId, periodLabel),
+  ]);
+
+  return {
+    unapprovedGroups: unapproved?.value ?? 0,
+    unassignedMembers: unassigned.length,
+  };
+}
+
+/**
+ * Makes a report permanent.
+ *
+ * Closing is not refused when groups are unapproved or members sit outside
+ * every group — an organization may have a good reason, and a rule it cannot
+ * get past would just be worked around in SQL. It does demand that the caller
+ * say so: the counts are recomputed here, and an acknowledgement is required
+ * when either is non-zero, so nobody closes a short year by accident.
+ */
 export const closeMembershipReportAction = orgAdminActionClient
   .metadata({ actionName: "closeMembershipReport" })
-  .inputSchema(z.object({ reportId: z.string().uuid() }))
+  .inputSchema(
+    z.object({
+      reportId: z.string().uuid(),
+      acknowledgeIncomplete: z.boolean().default(false),
+    }),
+  )
   .action(async ({ parsedInput }) => {
     const { organization } = await requireOrgAdminAccess();
+    const report = await loadReportForBoard(organization.id, parsedInput.reportId);
+
+    if (report.status === "closed") {
+      throw new Error("This report is already closed.");
+    }
+
+    const { unapprovedGroups, unassignedMembers } =
+      await getReportClosePreconditions(
+        organization.id,
+        report.id,
+        report.periodLabel,
+      );
+
+    if (
+      (unapprovedGroups > 0 || unassignedMembers > 0) &&
+      !parsedInput.acknowledgeIncomplete
+    ) {
+      const parts = [
+        unapprovedGroups > 0
+          ? `${unapprovedGroups} group${unapprovedGroups === 1 ? " is" : "s are"} not approved`
+          : null,
+        unassignedMembers > 0
+          ? `${unassignedMembers} confirmed member${unassignedMembers === 1 ? " is" : "s are"} in no group`
+          : null,
+      ].filter(Boolean);
+
+      throw new Error(
+        `${parts.join(" and ")}. Confirm you want to close ${report.periodLabel} anyway.`,
+      );
+    }
 
     await db
       .update(membershipReports)
       .set({ status: "closed", closedAt: new Date(), updatedAt: new Date() })
-      .where(
-        and(
-          eq(membershipReports.id, parsedInput.reportId),
-          eq(membershipReports.orgId, organization.id),
-        ),
-      );
+      .where(eq(membershipReports.id, report.id));
 
     revalidatePath("/admin/reports");
+    revalidatePath("/admin/groups", "layout");
 
-    return { success: true };
+    return { success: true, periodLabel: report.periodLabel };
+  });
+
+/**
+ * Reopens a closed report.
+ *
+ * Deliberately its own action rather than a side effect of refreshing from
+ * payments: a closed year is a record the board signed off, and undoing that
+ * has to be something somebody chose to do.
+ */
+export const reopenMembershipReportAction = orgAdminActionClient
+  .metadata({ actionName: "reopenMembershipReport" })
+  .inputSchema(z.object({ reportId: z.string().uuid() }))
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+    const report = await loadReportForBoard(organization.id, parsedInput.reportId);
+
+    if (report.status !== "closed") {
+      throw new Error("This report is not closed.");
+    }
+
+    await db
+      .update(membershipReports)
+      .set({ status: "open", closedAt: null, updatedAt: new Date() })
+      .where(eq(membershipReports.id, report.id));
+
+    revalidatePath("/admin/reports");
+    revalidatePath("/admin/groups", "layout");
+
+    return { success: true, periodLabel: report.periodLabel };
   });
 
 

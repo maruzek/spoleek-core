@@ -1,6 +1,7 @@
 import { forbidden } from "next/navigation";
 
 import { AppPage } from "@/components/app/app-page";
+import { CloseMembershipReportButton } from "@/components/app/close-membership-report-button";
 import { MembershipReportBoard } from "@/components/app/membership-report-board";
 import { OpenMembershipReportButton } from "@/components/app/open-membership-report-button";
 import { ReportPeriodPicker } from "@/components/app/report-period-picker";
@@ -54,7 +55,18 @@ export default async function AdminReportsPage({
               periods={view.periods}
               currentReportId={view.report.id}
             />
-            <OpenMembershipReportButton hasReport />
+            <CloseMembershipReportButton
+              reportId={view.report.id}
+              periodLabel={view.report.periodLabel}
+              isClosed={view.report.status === "closed"}
+              unapprovedGroups={
+                view.totals.groupCount - view.totals.approvedCount
+              }
+              unassignedMembers={view.unassigned.length}
+            />
+            {view.report.status === "closed" ? null : (
+              <OpenMembershipReportButton hasReport />
+            )}
           </div>
         ) : null
       }

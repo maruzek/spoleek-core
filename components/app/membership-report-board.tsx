@@ -195,9 +195,9 @@ export function MembershipReportBoard({
         <Alert>
           <AlertTitle>The {report.periodLabel} report is closed</AlertTitle>
           <AlertDescription>
-            This is the record as it was signed off. Reopen the year from
-            &ldquo;Refresh from payments&rdquo; if something genuinely has to
-            change.
+            This is the record as it was signed off. Nothing here can be
+            changed until somebody reopens the year, and refreshing from
+            payments will refuse to touch it.
           </AlertDescription>
         </Alert>
       ) : null}

@@ -444,6 +444,29 @@ export async function openMembershipReport(params: {
           day: org.membershipReportConfirmDay,
         });
 
+  const [existing] = await db
+    .select({
+      id: membershipReports.id,
+      status: membershipReports.status,
+    })
+    .from(membershipReports)
+    .where(
+      and(
+        eq(membershipReports.orgId, orgId),
+        eq(membershipReports.periodLabel, period.label),
+      ),
+    )
+    .limit(1);
+
+  // This function doubles as "Refresh from payments", which used to set the
+  // status back to `open` unconditionally — quietly undoing a sign-off. A
+  // closed year reopens only through the named action.
+  if (existing?.status === "closed") {
+    throw new Error(
+      `The ${period.label} report is closed. Reopen it before refreshing from payments.`,
+    );
+  }
+
   const [report] = await db
     .insert(membershipReports)
     .values({
@@ -459,10 +482,17 @@ export async function openMembershipReport(params: {
     })
     .onConflictDoUpdate({
       target: [membershipReports.orgId, membershipReports.periodLabel],
-      // Reopening a closed period is how the board handles a late correction.
-      // `currency` is absent on purpose: it is snapshotted when the period is
-      // first opened and a later refresh must not rewrite the totals' label.
-      set: { status: "open", confirmDueAt, closedAt: null, updatedAt: new Date() },
+      set: {
+        // `status`, `closedAt` and `currency` are absent on purpose. The first
+        // two belong to close/reopen; the third is snapshotted at open time and
+        // a refresh must not relabel the totals.
+        //
+        // The deadline is only written when this call was given one. Re-deriving
+        // it from the organization settings on every refresh would silently
+        // overwrite a date somebody set for this year on purpose.
+        ...(params.confirmDueAt !== undefined ? { confirmDueAt } : {}),
+        updatedAt: new Date(),
+      },
     })
     .returning({ id: membershipReports.id });
 
