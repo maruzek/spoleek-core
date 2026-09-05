@@ -94,6 +94,7 @@ export default async function AdminSettingsPage({
     emailNotifyRenewalHeadsupDaysBefore: organization.emailNotifyRenewalHeadsupDaysBefore,
     emailNotifyOverdue: organization.emailNotifyOverdue,
     emailNotifyPaymentConfirmed: organization.emailNotifyPaymentConfirmed,
+    emailNotifyReportReminder: organization.emailNotifyReportReminder,
     emailNotifyRegistration: organization.emailNotifyRegistration,
     emailNotifyRegistrationOrgAdmins: organization.emailNotifyRegistrationOrgAdmins,
     registrationNotificationEmail: organization.registrationNotificationEmail,

@@ -281,6 +281,20 @@
       "when": 1788600160489,
       "tag": "0039_acoustic_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788608866251,
+      "tag": "0040_conscious_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788609232603,
+      "tag": "0041_great_havok",
+      "breakpoints": true
     }
   ]
 }

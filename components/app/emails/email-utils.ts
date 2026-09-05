@@ -32,6 +32,10 @@ export function getEmailKindLabel(kind: EmailKind) {
       return "Application declined";
     case "workspace_welcome":
       return "Workspace welcome";
+    case "report_reminder":
+      return "Report reminder";
+    case "report_digest":
+      return "Report digest";
     default:
       return String(kind).replaceAll("_", " ");
   }

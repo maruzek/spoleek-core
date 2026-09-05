@@ -22,6 +22,7 @@ export type EmailNotificationSettingsState = {
   emailNotifyRenewalHeadsupDaysBefore: number;
   emailNotifyOverdue: boolean;
   emailNotifyPaymentConfirmed: boolean;
+  emailNotifyReportReminder: boolean;
   emailNotifyRegistration: boolean;
   emailNotifyRegistrationOrgAdmins: boolean;
   registrationNotificationEmail: string | null;
@@ -38,6 +39,9 @@ export function EmailNotificationSettingsCard({
   const [headsupDaysBefore, setHeadsupDaysBefore] = useState(state.emailNotifyRenewalHeadsupDaysBefore);
   const [notifyOverdue, setNotifyOverdue] = useState(state.emailNotifyOverdue);
   const [notifyPaymentConfirmed, setNotifyPaymentConfirmed] = useState(state.emailNotifyPaymentConfirmed);
+  const [notifyReportReminder, setNotifyReportReminder] = useState(
+    state.emailNotifyReportReminder,
+  );
   const [notifyRegistration, setNotifyRegistration] = useState(state.emailNotifyRegistration);
   const [notifyRegistrationOrgAdmins, setNotifyRegistrationOrgAdmins] = useState(
     state.emailNotifyRegistrationOrgAdmins,
@@ -139,6 +143,25 @@ export function EmailNotificationSettingsCard({
         Admin alerts
       </p>
 
+      <div className="flex flex-col gap-2 rounded-xl border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Report confirmation reminders</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Remind group admins who have not submitted their yearly report at
+              14, 7 and 1 days before the deadline, then weekly once it passes.
+              The board gets a summary of who is still outstanding. Only sent
+              when a confirmation deadline is set in Membership settings.
+            </p>
+          </div>
+          <Switch
+            checked={notifyReportReminder}
+            onCheckedChange={setNotifyReportReminder}
+            aria-label="Enable yearly report reminders"
+          />
+        </div>
+      </div>
+
       <div className="flex flex-col gap-4 rounded-xl border p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -215,6 +238,7 @@ export function EmailNotificationSettingsCard({
               emailNotifyRenewalHeadsupDaysBefore: headsupDaysBefore,
               emailNotifyOverdue: notifyOverdue,
               emailNotifyPaymentConfirmed: notifyPaymentConfirmed,
+              emailNotifyReportReminder: notifyReportReminder,
               emailNotifyRegistration: notifyRegistration,
               emailNotifyRegistrationOrgAdmins: notifyRegistrationOrgAdmins,
               registrationNotificationEmail: registrationEmail,

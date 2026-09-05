@@ -82,6 +82,11 @@ export const emailKindEnum = pgEnum("email_kind", [
   "registration_acknowledgement",
   "registration_duplicate_notice",
   "registration_rejected",
+  // Reminders for the yearly member report. Routed through
+  // `sendNotificationEmails` so a deadline the board enforces is provably
+  // delivered rather than merely sent.
+  "report_reminder",
+  "report_digest",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -211,6 +216,17 @@ export const membershipReportGroupStatusEnum = pgEnum(
  * rather than a flat 36 — a waived member is a decision someone made, and
  * collapsing it into the paid count hides that decision.
  */
+/**
+ * Rungs of the confirmation reminder ladder, in ascending urgency.
+ *
+ * Fixed rather than configurable: three descending numbers plus a validation
+ * rule that they stay ordered is a lot of setting for something nobody tunes.
+ */
+export const membershipReportReminderStageEnum = pgEnum(
+  "membership_report_reminder_stage",
+  ["t_minus_14", "t_minus_7", "t_minus_1", "overdue"],
+);
+
 export const membershipReportConfirmationBasisEnum = pgEnum(
   "membership_report_confirmation_basis",
   ["paid", "waived", "manual"],
@@ -446,6 +462,14 @@ export const organizations = pgTable(
      */
     membershipReportConfirmMonth: integer("membership_report_confirm_month"),
     membershipReportConfirmDay: integer("membership_report_confirm_day"),
+    /**
+     * Reminder emails to group admins who have not submitted, and the digest to
+     * the board. Only ever sent when a confirmation deadline is configured —
+     * without one there is nothing to count down to.
+     */
+    emailNotifyReportReminder: boolean("email_notify_report_reminder")
+      .notNull()
+      .default(true),
     emailNotifyRenewalHeadsup: boolean("email_notify_renewal_headsup").notNull().default(true),
     emailNotifyRenewalHeadsupDaysBefore: integer("email_notify_renewal_headsup_days_before")
       .notNull()
@@ -1233,6 +1257,15 @@ export const membershipReports = pgTable(
     status: membershipReportStatusEnum("status").notNull().default("draft"),
     openedAt: timestamp("opened_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    /**
+     * When the board digest last went out.
+     *
+     * The digest normally rides the group reminders' cadence, which the ladder
+     * already rate-limits. It only needs a record of its own for the case where
+     * every group has submitted and the board is the sole holdout — with no
+     * group reminders to ride, it would otherwise send every morning.
+     */
+    digestSentAt: timestamp("digest_sent_at", { withTimezone: true }),
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -1294,6 +1327,17 @@ export const membershipReportGroups = pgTable(
     selfApproved: boolean("self_approved").notNull().default(false),
     returnedAt: timestamp("returned_at", { withTimezone: true }),
     returnedReason: text("returned_reason"),
+    /**
+     * The last rung of the reminder ladder sent for this group, and when.
+     *
+     * The cron runs daily against a single deadline, so without this the group
+     * would be mailed "14 days left" every morning for a fortnight. The ladder
+     * is monotonic, so "already at or past this rung" is one comparison and a
+     * re-run cannot double-send. Cleared when the group is sent back, because
+     * its position in the ladder is no longer where it was.
+     */
+    reminderStageSent: membershipReportReminderStageEnum("reminder_stage_sent"),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
     memberCount: integer("member_count").notNull().default(0),
     paidCount: integer("paid_count").notNull().default(0),
     waivedCount: integer("waived_count").notNull().default(0),
@@ -1431,6 +1475,8 @@ export type MembershipReportGroupStatus =
   typeof membershipReportGroupStatusEnum.enumValues[number];
 export type MembershipReportConfirmationBasis =
   typeof membershipReportConfirmationBasisEnum.enumValues[number];
+export type MembershipReportReminderStage =
+  typeof membershipReportReminderStageEnum.enumValues[number];
 export type MembershipReport = typeof membershipReports.$inferSelect;
 export type MembershipReportGroup = typeof membershipReportGroups.$inferSelect;
 export type MembershipReportMember = typeof membershipReportMembers.$inferSelect;

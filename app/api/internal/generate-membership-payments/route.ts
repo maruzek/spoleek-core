@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getServerEnv } from "@/lib/env";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
+import { sendMembershipReportReminders } from "@/server/lib/membership-report-reminders";
 
 function isAuthorized(request: Request) {
   const env = getServerEnv();
@@ -48,7 +49,19 @@ async function handleGenerate(request: Request) {
 
   console.info("Generated membership payments", result);
 
-  return NextResponse.json(result);
+  // Same daily cadence, so it rides this cron rather than adding another entry.
+  // Failures are reported alongside the payment run, never thrown — a broken
+  // mailer must not stop fees from being generated.
+  const reminders = await sendMembershipReportReminders().catch((error) => {
+    console.error("Membership report reminders failed", error);
+    return null;
+  });
+
+  if (reminders) {
+    console.info("Sent membership report reminders", reminders);
+  }
+
+  return NextResponse.json({ ...result, reminders });
 }
 
 export async function GET(request: Request) {

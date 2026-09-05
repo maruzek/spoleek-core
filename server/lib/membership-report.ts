@@ -381,6 +381,7 @@ export async function openMembershipReport(params: {
         .returning({
           id: membershipReportGroups.id,
           groupId: membershipReportGroups.groupId,
+          status: membershipReportGroups.status,
         })
     : [];
 
@@ -388,11 +389,21 @@ export async function openMembershipReport(params: {
     reportGroups.map((row) => [row.groupId, row.id]),
   );
 
+  // Reopening an existing report must not push members into a roster a group
+  // has already signed off. They land as pending additions, the same way a late
+  // payment does.
+  const frozenReportGroupIds = new Set(
+    reportGroups
+      .filter((row) => row.status === "submitted" || row.status === "approved")
+      .map((row) => row.id),
+  );
+
   const membersBackfilled = await backfillReportMembers({
     orgId,
     categoryId: category.id,
     periodLabel: period.label,
     reportGroupIdByGroupId,
+    frozenReportGroupIds,
   });
 
   return {
@@ -413,8 +424,16 @@ async function backfillReportMembers(params: {
   categoryId: string;
   periodLabel: string;
   reportGroupIdByGroupId: Map<string, string>;
+  /** Groups whose roster is signed off; new members queue instead of counting. */
+  frozenReportGroupIds: Set<string>;
 }): Promise<number> {
-  const { orgId, categoryId, periodLabel, reportGroupIdByGroupId } = params;
+  const {
+    orgId,
+    categoryId,
+    periodLabel,
+    reportGroupIdByGroupId,
+    frozenReportGroupIds,
+  } = params;
   if (reportGroupIdByGroupId.size === 0) return 0;
 
   const confirmed = await db
@@ -475,6 +494,7 @@ async function backfillReportMembers(params: {
         paymentId: row.paymentId,
         feeAmountCents: basis === "paid" ? row.amount : 0,
         currency: row.currency,
+        pendingAddition: frozenReportGroupIds.has(reportGroupId),
       },
     ];
   });

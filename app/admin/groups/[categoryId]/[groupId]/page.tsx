@@ -11,10 +11,13 @@ import { getGroupReportView } from "@/server/queries/membership-reports";
 
 export default async function AdminGroupPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ categoryId: string; groupId: string }>;
+  searchParams: Promise<{ report?: string }>;
 }) {
-  const { categoryId, groupId } = await params;
+  const [{ categoryId, groupId }, { report: requestedReportId }] =
+    await Promise.all([params, searchParams]);
   const [access, organization] = await Promise.all([
     requireGroupManagementAccess(groupId),
     getAppOrganization(),
@@ -29,7 +32,7 @@ export default async function AdminGroupPage({
     // Returns null unless the module is on and this group is a reporting group,
     // so a group that does not report is never told it has a report to file.
     organization?.membershipReportEnabled
-      ? getGroupReportView(access.organization.id, groupId)
+      ? getGroupReportView(access.organization.id, groupId, requestedReportId)
       : null,
   ]);
 

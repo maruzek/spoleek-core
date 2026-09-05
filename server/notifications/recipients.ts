@@ -1,6 +1,7 @@
 import { and, eq, inArray, ne } from "drizzle-orm";
 
 import { db } from "@/server/db";
+import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import {
   categoryAdminAssignments,
   groupCategories,
@@ -234,6 +235,169 @@ export async function resolveRegistrationRecipients(params: {
         name: null,
         reason: "category_address",
       });
+    }
+  }
+
+  return dedupe(recipients);
+}
+
+
+/**
+ * Who is reminded that a group has not confirmed its members yet.
+ *
+ * Group admins and the admins of the fee-managing category, resolved through
+ * `resolveMemberEmailForOrg` so a Workspace-first organization reaches people
+ * at the address they actually read.
+ *
+ * A group with no admin at all falls back to the org admins, with the group
+ * named in the subject. Sending nothing would let an unowned region miss the
+ * deadline in silence, which is exactly the failure the reminders exist to
+ * prevent — better that it surfaces to the board as a problem.
+ */
+export async function resolveReportReminderRecipients(params: {
+  orgId: string;
+  groupId: string;
+  categoryId: string;
+}): Promise<{
+  recipients: NotificationRecipient[];
+  /** True when nobody administers this group and the board was told instead. */
+  fellBackToOrgAdmins: boolean;
+}> {
+  const [organization] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, params.orgId))
+    .limit(1);
+
+  if (!organization) {
+    return { recipients: [], fellBackToOrgAdmins: false };
+  }
+
+  const memberColumns = {
+    email: tenantMembers.email,
+    workspaceUserEmail: tenantMembers.workspaceUserEmail,
+    preferredEmail: tenantMembers.preferredEmail,
+    firstName: tenantMembers.firstName,
+    lastName: tenantMembers.lastName,
+  };
+
+  const [groupAdmins, categoryAdmins] = await Promise.all([
+    db
+      .select(memberColumns)
+      .from(groupMemberships)
+      .innerJoin(tenantMembers, eq(groupMemberships.memberId, tenantMembers.id))
+      .where(
+        and(
+          eq(groupMemberships.orgId, params.orgId),
+          eq(groupMemberships.groupId, params.groupId),
+          eq(groupMemberships.role, "group_admin"),
+          eq(tenantMembers.status, "active"),
+        ),
+      ),
+    db
+      .select(memberColumns)
+      .from(categoryAdminAssignments)
+      .innerJoin(
+        tenantMembers,
+        eq(categoryAdminAssignments.memberId, tenantMembers.id),
+      )
+      .where(
+        and(
+          eq(categoryAdminAssignments.orgId, params.orgId),
+          eq(categoryAdminAssignments.categoryId, params.categoryId),
+          eq(tenantMembers.status, "active"),
+        ),
+      ),
+  ]);
+
+  const recipients: NotificationRecipient[] = [];
+
+  const push = (
+    rows: typeof groupAdmins,
+    reason: NotificationRecipient["reason"],
+  ) => {
+    for (const row of rows) {
+      const email = resolveMemberEmailForOrg({
+        member: {
+          email: row.email,
+          workspaceUserEmail: row.workspaceUserEmail,
+          preferredEmail: row.preferredEmail,
+        },
+        organization,
+      });
+
+      if (email) {
+        recipients.push({ email, name: memberName(row), reason });
+      }
+    }
+  };
+
+  push(groupAdmins, "group_admin");
+  push(categoryAdmins, "category_admin");
+
+  if (recipients.length > 0) {
+    return { recipients: dedupe(recipients), fellBackToOrgAdmins: false };
+  }
+
+  const orgAdmins = await db
+    .select(memberColumns)
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.orgId, params.orgId),
+        eq(tenantMembers.role, "org_admin"),
+        eq(tenantMembers.status, "active"),
+      ),
+    );
+
+  push(orgAdmins, "org_admin");
+
+  return { recipients: dedupe(recipients), fellBackToOrgAdmins: true };
+}
+
+/** Org admins, for the board digest. */
+export async function resolveBoardRecipients(
+  orgId: string,
+): Promise<NotificationRecipient[]> {
+  const [organization] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  if (!organization) return [];
+
+  const orgAdmins = await db
+    .select({
+      email: tenantMembers.email,
+      workspaceUserEmail: tenantMembers.workspaceUserEmail,
+      preferredEmail: tenantMembers.preferredEmail,
+      firstName: tenantMembers.firstName,
+      lastName: tenantMembers.lastName,
+    })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.orgId, orgId),
+        eq(tenantMembers.role, "org_admin"),
+        eq(tenantMembers.status, "active"),
+      ),
+    );
+
+  const recipients: NotificationRecipient[] = [];
+
+  for (const admin of orgAdmins) {
+    const email = resolveMemberEmailForOrg({
+      member: {
+        email: admin.email,
+        workspaceUserEmail: admin.workspaceUserEmail,
+        preferredEmail: admin.preferredEmail,
+      },
+      organization,
+    });
+
+    if (email) {
+      recipients.push({ email, name: memberName(admin), reason: "org_admin" });
     }
   }
 

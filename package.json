@@ -13,7 +13,8 @@
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "db:seed:payments": "tsx --env-file=.env scripts/seed-payments-test.ts",
     "email:test": "tsx --env-file=.env scripts/send-payment-emails-test.ts",
-    "email:dev": "email dev --dir emails"
+    "email:dev": "email dev --dir emails",
+    "db:seed:report": "tsx --env-file=.env scripts/seed-report-test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

@@ -12,6 +12,8 @@ import {
   membershipReportGroups,
   membershipReportMembers,
   membershipReports,
+  organizations,
+  tenantMembers,
 } from "@/server/db/schema";
 import {
   openMembershipReport,
@@ -248,6 +250,8 @@ export const acceptPendingAdditionAction = authActionClient
           approvedAt: null,
           approvedByUserId: null,
           selfApproved: false,
+          reminderStageSent: null,
+          reminderSentAt: null,
           updatedAt: new Date(),
         })
         .where(eq(membershipReportGroups.id, member.reportGroupId));
@@ -285,6 +289,146 @@ export const submitGroupReportAction = authActionClient
       })
       .where(eq(membershipReportGroups.id, parsedInput.reportGroupId));
 
+    revalidatePath("/admin/groups", "layout");
+
+    return { success: true };
+  });
+
+
+/**
+ * Loads a group row for a board decision, together with who submitted it.
+ *
+ * The submitter is resolved all the way to a user id because the self-approval
+ * guard compares people, not members — the same person can hold more than one
+ * member record over time, but the account approving is the account that
+ * submitted.
+ */
+async function loadReportGroupForBoard(orgId: string, reportGroupId: string) {
+  const [row] = await db
+    .select({
+      id: membershipReportGroups.id,
+      status: membershipReportGroups.status,
+      submittedByUserId: tenantMembers.userId,
+      reportStatus: membershipReports.status,
+      allowSelfApproval: organizations.membershipReportAllowSelfApproval,
+    })
+    .from(membershipReportGroups)
+    .innerJoin(
+      membershipReports,
+      eq(membershipReportGroups.reportId, membershipReports.id),
+    )
+    .innerJoin(
+      organizations,
+      eq(membershipReportGroups.orgId, organizations.id),
+    )
+    .leftJoin(
+      tenantMembers,
+      eq(membershipReportGroups.submittedByMemberId, tenantMembers.id),
+    )
+    .where(
+      and(
+        eq(membershipReportGroups.id, reportGroupId),
+        eq(membershipReportGroups.orgId, orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) forbidden();
+
+  return row;
+}
+
+export const approveGroupReportAction = orgAdminActionClient
+  .metadata({ actionName: "approveGroupReport" })
+  .inputSchema(z.object({ reportGroupId: z.string().uuid() }))
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess();
+    const row = await loadReportGroupForBoard(
+      organization.id,
+      parsedInput.reportGroupId,
+    );
+
+    if (row.reportStatus !== "open") {
+      throw new Error("This report is closed. Reopen it before changing anything.");
+    }
+
+    if (row.status !== "submitted") {
+      throw new Error("Only a submitted report can be approved.");
+    }
+
+    // Two stages where both stages are the same person is a one-stage workflow
+    // with extra clicks. Organizations small enough that the region admin is
+    // also the board can opt out, and the exception is recorded on the row.
+    const isSelfApproval =
+      row.submittedByUserId !== null &&
+      row.submittedByUserId === ctx.auth.user.id;
+
+    if (isSelfApproval && !row.allowSelfApproval) {
+      throw new Error(
+        "You submitted this report, so somebody else has to approve it. An org admin can allow self-approval in Settings → Membership.",
+      );
+    }
+
+    await db
+      .update(membershipReportGroups)
+      .set({
+        status: "approved",
+        approvedAt: new Date(),
+        approvedByUserId: ctx.auth.user.id,
+        selfApproved: isSelfApproval,
+        returnedAt: null,
+        returnedReason: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(membershipReportGroups.id, parsedInput.reportGroupId));
+
+    revalidatePath("/admin/reports");
+    revalidatePath("/admin/groups", "layout");
+
+    return { success: true, selfApproved: isSelfApproval };
+  });
+
+export const returnGroupReportAction = orgAdminActionClient
+  .metadata({ actionName: "returnGroupReport" })
+  .inputSchema(
+    z.object({
+      reportGroupId: z.string().uuid(),
+      reason: z.string().trim().min(1).max(1000),
+    }),
+  )
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+    const row = await loadReportGroupForBoard(
+      organization.id,
+      parsedInput.reportGroupId,
+    );
+
+    if (row.reportStatus !== "open") {
+      throw new Error("This report is closed. Reopen it before changing anything.");
+    }
+
+    if (row.status !== "submitted" && row.status !== "approved") {
+      throw new Error("Only a submitted or approved report can be sent back.");
+    }
+
+    await db
+      .update(membershipReportGroups)
+      .set({
+        status: "returned",
+        returnedAt: new Date(),
+        returnedReason: parsedInput.reason,
+        approvedAt: null,
+        approvedByUserId: null,
+        selfApproved: false,
+        // The group is owed the reminder ladder again — it was silenced by a
+        // submission that no longer stands.
+        reminderStageSent: null,
+        reminderSentAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(membershipReportGroups.id, parsedInput.reportGroupId));
+
+    revalidatePath("/admin/reports");
     revalidatePath("/admin/groups", "layout");
 
     return { success: true };

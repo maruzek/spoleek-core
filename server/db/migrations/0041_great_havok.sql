@@ -1,0 +1,1 @@
+ALTER TABLE "membership_reports" ADD COLUMN "digest_sent_at" timestamp with time zone;

@@ -19,6 +19,7 @@ import {
   setReportMemberInclusionAction,
   submitGroupReportAction,
 } from "@/server/actions/membership-reports";
+import { ReportPeriodPicker } from "@/components/app/report-period-picker";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,8 +102,13 @@ export function GroupReportCard({
   });
 
   const presentation = REPORT_GROUP_STATUS[reportGroup.status];
+  // A closed year is history: it renders exactly as it was signed off, with
+  // every control withdrawn rather than disabled, so there is nothing to click
+  // that could imply the past is still editable.
   const isLocked =
-    reportGroup.status === "submitted" || reportGroup.status === "approved";
+    !view.isEditable ||
+    reportGroup.status === "submitted" ||
+    reportGroup.status === "approved";
 
   const pendingAdditions = roster.filter((row) => row.pendingAddition);
   const confirmed = roster.filter((row) => !row.pendingAddition);
@@ -124,6 +130,9 @@ export function GroupReportCard({
             <p className="font-medium text-sm">
               Membership year {report.periodLabel}
             </p>
+            {!view.isEditable ? (
+              <Badge variant="outline">Closed</Badge>
+            ) : null}
             <span className="text-muted-foreground text-xs">
               {formatDate(report.periodStart, locale)} –{" "}
               {formatDate(report.periodEnd, locale)}
@@ -163,6 +172,10 @@ export function GroupReportCard({
         </div>
 
         <div className="flex items-center gap-6">
+          <ReportPeriodPicker
+            periods={view.periods}
+            currentReportId={report.id}
+          />
           <div className="flex flex-col">
             <span className="font-semibold text-2xl tabular-nums">
               {reportGroup.memberCount}
@@ -190,9 +203,11 @@ export function GroupReportCard({
       {isLocked ? (
         <Alert>
           <AlertTitle>
-            {reportGroup.status === "approved"
-              ? "Approved by the board"
-              : "Submitted and locked"}
+            {!view.isEditable
+              ? `The ${report.periodLabel} report is closed`
+              : reportGroup.status === "approved"
+                ? "Approved by the board"
+                : "Submitted and locked"}
           </AlertTitle>
           <AlertDescription>
             {reportGroup.submittedByName
@@ -201,8 +216,9 @@ export function GroupReportCard({
             {reportGroup.submittedAt
               ? ` on ${formatDate(reportGroup.submittedAt, locale)}.`
               : "."}{" "}
-            The roster is frozen. Members who pay from now on appear below for
-            you to add, which sends the report back for re-approval.
+            {view.isEditable
+              ? "The roster is frozen. Members who pay from now on appear below for you to add, which sends the report back for re-approval."
+              : "This is how the year was signed off. Nothing here can change any more."}
             {reportGroup.selfApproved
               ? " This report was approved by the person who submitted it."
               : ""}
@@ -210,7 +226,7 @@ export function GroupReportCard({
         </Alert>
       ) : null}
 
-      {pendingAdditions.length > 0 ? (
+      {pendingAdditions.length > 0 && view.isEditable ? (
         <div className="flex flex-col gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
           <p className="font-medium text-sm">
             {pendingAdditions.length} member
