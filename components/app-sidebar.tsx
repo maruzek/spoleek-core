@@ -20,6 +20,7 @@ import type { AppShellContext } from "@/lib/app-shell";
 import {
   BookOpenIcon,
   CalendarDaysIcon,
+  ClipboardCheckIcon,
   CreditCardIcon,
   FolderTreeIcon,
   FormIcon,
@@ -109,6 +110,11 @@ function getSidebarData(appContext: AppShellContext) {
       icon: CreditCardIcon,
     },
     {
+      title: "Reports",
+      href: "/admin/reports",
+      icon: ClipboardCheckIcon,
+    },
+    {
       title: "Email",
       href: "/admin/email",
       icon: MailIcon,
@@ -141,6 +147,15 @@ function getSidebarData(appContext: AppShellContext) {
 
     if (item.href === "/admin/email") {
       return appContext.capabilities.canManageOrganization;
+    }
+
+    // Board-only. Group admins reach their own report through the group page,
+    // so they never need — and must never get — the org-wide roster view.
+    if (item.href === "/admin/reports") {
+      return (
+        appContext.capabilities.canManageOrganization &&
+        appContext.organization.membershipReportEnabled
+      );
     }
 
     return appContext.capabilities.canAccessAdmin;

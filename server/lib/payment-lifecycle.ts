@@ -2,6 +2,7 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 
 import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
 import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
+import { resolveMembershipPeriod } from "@/lib/membership-period";
 import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
@@ -12,6 +13,7 @@ import {
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
+import type { MembershipPeriodMode } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 
@@ -38,11 +40,21 @@ type GenerateResult = {
   errors: Array<{ orgId: string; error: string }>;
 };
 
-function getPeriodLabel(renewalMonth: number, renewalDay: number, today: Date): string {
-  const currentYear = today.getFullYear();
-  const renewalThisYear = new Date(currentYear, renewalMonth - 1, renewalDay);
-  const periodStartYear = today >= renewalThisYear ? currentYear : currentYear - 1;
-  return `${periodStartYear}/${periodStartYear + 1}`;
+/**
+ * The label stamped onto a payment's `period_label` and `period_key`.
+ *
+ * Delegates to `resolveMembershipPeriod` so payments and the yearly member
+ * report always name the period identically — the report joins members to
+ * payments on this string, and two functions that merely happen to format the
+ * same way would drift the first time one of them changed.
+ */
+function getPeriodLabel(
+  mode: MembershipPeriodMode,
+  renewalMonth: number,
+  renewalDay: number,
+  today: Date,
+): string {
+  return resolveMembershipPeriod({ mode, renewalMonth, renewalDay, today }).label;
 }
 
 /** The group columns that may override the organization's fee settings. */
@@ -102,7 +114,12 @@ export function resolveMembershipFee(
   const dueAt = new Date(today);
   dueAt.setDate(dueAt.getDate() + windowDays);
 
-  const periodLabel = getPeriodLabel(renewalMonth, renewalDay, today);
+  const periodLabel = getPeriodLabel(
+    org.membershipPeriodMode,
+    renewalMonth,
+    renewalDay,
+    today,
+  );
 
   // A group that overrides nothing bills exactly the org fee, so it keeps the
   // org period key. Scoping it to the group regardless would let the same
@@ -474,7 +491,12 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
         org.emailNotifyRenewalHeadsupDaysBefore,
       )
     ) {
-      const periodLabel = getPeriodLabel(org.membershipRenewalMonth, org.membershipRenewalDay, today);
+      const periodLabel = getPeriodLabel(
+        org.membershipPeriodMode,
+        org.membershipRenewalMonth,
+        org.membershipRenewalDay,
+        today,
+      );
       void sendRenewalHeadsupEmails(org, periodLabel);
     }
 

@@ -260,6 +260,20 @@
       "when": 1788536444867,
       "tag": "0036_easy_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788597062597,
+      "tag": "0037_naive_ezekiel_stane",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788598060079,
+      "tag": "0038_rewrite_period_labels_to_calendar_year",
+      "breakpoints": true
     }
   ]
 }

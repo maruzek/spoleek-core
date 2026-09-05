@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { parseBankAccount } from "@/lib/iban";
+import { isMembershipPeriodModeImplemented } from "@/lib/membership-period";
 import type { MembershipManagementMode } from "@/server/db/schema";
 
 
@@ -55,6 +56,11 @@ export const membershipSettingsSchema = z
         }
       }),
     membershipFeePaymentWindowDays: z.number().int().min(1).max(365).default(30),
+    membershipPeriodMode: z
+      .enum(["calendar_year", "renewal_span"])
+      .default("calendar_year"),
+    membershipReportEnabled: z.boolean().default(false),
+    membershipReportAllowSelfApproval: z.boolean().default(false),
   })
   .superRefine((value, ctx) => {
     if (value.membershipManagementMode === "periodic_renewal") {
@@ -98,6 +104,28 @@ export const membershipSettingsSchema = z
           message: `Day ${value.membershipRenewalDay} is not valid for month ${value.membershipRenewalMonth}.`,
         });
       }
+    }
+
+    if (!isMembershipPeriodModeImplemented(value.membershipPeriodMode)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["membershipPeriodMode"],
+        message: "That membership period mode is not available yet.",
+      });
+    }
+
+    // The report counts paid members per group, so both halves have to exist.
+    if (
+      value.membershipReportEnabled &&
+      (value.membershipManagementMode !== "periodic_renewal" ||
+        !value.membershipFeeEnabled)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["membershipReportEnabled"],
+        message:
+          "The yearly report needs periodic renewal with fee payment enabled.",
+      });
     }
 
     if (value.membershipFeeEnabled) {

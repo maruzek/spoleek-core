@@ -77,7 +77,15 @@ export default async function AdminSettingsPage({
     membershipFeeCurrency: organization.membershipFeeCurrency,
     membershipFeeBankAccount: organization.membershipFeeBankAccount,
     membershipFeePaymentWindowDays: organization.membershipFeePaymentWindowDays,
+    membershipPeriodMode: organization.membershipPeriodMode,
+    membershipReportEnabled: organization.membershipReportEnabled,
+    membershipReportAllowSelfApproval:
+      organization.membershipReportAllowSelfApproval,
   };
+
+  // The yearly report has one row per group in the fee-managing category, so
+  // the settings toggle names it — and stays disabled when there isn't one.
+  const feeManagingCategory = categories.find((c) => c.managesMembershipFees);
 
   const emailNotificationState: EmailNotificationSettingsState = {
     emailNotifyRenewalHeadsup: organization.emailNotifyRenewalHeadsup,
@@ -135,6 +143,8 @@ export default async function AdminSettingsPage({
         organization={organization}
         policy={policy}
         membershipState={membershipState}
+        membershipLocale={organization.locale}
+        feeManagingCategoryName={feeManagingCategory?.name ?? null}
         localizationState={localizationState}
         emailNotificationState={emailNotificationState}
         workspaceState={workspaceState}

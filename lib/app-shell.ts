@@ -44,6 +44,11 @@ export type AppShellContext = {
       feeBankAccount: string | null;
       paymentWindowDays: number;
     };
+    /**
+     * Whether the yearly member report module is on. Gates the Reports entry in
+     * the admin navigation; the route enforces access on its own.
+     */
+    membershipReportEnabled: boolean;
   };
   member: {
     id: string;

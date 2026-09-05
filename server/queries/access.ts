@@ -210,6 +210,7 @@ export async function getViewerAppContext(): Promise<
         feeBankAccount: organization.membershipFeeBankAccount,
         paymentWindowDays: organization.membershipFeePaymentWindowDays,
       },
+      membershipReportEnabled: organization.membershipReportEnabled,
     },
     viewer: {
       name: session.user.name,

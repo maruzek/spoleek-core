@@ -13,6 +13,7 @@ import { memberPayments, organizations, tenantMembers, users } from "@/server/db
 import { requireAdminAccess, listScopedGroupIds } from "@/server/queries/access";
 import { listMemberIdsInGroups } from "@/server/queries/payments";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
+import { syncReportMemberForPayment } from "@/server/lib/membership-report";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 
@@ -192,6 +193,11 @@ export const markPaymentPaidAction = authActionClient
         ),
       );
 
+    // Awaited, not deferred: the report entry is a consequence of this
+    // decision, and a gap between the two would let the group submit a roster
+    // that disagrees with the payments it was built from.
+    await syncReportMemberForPayment(parsedInput.paymentId);
+
     after(() => sendPaymentConfirmedEmail(parsedInput.paymentId, paidAt));
 
     return { success: true };
@@ -224,6 +230,11 @@ export const cancelPaymentAction = authActionClient
           inArray(memberPayments.status, ["pending", "overdue"]),
         ),
       );
+
+    // A fee waived by an admin still confirms membership; every other
+    // cancellation reason means the payment should not have existed, and the
+    // sync removes any report row it had created.
+    await syncReportMemberForPayment(parsedInput.paymentId);
 
     return { success: true };
   });
@@ -263,6 +274,10 @@ export const bulkMarkPaymentsPaidAction = authActionClient
         ),
       )
       .returning({ id: memberPayments.id, memberId: memberPayments.memberId });
+
+    for (const { id } of result) {
+      await syncReportMemberForPayment(id);
+    }
 
     after(async () => {
       for (const { id } of result) {

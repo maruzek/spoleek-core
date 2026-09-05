@@ -158,6 +158,15 @@ export const saveMembershipSettingsAction = orgAdminActionClient
           isPeriodicRenewal && parsedInput.membershipFeeEnabled
             ? parsedInput.membershipFeePaymentWindowDays
             : 30,
+        membershipPeriodMode: parsedInput.membershipPeriodMode,
+        // The report is meaningless without fees to report on, so it follows
+        // the same gate as the fee fields rather than lingering enabled.
+        membershipReportEnabled:
+          isPeriodicRenewal && parsedInput.membershipFeeEnabled
+            ? parsedInput.membershipReportEnabled
+            : false,
+        membershipReportAllowSelfApproval:
+          parsedInput.membershipReportAllowSelfApproval,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

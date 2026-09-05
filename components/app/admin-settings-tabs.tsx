@@ -45,6 +45,8 @@ type AdminSettingsTabsProps = {
     | "privacyPolicyText"
   >;
   membershipState: MembershipSettingsState;
+  membershipLocale: string;
+  feeManagingCategoryName: string | null;
   localizationState: LocalizationSettingsState;
   emailNotificationState: EmailNotificationSettingsState;
   workspaceState: WorkspaceSettingsState;
@@ -70,6 +72,8 @@ export function AdminSettingsTabs({
   organization,
   policy,
   membershipState,
+  membershipLocale,
+  feeManagingCategoryName,
   localizationState,
   emailNotificationState,
   workspaceState,
@@ -122,7 +126,11 @@ export function AdminSettingsTabs({
 
       <TabsContent value="membership">
         <div className="max-w-2xl pt-6">
-          <MembershipSettingsCard state={membershipState} />
+          <MembershipSettingsCard
+            state={membershipState}
+            locale={membershipLocale}
+            feeManagingCategoryName={feeManagingCategoryName}
+          />
         </div>
       </TabsContent>
 

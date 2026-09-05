@@ -15,6 +15,7 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 
+import { resolveMembershipPeriod } from "@/lib/membership-period";
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -155,13 +156,6 @@ const SCENARIOS: Scenario[] = [
   },
 ];
 
-function periodLabel(renewalMonth: number, renewalDay: number, today: Date): string {
-  const year = today.getFullYear();
-  const renewalThisYear = new Date(year, renewalMonth - 1, renewalDay);
-  const start = today >= renewalThisYear ? year : year - 1;
-  return `${start}/${start + 1}`;
-}
-
 async function main() {
   const [org] = await db.select().from(organizations).limit(1);
 
@@ -202,11 +196,14 @@ async function main() {
   }
 
   const today = new Date();
-  const label = periodLabel(
-    org.membershipRenewalMonth ?? 1,
-    org.membershipRenewalDay ?? 1,
+  // Same resolver the generator uses, so fixtures land on the period key a
+  // real run would have produced.
+  const label = resolveMembershipPeriod({
+    mode: org.membershipPeriodMode,
+    renewalMonth: org.membershipRenewalMonth,
+    renewalDay: org.membershipRenewalDay,
     today,
-  );
+  }).label;
 
   // The first active group under a fee-managing category, if the org has one.
   const [feeGroup] = await db

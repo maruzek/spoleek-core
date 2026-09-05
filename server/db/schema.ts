@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   integer,
   index,
   jsonb,
@@ -164,6 +165,56 @@ export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
   "overdue",
   "cancelled",
 ]);
+
+// ─── Yearly membership report ───────────────────────────────────────────────
+
+/**
+ * How a membership period is named and bounded.
+ *
+ * `calendar_year` is the only mode built so far: the period is 1 January to 31
+ * December and is labelled with the single year ("2026"). `renewal_span` exists
+ * in the enum so the org that renews mid-year can be supported without a second
+ * migration, but nothing reads it yet.
+ *
+ * TODO(spanning-periods): implement `renewal_span` — the label becomes
+ * "2026/2027" and the bounds run from the renewal day to the day before it.
+ * `getPeriodLabel()` in server/lib/payment-lifecycle.ts already emits the
+ * spanning label unconditionally and must switch on this column instead.
+ */
+export const membershipPeriodModeEnum = pgEnum("membership_period_mode", [
+  "calendar_year",
+  "renewal_span",
+]);
+
+export const membershipReportStatusEnum = pgEnum("membership_report_status", [
+  "draft",
+  "open",
+  "closed",
+]);
+
+/**
+ * Where one group stands in the confirmation workflow.
+ *
+ * `returned` is distinct from `not_started` on purpose: both need the group's
+ * attention, but only one of them means the board rejected something, and the
+ * dashboard has to be able to say which.
+ */
+export const membershipReportGroupStatusEnum = pgEnum(
+  "membership_report_group_status",
+  ["not_started", "in_progress", "submitted", "approved", "returned"],
+);
+
+/**
+ * Why a member counts towards the report.
+ *
+ * Kept alongside the frozen roster so the board reads "34 paid, 2 waived"
+ * rather than a flat 36 — a waived member is a decision someone made, and
+ * collapsing it into the paid count hides that decision.
+ */
+export const membershipReportConfirmationBasisEnum = pgEnum(
+  "membership_report_confirmation_basis",
+  ["paid", "waived", "manual"],
+);
 
 // ─── Workspace group link ───────────────────────────────────────────────────
 
@@ -362,6 +413,28 @@ export const organizations = pgTable(
     membershipFeePaymentWindowDays: integer("membership_fee_payment_window_days")
       .notNull()
       .default(30),
+    /**
+     * How the membership period is named and bounded. See
+     * `membershipPeriodModeEnum` — only `calendar_year` is implemented.
+     */
+    membershipPeriodMode: membershipPeriodModeEnum("membership_period_mode")
+      .notNull()
+      .default("calendar_year"),
+    /** Master switch for the yearly member report module and its navigation. */
+    membershipReportEnabled: boolean("membership_report_enabled")
+      .notNull()
+      .default(false),
+    /**
+     * Whether an org admin may approve a group report they submitted themselves.
+     *
+     * Off by default, because a two-stage workflow where both stages are the
+     * same person is a one-stage workflow with extra clicks. Small organizations
+     * where the region admin genuinely is the whole board can turn it on; the
+     * approval is then still recorded and flagged in the UI as self-approved.
+     */
+    membershipReportAllowSelfApproval: boolean("membership_report_allow_self_approval")
+      .notNull()
+      .default(false),
     emailNotifyRenewalHeadsup: boolean("email_notify_renewal_headsup").notNull().default(true),
     emailNotifyRenewalHeadsupDaysBefore: integer("email_notify_renewal_headsup_days_before")
       .notNull()
@@ -1115,6 +1188,171 @@ export const memberPayments = pgTable(
   ],
 );
 
+// ─── Yearly membership report ───────────────────────────────────────────────
+
+/**
+ * One reporting cycle for the organization.
+ *
+ * The period bounds and label are copied in at open time rather than derived
+ * from the organization's current settings on every read. A report describes a
+ * year that has already happened; if an admin later changes the renewal date or
+ * switches period mode, last year's report must keep saying what it said.
+ */
+export const membershipReports = pgTable(
+  "membership_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Human-facing name of the period, e.g. "2026". Matches `member_payments.period_label`. */
+    periodLabel: text("period_label").notNull(),
+    periodStart: date("period_start", { mode: "date" }).notNull(),
+    periodEnd: date("period_end", { mode: "date" }).notNull(),
+    /** Date by which every group must have submitted. Null means no deadline. */
+    confirmDueAt: date("confirm_due_at", { mode: "date" }),
+    status: membershipReportStatusEnum("status").notNull().default("draft"),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("membership_reports_org_period_idx").on(
+      table.orgId,
+      table.periodLabel,
+    ),
+    index("membership_reports_org_status_idx").on(table.orgId, table.status),
+    check(
+      "membership_reports_period_bounds_check",
+      sql`${table.periodEnd} >= ${table.periodStart}`,
+    ),
+  ],
+);
+
+/**
+ * One group's slice of a report, and the whole of its workflow state.
+ *
+ * The counts are cached at submit time. They are recomputable from
+ * `membership_report_members`, but the board dashboard lists every group at
+ * once and should not fan out a per-group aggregate to render a table.
+ */
+export const membershipReportGroups = pgTable(
+  "membership_report_groups",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => membershipReports.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    /** Copied at open time so a renamed or deleted group still reads correctly. */
+    groupName: text("group_name").notNull(),
+    status: membershipReportGroupStatusEnum("status")
+      .notNull()
+      .default("not_started"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedByMemberId: uuid("submitted_by_member_id").references(
+      () => tenantMembers.id,
+      { onDelete: "set null" },
+    ),
+    submissionNote: text("submission_note"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedByUserId: text("approved_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    /**
+     * Set when the approver is also the submitter. Only reachable while the
+     * organization has `membershipReportAllowSelfApproval` on, and surfaced in
+     * the UI so the exception stays visible after the setting changes back.
+     */
+    selfApproved: boolean("self_approved").notNull().default(false),
+    returnedAt: timestamp("returned_at", { withTimezone: true }),
+    returnedReason: text("returned_reason"),
+    memberCount: integer("member_count").notNull().default(0),
+    paidCount: integer("paid_count").notNull().default(0),
+    waivedCount: integer("waived_count").notNull().default(0),
+    feeTotalCents: integer("fee_total_cents").notNull().default(0),
+    currency: text("currency"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("membership_report_groups_report_group_idx").on(
+      table.reportId,
+      table.groupId,
+    ),
+    index("membership_report_groups_org_status_idx").on(
+      table.orgId,
+      table.status,
+    ),
+    index("membership_report_groups_group_idx").on(table.groupId),
+  ],
+);
+
+/**
+ * The frozen roster: who this group reported for this period.
+ *
+ * Names are copied rather than joined. `group_memberships` has no validity
+ * period, so a live join would silently rewrite history the moment someone
+ * changes region — and a member deleted under GDPR would erase the count they
+ * were part of. The FK nulls out instead, and the name columns can be scrubbed
+ * on their own without destroying the report.
+ */
+export const membershipReportMembers = pgTable(
+  "membership_report_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    reportGroupId: uuid("report_group_id")
+      .notNull()
+      .references(() => membershipReportGroups.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "set null",
+    }),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    email: text("email"),
+    confirmationBasis: membershipReportConfirmationBasisEnum(
+      "confirmation_basis",
+    ).notNull(),
+    /** The payment that confirmed this member, when there was one. */
+    paymentId: uuid("payment_id").references(() => memberPayments.id, {
+      onDelete: "set null",
+    }),
+    feeAmountCents: integer("fee_amount_cents"),
+    currency: text("currency"),
+    included: boolean("included").notNull().default(true),
+    /**
+     * True when the member was confirmed after the group had already submitted.
+     * They are held out of the counts until a group admin accepts them, which
+     * sends the group back to `returned` for the board to re-approve.
+     */
+    pendingAddition: boolean("pending_addition").notNull().default(false),
+    /** Required when `confirmationBasis` is `manual` or when `included` is false. */
+    note: text("note"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("membership_report_members_group_member_idx").on(
+      table.reportGroupId,
+      table.memberId,
+    ),
+    index("membership_report_members_org_idx").on(table.orgId),
+    index("membership_report_members_member_idx").on(table.memberId),
+    index("membership_report_members_pending_idx")
+      .on(table.reportGroupId)
+      .where(sql`pending_addition`),
+  ],
+);
+
 export const schema = {
   users,
   sessions,
@@ -1139,6 +1377,9 @@ export const schema = {
   emailActivities,
   emailActivityEvents,
   memberPayments,
+  membershipReports,
+  membershipReportGroups,
+  membershipReportMembers,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
@@ -1165,6 +1406,15 @@ export type MemberPreferredEmail = typeof memberPreferredEmailEnum.enumValues[nu
 export type MemberPaymentType = typeof memberPaymentTypeEnum.enumValues[number];
 export type MemberPaymentStatus = typeof memberPaymentStatusEnum.enumValues[number];
 export type MemberPayment = typeof memberPayments.$inferSelect;
+export type MembershipPeriodMode = typeof membershipPeriodModeEnum.enumValues[number];
+export type MembershipReportStatus = typeof membershipReportStatusEnum.enumValues[number];
+export type MembershipReportGroupStatus =
+  typeof membershipReportGroupStatusEnum.enumValues[number];
+export type MembershipReportConfirmationBasis =
+  typeof membershipReportConfirmationBasisEnum.enumValues[number];
+export type MembershipReport = typeof membershipReports.$inferSelect;
+export type MembershipReportGroup = typeof membershipReportGroups.$inferSelect;
+export type MembershipReportMember = typeof membershipReportMembers.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;

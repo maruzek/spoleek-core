@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
@@ -11,7 +11,17 @@ import {
   feeCurrencyOptions,
   membershipManagementModeOptions,
 } from "@/lib/membership";
-import type { MembershipManagementMode } from "@/server/db/schema";
+import {
+  describeMembershipPeriod,
+  getFeeDueDate,
+  membershipPeriodModeOptions,
+  resolveMembershipPeriod,
+} from "@/lib/membership-period";
+import type {
+  MembershipManagementMode,
+  MembershipPeriodMode,
+} from "@/server/db/schema";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,21 +50,37 @@ export type MembershipSettingsState = {
   membershipFeeCurrency: string;
   membershipFeeBankAccount: string | null;
   membershipFeePaymentWindowDays: number;
+  membershipPeriodMode: MembershipPeriodMode;
+  membershipReportEnabled: boolean;
+  membershipReportAllowSelfApproval: boolean;
 };
 
 export function MembershipSettingsCard({
   state,
+  locale,
+  feeManagingCategoryName,
 }: {
   state: MembershipSettingsState;
+  /** Formats the period summary sentence in the organization's language. */
+  locale: string;
+  /**
+   * Name of the group category flagged `managesMembershipFees`, or null when
+   * none is. The yearly report reports one row per group in that category, so
+   * without it there is nothing to switch on.
+   */
+  feeManagingCategoryName: string | null;
 }) {
   const router = useRouter();
 
   const [mode, setMode] = useState(state.membershipManagementMode);
-  const [renewalMonth, setRenewalMonth] = useState(
+  const [renewalMonthValue, setRenewalMonthValue] = useState(
     state.membershipRenewalMonth ?? 1,
   );
-  const [renewalDay, setRenewalDay] = useState(
-    state.membershipRenewalDay ?? 1,
+  // Held as text, not a number. A number input round-trips "" through
+  // Number("") === 0 and stamps a 0 into the field the moment the admin clears
+  // it to type a new value, which is why the old field showed "020".
+  const [renewalDayText, setRenewalDayText] = useState(
+    String(state.membershipRenewalDay ?? 1),
   );
   const [feeEnabled, setFeeEnabled] = useState(state.membershipFeeEnabled);
   const [feeAmount, setFeeAmount] = useState(
@@ -66,6 +92,21 @@ export function MembershipSettingsCard({
   );
   const [paymentWindowDays, setPaymentWindowDays] = useState(
     state.membershipFeePaymentWindowDays ?? 30,
+  );
+  const [periodMode, setPeriodMode] = useState(state.membershipPeriodMode);
+
+  // A calendar year fixes the renewal date at 1 January; nothing else is
+  // consistent with a period that is defined as Jan–Dec.
+  const isCalendarYear = periodMode === "calendar_year";
+  const renewalMonth = isCalendarYear ? 1 : renewalMonthValue;
+  const renewalDay = isCalendarYear
+    ? 1
+    : Math.min(Math.max(Number(renewalDayText) || 1, 1), 31);
+  const [reportEnabled, setReportEnabled] = useState(
+    state.membershipReportEnabled,
+  );
+  const [allowSelfApproval, setAllowSelfApproval] = useState(
+    state.membershipReportAllowSelfApproval,
   );
 
   const saveAction = useAction(saveMembershipSettingsAction, {
@@ -79,6 +120,28 @@ export function MembershipSettingsCard({
   });
 
   const isPeriodicRenewal = mode === "periodic_renewal";
+
+  // Stated back to the admin rather than left to be inferred from a month
+  // dropdown and a day input. Recomputed from the unsaved form values so the
+  // sentence tracks what they are about to save, not what is stored.
+  const periodSummary = useMemo(() => {
+    const period = resolveMembershipPeriod({
+      mode: periodMode,
+      renewalMonth,
+      renewalDay,
+      today: new Date(),
+    });
+
+    return describeMembershipPeriod({
+      period,
+      feeDueAt: feeEnabled
+        ? getFeeDueDate(period.start, paymentWindowDays)
+        : null,
+      locale,
+    });
+  }, [periodMode, renewalMonth, renewalDay, feeEnabled, paymentWindowDays, locale]);
+
+  const canEnableReport = isPeriodicRenewal && feeEnabled;
 
   return (
     <div className="flex flex-col gap-6">
@@ -118,13 +181,49 @@ export function MembershipSettingsCard({
 
       {isPeriodicRenewal ? (
         <>
+          <Field>
+            <FieldLabel htmlFor="membership-period-mode">
+              Membership period
+            </FieldLabel>
+            <FieldContent>
+              <Select
+                value={periodMode}
+                onValueChange={(v) => setPeriodMode(v as MembershipPeriodMode)}
+              >
+                <SelectTrigger id="membership-period-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {membershipPeriodModeOptions.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      disabled={!option.available}
+                    >
+                      {option.label}
+                      {option.available ? "" : " (coming soon)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                {
+                  membershipPeriodModeOptions.find(
+                    (option) => option.value === periodMode,
+                  )?.description
+                }
+              </FieldDescription>
+            </FieldContent>
+          </Field>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel htmlFor="renewal-month">Renewal month</FieldLabel>
               <FieldContent>
                 <Select
                   value={String(renewalMonth)}
-                  onValueChange={(v) => setRenewalMonth(Number(v))}
+                  onValueChange={(v) => setRenewalMonthValue(Number(v))}
+                  disabled={isCalendarYear}
                 >
                   <SelectTrigger id="renewal-month">
                     <SelectValue />
@@ -138,7 +237,9 @@ export function MembershipSettingsCard({
                   </SelectContent>
                 </Select>
                 <FieldDescription>
-                  The month until which memberships are valid.
+                  {isCalendarYear
+                    ? "Fixed to 1 January by the calendar year period."
+                    : "The month in which memberships renew."}
                 </FieldDescription>
               </FieldContent>
             </Field>
@@ -148,18 +249,32 @@ export function MembershipSettingsCard({
               <FieldContent>
                 <Input
                   id="renewal-day"
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={renewalDay}
-                  onChange={(e) => setRenewalDay(Number(e.target.value))}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={2}
+                  value={isCalendarYear ? "1" : renewalDayText}
+                  disabled={isCalendarYear}
+                  onChange={(e) => {
+                    // Digits only, and an empty field stays empty — the value
+                    // is clamped into range when it is read, not while typing.
+                    const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
+                    if (Number(digits) > 31) return;
+                    setRenewalDayText(digits);
+                  }}
+                  onBlur={() => setRenewalDayText(String(renewalDay))}
                 />
                 <FieldDescription>
-                  The day of the month (1–31).
+                  {isCalendarYear
+                    ? "Fixed to the 1st by the calendar year period."
+                    : "The day of the month (1–31)."}
                 </FieldDescription>
               </FieldContent>
             </Field>
           </div>
+
+          <Alert>
+            <AlertDescription>{periodSummary}</AlertDescription>
+          </Alert>
 
           <SwitchChoiceField
             id="membership-fee-enabled"
@@ -238,6 +353,52 @@ export function MembershipSettingsCard({
               </Field>
             </div>
           ) : null}
+
+          <div className="flex flex-col gap-3 border-t pt-6">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Yearly member report
+            </p>
+
+            <SwitchChoiceField
+              id="membership-report-enabled"
+              title="Enable the yearly member report"
+              description={
+                feeManagingCategoryName
+                  ? `Groups in ${feeManagingCategoryName} confirm and lock their paid members each year, and the board reviews and approves each one. Adds Reports to the navigation.`
+                  : "Groups confirm and lock their paid members each year, and the board reviews and approves each one. Adds Reports to the navigation."
+              }
+              checked={reportEnabled && canEnableReport}
+              onCheckedChange={setReportEnabled}
+              disabled={!canEnableReport || !feeManagingCategoryName}
+            />
+
+            {!canEnableReport ? (
+              <Alert>
+                <AlertDescription>
+                  The report counts members who paid their fee, so it needs
+                  periodic renewal with fee payment turned on.
+                </AlertDescription>
+              </Alert>
+            ) : !feeManagingCategoryName ? (
+              <Alert>
+                <AlertDescription>
+                  No group category manages membership fees yet. The report has
+                  one row per group in that category — turn on &ldquo;Manages
+                  membership fees&rdquo; for the category your regions live in.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {reportEnabled && canEnableReport && feeManagingCategoryName ? (
+              <SwitchChoiceField
+                id="membership-report-self-approval"
+                title="Allow self-approval"
+                description="Off means an org admin cannot approve a group report they submitted themselves. Turn it on for a small organization where the same person runs a region and sits on the board — the approval is still recorded and shown as self-approved."
+                checked={allowSelfApproval}
+                onCheckedChange={setAllowSelfApproval}
+              />
+            ) : null}
+          </div>
         </>
       ) : null}
 
@@ -260,6 +421,12 @@ export function MembershipSettingsCard({
                   ? bankAccount.trim()
                   : null,
               membershipFeePaymentWindowDays: paymentWindowDays,
+              membershipPeriodMode: periodMode,
+              membershipReportEnabled:
+                canEnableReport && Boolean(feeManagingCategoryName)
+                  ? reportEnabled
+                  : false,
+              membershipReportAllowSelfApproval: allowSelfApproval,
             })
           }
           disabled={saveAction.isPending}
