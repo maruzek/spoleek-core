@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
@@ -149,6 +149,8 @@ export type GroupReportView = {
   };
   roster: ReportRosterRow[];
   peers: PeerProgressRow[];
+  /** Null in a group's first reported year — there is nothing to compare with. */
+  comparison: RosterComparison | null;
   /**
    * Members of this group with no row on the roster yet — the candidates for a
    * manual add. Empty once the report is closed, where nothing can be added.
@@ -162,6 +164,225 @@ export type AddableMemberRow = {
   lastName: string | null;
   email: string | null;
 };
+
+/** Why somebody on last year's roster is not on this one. */
+export type MissingMemberReason = "moved" | "left" | "unpaid";
+
+export type ComparisonMember = {
+  memberId: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+};
+
+export type MissingMember = ComparisonMember & {
+  reason: MissingMemberReason;
+  /** The group they are reporting under this year, when they moved. */
+  movedTo: string | null;
+};
+
+export type RosterComparison = {
+  /** The year compared against — not always the one before, if a year is missing. */
+  previousPeriodLabel: string;
+  previousMemberCount: number;
+  returningCount: number;
+  newMembers: ComparisonMember[];
+  missingMembers: MissingMember[];
+};
+
+/**
+ * Sorts a member the previous roster had and this one does not.
+ *
+ * Without this every transfer between regions reads as a loss in the region
+ * that lost them, and a panel that cries wolf stops being read. Only "unpaid"
+ * is somebody to chase.
+ */
+export function classifyMissingMember(params: {
+  movedToGroupName: string | null;
+  memberStatus: string | null;
+}): MissingMemberReason {
+  if (params.movedToGroupName) return "moved";
+  // A null status means the member record is gone — the FK nulled out, or they
+  // were deleted. Either way there is nobody to chase.
+  if (params.memberStatus === null || params.memberStatus !== "active") {
+    return "left";
+  }
+  return "unpaid";
+}
+
+/**
+ * The same group's roster in the closest earlier report, if there is one.
+ *
+ * Not necessarily last year: an organization that skipped a cycle should be
+ * compared with the last one it actually ran, and told which that was.
+ */
+async function findPreviousReportGroup(params: {
+  orgId: string;
+  groupId: string;
+  periodLabel: string;
+}) {
+  const [previous] = await db
+    .select({
+      reportGroupId: membershipReportGroups.id,
+      periodLabel: membershipReports.periodLabel,
+      memberCount: membershipReportGroups.memberCount,
+    })
+    .from(membershipReportGroups)
+    .innerJoin(
+      membershipReports,
+      eq(membershipReportGroups.reportId, membershipReports.id),
+    )
+    .where(
+      and(
+        eq(membershipReportGroups.orgId, params.orgId),
+        eq(membershipReportGroups.groupId, params.groupId),
+        lt(membershipReports.periodLabel, params.periodLabel),
+      ),
+    )
+    .orderBy(desc(membershipReports.periodLabel))
+    .limit(1);
+
+  return previous ?? null;
+}
+
+/**
+ * This group's roster against its own roster in the previous report.
+ *
+ * Roster to roster, never through `group_memberships` — that table has no
+ * validity period, so asking it who was in the group last year returns who is
+ * in it today. The snapshots are the only record of what was actually
+ * reported, which is what invariant 2 preserved them for.
+ *
+ * Matching is on `member_id`. It nulls out when a member is deleted, so those
+ * rows fall out of the comparison rather than being matched on a name two
+ * people can share.
+ */
+async function getRosterComparison(params: {
+  orgId: string;
+  reportId: string;
+  groupId: string;
+  periodLabel: string;
+  /** This year's roster, already loaded — counted rows only. */
+  currentRoster: ReportRosterRow[];
+}): Promise<RosterComparison | null> {
+  const previous = await findPreviousReportGroup({
+    orgId: params.orgId,
+    groupId: params.groupId,
+    periodLabel: params.periodLabel,
+  });
+
+  if (!previous) return null;
+
+  const previousRoster = await db
+    .select({
+      memberId: membershipReportMembers.memberId,
+      firstName: membershipReportMembers.firstName,
+      lastName: membershipReportMembers.lastName,
+      email: membershipReportMembers.email,
+    })
+    .from(membershipReportMembers)
+    .where(
+      and(
+        eq(membershipReportMembers.reportGroupId, previous.reportGroupId),
+        eq(membershipReportMembers.included, true),
+        eq(membershipReportMembers.pendingAddition, false),
+      ),
+    )
+    .orderBy(
+      asc(membershipReportMembers.lastName),
+      asc(membershipReportMembers.firstName),
+    );
+
+  // The same rule the cached counts use, so the comparison and the totals on
+  // the same card cannot disagree.
+  const counted = params.currentRoster.filter(
+    (member) => member.included && !member.pendingAddition,
+  );
+  const currentIds = new Set(
+    counted
+      .map((member) => member.memberId)
+      .filter((id): id is string => id !== null),
+  );
+
+  const missingIds = previousRoster
+    .map((member) => member.memberId)
+    .filter((id): id is string => id !== null && !currentIds.has(id));
+
+  // Where a missing member turns up this year, and whether they are still a
+  // member at all. Both are looked up once for the whole list.
+  const [movedRows, statusRows] = await Promise.all([
+    missingIds.length > 0
+      ? db
+          .select({
+            memberId: membershipReportMembers.memberId,
+            groupName: membershipReportGroups.groupName,
+          })
+          .from(membershipReportMembers)
+          .innerJoin(
+            membershipReportGroups,
+            eq(membershipReportMembers.reportGroupId, membershipReportGroups.id),
+          )
+          .where(
+            and(
+              eq(membershipReportGroups.reportId, params.reportId),
+              inArray(membershipReportMembers.memberId, missingIds),
+              eq(membershipReportMembers.included, true),
+            ),
+          )
+      : [],
+    missingIds.length > 0
+      ? db
+          .select({ id: tenantMembers.id, status: tenantMembers.status })
+          .from(tenantMembers)
+          .where(inArray(tenantMembers.id, missingIds))
+      : [],
+  ]);
+
+  const movedTo = new Map(movedRows.map((row) => [row.memberId, row.groupName]));
+  const statusById = new Map(statusRows.map((row) => [row.id, row.status]));
+
+  const previousIds = new Set(
+    previousRoster
+      .map((member) => member.memberId)
+      .filter((id): id is string => id !== null),
+  );
+
+  const missingMembers: MissingMember[] = previousRoster
+    .filter((member) => member.memberId === null || !currentIds.has(member.memberId))
+    .map((member) => {
+      const movedToGroupName = member.memberId
+        ? (movedTo.get(member.memberId) ?? null)
+        : null;
+
+      return {
+        ...member,
+        movedTo: movedToGroupName,
+        reason: classifyMissingMember({
+          movedToGroupName,
+          memberStatus: member.memberId
+            ? (statusById.get(member.memberId) ?? null)
+            : null,
+        }),
+      };
+    });
+
+  const newMembers: ComparisonMember[] = counted
+    .filter((member) => member.memberId === null || !previousIds.has(member.memberId))
+    .map((member) => ({
+      memberId: member.memberId,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      email: member.email,
+    }));
+
+  return {
+    previousPeriodLabel: previous.periodLabel,
+    previousMemberCount: previous.memberCount,
+    returningCount: counted.length - newMembers.length,
+    newMembers,
+    missingMembers,
+  };
+}
 
 /**
  * Everything one group needs to work its slice of the current report.
@@ -297,6 +518,14 @@ export async function getGroupReportView(
           .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName))
       : [];
 
+  const comparison = await getRosterComparison({
+    orgId,
+    reportId: row.reportId,
+    groupId,
+    periodLabel: row.periodLabel,
+    currentRoster: roster,
+  });
+
   return {
     periods,
     isEditable: row.reportStatus === "open",
@@ -330,12 +559,19 @@ export async function getGroupReportView(
     roster,
     peers,
     addableMembers,
+    comparison,
   };
 }
 
 
 export type BoardGroupRow = {
   reportGroupId: string;
+  /**
+   * What this group reported in the closest earlier report, and which year that
+   * was. Null when it has never reported before — a new region is not growth.
+   */
+  previousPeriodLabel: string | null;
+  previousMemberCount: number | null;
   /** Null once the group is deleted; the row stays as history. */
   groupId: string | null;
   groupName: string;
@@ -391,6 +627,54 @@ export type BoardReportView = {
     pendingAdditions: number;
   };
 };
+
+/**
+ * What every group in this report counted the last time it reported.
+ *
+ * One query for the whole board rather than one per row. The closest earlier
+ * report can differ per group — a region added two years ago has a different
+ * baseline from one that has reported since the start — so the rows come back
+ * newest first and the first hit per group wins.
+ */
+async function getPreviousMemberCounts(params: {
+  orgId: string;
+  periodLabel: string;
+  groupIds: string[];
+}): Promise<Map<string, { periodLabel: string; memberCount: number }>> {
+  if (params.groupIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      groupId: membershipReportGroups.groupId,
+      periodLabel: membershipReports.periodLabel,
+      memberCount: membershipReportGroups.memberCount,
+    })
+    .from(membershipReportGroups)
+    .innerJoin(
+      membershipReports,
+      eq(membershipReportGroups.reportId, membershipReports.id),
+    )
+    .where(
+      and(
+        eq(membershipReportGroups.orgId, params.orgId),
+        inArray(membershipReportGroups.groupId, params.groupIds),
+        lt(membershipReports.periodLabel, params.periodLabel),
+      ),
+    )
+    .orderBy(desc(membershipReports.periodLabel));
+
+  const byGroup = new Map<string, { periodLabel: string; memberCount: number }>();
+
+  for (const row of rows) {
+    if (!row.groupId || byGroup.has(row.groupId)) continue;
+    byGroup.set(row.groupId, {
+      periodLabel: row.periodLabel,
+      memberCount: row.memberCount,
+    });
+  }
+
+  return byGroup;
+}
 
 /**
  * The board's view of the whole reporting cycle.
@@ -488,11 +772,22 @@ export async function getBoardReportView(
     else rosterByGroup.set(reportGroupId, [member]);
   }
 
+  const previousCounts = await getPreviousMemberCounts({
+    orgId,
+    periodLabel: report.periodLabel,
+    groupIds: groupRows
+      .map((row) => row.groupId)
+      .filter((id): id is string => id !== null),
+  });
+
   // Not `groups`: that name belongs to the table this function also queries.
   const boardGroups: BoardGroupRow[] = groupRows.map((row) => {
     const roster = rosterByGroup.get(row.reportGroupId) ?? [];
+    const previous = row.groupId ? previousCounts.get(row.groupId) : undefined;
     return {
       reportGroupId: row.reportGroupId,
+      previousPeriodLabel: previous?.periodLabel ?? null,
+      previousMemberCount: previous?.memberCount ?? null,
       groupId: row.groupId,
       groupName: row.groupName,
       status: row.status,

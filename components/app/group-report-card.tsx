@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
-import { CheckIcon, ClockIcon, PlusIcon, UndoIcon } from "lucide-react";
+import {
+  ArrowRightLeftIcon,
+  CheckIcon,
+  ClockIcon,
+  PlusIcon,
+  UndoIcon,
+} from "lucide-react";
 
 import { formatFeeAmount } from "@/lib/payments";
 import { PERIOD_DATE_TIMEZONE } from "@/lib/membership-period";
@@ -79,7 +85,8 @@ export function GroupReportCard({
   locale: string;
 }) {
   const router = useRouter();
-  const { report, reportGroup, roster, peers, addableMembers } = view;
+  const { report, reportGroup, roster, peers, addableMembers, comparison } =
+    view;
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submissionNote, setSubmissionNote] = useState("");
@@ -88,6 +95,7 @@ export function GroupReportCard({
   const [addOpen, setAddOpen] = useState(false);
   const [addMemberId, setAddMemberId] = useState("");
   const [addNote, setAddNote] = useState("");
+  const [comparisonOpen, setComparisonOpen] = useState(false);
 
   const refresh = (message: string) => () => {
     toast.success(message);
@@ -138,6 +146,13 @@ export function GroupReportCard({
   const pendingAdditions = roster.filter((row) => row.pendingAddition);
   const confirmed = roster.filter((row) => !row.pendingAddition);
   const currency = reportGroup.currency ?? "CZK";
+
+  // Only the unpaid ones are somebody to chase; a transfer or a member who has
+  // left is expected movement, and colouring those red teaches people to
+  // ignore the panel.
+  const unpaidCount =
+    comparison?.missingMembers.filter((member) => member.reason === "unpaid")
+      .length ?? 0;
 
   const daysLeft = report.confirmDueAt ? daysUntil(report.confirmDueAt) : null;
 
@@ -286,6 +301,41 @@ export function GroupReportCard({
         </div>
       ) : null}
 
+      {comparison ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-sm">
+              Compared with {comparison.previousPeriodLabel} ·{" "}
+              {comparison.previousMemberCount}{" "}
+              {comparison.previousMemberCount === 1 ? "member" : "members"}
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {comparison.returningCount} returning · {comparison.newMembers.length}{" "}
+              new ·{" "}
+              <span
+                className={
+                  unpaidCount > 0 ? "text-destructive font-medium" : undefined
+                }
+              >
+                {comparison.missingMembers.length} not on this year&rsquo;s list
+              </span>
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={
+              comparison.missingMembers.length === 0 &&
+              comparison.newMembers.length === 0
+            }
+            onClick={() => setComparisonOpen(true)}
+          >
+            <ArrowRightLeftIcon data-icon="inline-start" />
+            See what changed
+          </Button>
+        </div>
+      ) : null}
+
       {view.isEditable ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-muted-foreground text-sm">
@@ -427,6 +477,69 @@ export function GroupReportCard({
           </div>
         </div>
       ) : null}
+
+      <Dialog open={comparisonOpen} onOpenChange={setComparisonOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {report.periodLabel} compared with{" "}
+              {comparison?.previousPeriodLabel}
+            </DialogTitle>
+            <DialogDescription>
+              Both lists are what was actually reported those years, not who is
+              in the group today.
+            </DialogDescription>
+          </DialogHeader>
+
+          {comparison && comparison.missingMembers.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="font-medium text-sm">
+                On {comparison.previousPeriodLabel}&rsquo;s list, not on this
+                one
+              </p>
+              <Table>
+                <TableBody>
+                  {comparison.missingMembers.map((member, index) => (
+                    <TableRow key={member.memberId ?? `missing-${index}`}>
+                      <TableCell>
+                        <span className="text-sm">{memberName(member)}</span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {member.reason === "moved" ? (
+                          <Badge variant="secondary">
+                            Now in {member.movedTo}
+                          </Badge>
+                        ) : member.reason === "left" ? (
+                          <Badge variant="secondary">No longer a member</Badge>
+                        ) : (
+                          <Badge variant="destructive">Has not paid</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+
+          {comparison && comparison.newMembers.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="font-medium text-sm">New this year</p>
+              <Table>
+                <TableBody>
+                  {comparison.newMembers.map((member, index) => (
+                    <TableRow key={member.memberId ?? `new-${index}`}>
+                      <TableCell>
+                        <span className="text-sm">{memberName(member)}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>

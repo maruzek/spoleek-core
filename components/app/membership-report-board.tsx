@@ -67,6 +67,12 @@ function formatDate(value: Date, locale: string) {
   }).format(new Date(value));
 }
 
+/** A signed count, where a plain "0" reads better than "+0". */
+function formatDelta(value: number) {
+  if (value === 0) return "0";
+  return value > 0 ? `+${value}` : String(value);
+}
+
 function Stat({
   value,
   label,
@@ -214,6 +220,17 @@ export function MembershipReportBoard({
         : current.filter((id) => id !== reportGroupId),
     );
 
+  // Only groups with a baseline are compared. A region reporting for the first
+  // time is not organizational growth, and counting it as such would overstate
+  // every year a region is added.
+  const comparable = groups.filter((group) => group.previousMemberCount !== null);
+  const hasBaseline = comparable.length > 0;
+  const totalDelta = comparable.reduce(
+    (sum, group) => sum + group.memberCount - (group.previousMemberCount ?? 0),
+    0,
+  );
+  const baselineLabel = comparable[0]?.previousPeriodLabel ?? null;
+
   const daysLeft = report.confirmDueAt ? daysUntil(report.confirmDueAt) : null;
 
   return (
@@ -226,7 +243,15 @@ export function MembershipReportBoard({
             totals.submittedCount < totals.groupCount ? "warning" : undefined
           }
         />
-        <Stat value={String(totals.memberCount)} label="Members confirmed" />
+        <Stat
+          value={String(totals.memberCount)}
+          label={
+            hasBaseline
+              ? `Members confirmed · ${formatDelta(totalDelta)} on ${baselineLabel}`
+              : "Members confirmed"
+          }
+          tone={hasBaseline && totalDelta < 0 ? "warning" : undefined}
+        />
         <Stat
           value={formatFeeAmount(totals.feeTotalCents, totals.currency)}
           label="Fees collected"
@@ -430,6 +455,9 @@ export function MembershipReportBoard({
               <TableHead>Group</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Members</TableHead>
+              {hasBaseline ? (
+                <TableHead className="text-right">vs last year</TableHead>
+              ) : null}
               <TableHead className="text-right">Collected</TableHead>
               <TableHead>Submitted</TableHead>
               <TableHead className="w-0" />
@@ -439,7 +467,9 @@ export function MembershipReportBoard({
             {visibleGroups.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={selectableIds.length > 0 ? 7 : 6}
+                  colSpan={
+                    6 + (selectableIds.length > 0 ? 1 : 0) + (hasBaseline ? 1 : 0)
+                  }
                   className="py-8 text-center text-muted-foreground text-sm"
                 >
                   No groups with this status.
@@ -504,6 +534,36 @@ export function MembershipReportBoard({
                         </span>
                       </div>
                     </TableCell>
+                    {hasBaseline ? (
+                      <TableCell className="text-right">
+                        {group.previousMemberCount === null ? (
+                          <span
+                            className="text-muted-foreground text-sm"
+                            title="This group has not reported before"
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <span
+                              className={
+                                group.memberCount - group.previousMemberCount < 0
+                                  ? "text-destructive text-sm tabular-nums"
+                                  : "text-sm tabular-nums"
+                              }
+                            >
+                              {formatDelta(
+                                group.memberCount - group.previousMemberCount,
+                              )}
+                            </span>
+                            <span className="text-muted-foreground text-xs tabular-nums">
+                              {group.previousPeriodLabel}:{" "}
+                              {group.previousMemberCount}
+                            </span>
+                          </div>
+                        )}
+                      </TableCell>
+                    ) : null}
                     <TableCell className="text-right text-sm tabular-nums">
                       {formatFeeAmount(
                         group.feeTotalCents,

@@ -5,6 +5,7 @@ import {
   getConfirmationBasis,
   isReportGroupFrozen,
 } from "@/server/lib/membership-report";
+import { classifyMissingMember } from "@/server/queries/membership-reports";
 import {
   REPORT_GROUP_STATUS_ORDER,
   compareReportGroupStatus,
@@ -194,5 +195,55 @@ describe("getApprovalDecision", () => {
         groupStatus: "approved",
       }),
     ).toMatchObject({ code: "report_closed" });
+  });
+});
+
+/**
+ * A member on last year's roster and not on this one is usually not a problem:
+ * they moved region, or they left. Only the third case is somebody to chase,
+ * and a panel that flags all three stops being read.
+ */
+describe("classifyMissingMember", () => {
+  it("calls a member who is on another group's roster this year moved", () => {
+    expect(
+      classifyMissingMember({
+        movedToGroupName: "Brno",
+        memberStatus: "active",
+      }),
+    ).toBe("moved");
+  });
+
+  it.each(["archived", "suspended", "deleted", "pending", "invited"])(
+    "calls a %s member gone rather than unpaid",
+    (memberStatus) => {
+      expect(
+        classifyMissingMember({ movedToGroupName: null, memberStatus }),
+      ).toBe("left");
+    },
+  );
+
+  it("calls a still-active member unpaid", () => {
+    expect(
+      classifyMissingMember({ movedToGroupName: null, memberStatus: "active" }),
+    ).toBe("unpaid");
+  });
+
+  it("treats a vanished member record as gone, not as somebody to chase", () => {
+    // `member_id` nulls out on delete, and the row keeps the name it was
+    // reported under. There is nobody left to ask for a payment.
+    expect(
+      classifyMissingMember({ movedToGroupName: null, memberStatus: null }),
+    ).toBe("left");
+  });
+
+  it("prefers the move over the membership status", () => {
+    // Somebody who transferred and was then archived is still explained by the
+    // transfer: they are on another region's roster, so they were reported.
+    expect(
+      classifyMissingMember({
+        movedToGroupName: "Ostrava",
+        memberStatus: "archived",
+      }),
+    ).toBe("moved");
   });
 });
