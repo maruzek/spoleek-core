@@ -1309,9 +1309,17 @@ export const membershipReportGroups = pgTable(
     reportId: uuid("report_id")
       .notNull()
       .references(() => membershipReports.id, { onDelete: "cascade" }),
-    groupId: uuid("group_id")
-      .notNull()
-      .references(() => groups.id, { onDelete: "cascade" }),
+    /**
+     * Nulls out when the group is deleted; the row survives.
+     *
+     * `group_name` is copied precisely so a deleted group still reads
+     * correctly, and an organization must be able to retire a region without
+     * erasing the years it existed. A row with no group is history only: it
+     * cannot be acted on, because authorization routes through the group.
+     */
+    groupId: uuid("group_id").references(() => groups.id, {
+      onDelete: "set null",
+    }),
     /** Copied at open time so a renamed or deleted group still reads correctly. */
     groupName: text("group_name").notNull(),
     status: membershipReportGroupStatusEnum("status")

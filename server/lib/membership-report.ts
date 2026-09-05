@@ -413,7 +413,9 @@ export async function openMembershipReport(params: {
     : [];
 
   const reportGroupIdByGroupId = new Map(
-    reportGroups.map((row) => [row.groupId, row.id]),
+    reportGroups
+      .filter((row): row is typeof row & { groupId: string } => row.groupId !== null)
+      .map((row) => [row.groupId, row.id]),
   );
 
   // Reopening an existing report must not push members into a roster a group

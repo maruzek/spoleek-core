@@ -141,6 +141,10 @@ async function requireReportGroupAccess(reportGroupId: string) {
 
   if (!row) forbidden();
 
+  // The group has been deleted. The row stays readable as history, but there
+  // is no longer anything to check access against, so it cannot be acted on.
+  if (!row.groupId) forbidden();
+
   const access = await requireGroupManagementAccess(row.groupId);
 
   if (access.organization.id !== row.orgId) forbidden();

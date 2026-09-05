@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
@@ -105,7 +105,8 @@ export type ReportRosterRow = {
  * route, which is why this type has no names in it.
  */
 export type PeerProgressRow = {
-  groupId: string;
+  /** Null once the group is deleted; the row stays as history. */
+  groupId: string | null;
   groupName: string;
   status: MembershipReportGroupStatus;
   memberCount: number;
@@ -234,9 +235,15 @@ export async function getGroupReportView(
         memberCount: membershipReportGroups.memberCount,
       })
       .from(membershipReportGroups)
-      .innerJoin(groups, eq(membershipReportGroups.groupId, groups.id))
+      // Left, not inner: a group deleted since the report opened still has a
+      // row here, and dropping it would make the peer list disagree with the
+      // board's. It sorts last, having no sort order of its own.
+      .leftJoin(groups, eq(membershipReportGroups.groupId, groups.id))
       .where(eq(membershipReportGroups.reportId, row.reportId))
-      .orderBy(asc(groups.sortOrder), asc(membershipReportGroups.groupName)),
+      .orderBy(
+        sql`${groups.sortOrder} nulls last`,
+        asc(membershipReportGroups.groupName),
+      ),
   ]);
 
   return {
@@ -277,7 +284,8 @@ export async function getGroupReportView(
 
 export type BoardGroupRow = {
   reportGroupId: string;
-  groupId: string;
+  /** Null once the group is deleted; the row stays as history. */
+  groupId: string | null;
   groupName: string;
   status: MembershipReportGroupStatus;
   submittedAt: Date | null;

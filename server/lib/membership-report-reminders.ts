@@ -188,16 +188,20 @@ async function remindOrganization(
       categoryId: groups.categoryId,
     })
     .from(membershipReportGroups)
-    .innerJoin(groups, eq(membershipReportGroups.groupId, groups.id))
+    .leftJoin(groups, eq(membershipReportGroups.groupId, groups.id))
     .where(eq(membershipReportGroups.reportId, report.id));
 
   // A submitted or approved group has done its part. `returned` is chased
   // again, because the board is waiting on it.
+  // A row whose group was deleted has nobody to chase and nowhere to send
+  // them; it is history, not outstanding work.
   const outstanding = rows.filter(
-    (row) =>
-      row.status === "not_started" ||
-      row.status === "in_progress" ||
-      row.status === "returned",
+    (row): row is typeof row & { groupId: string; categoryId: string } =>
+      row.groupId !== null &&
+      row.categoryId !== null &&
+      (row.status === "not_started" ||
+        row.status === "in_progress" ||
+        row.status === "returned"),
   );
 
   let groupsReminded = 0;
@@ -294,6 +298,7 @@ async function sendBoardDigest(params: {
   org: typeof organizations.$inferSelect;
   report: typeof membershipReports.$inferSelect;
   rows: Array<{
+    groupId: string | null;
     groupName: string;
     status: string;
     memberCount: number;
@@ -309,12 +314,15 @@ async function sendBoardDigest(params: {
 
   if (daysLeft > 1) return 0;
 
+  // A deleted group's row can never be completed, so naming it here would tell
+  // the board to chase something that no longer exists.
   const outstandingGroups = rows
     .filter(
       (row) =>
-        row.status === "not_started" ||
+        row.groupId !== null &&
+        (row.status === "not_started" ||
         row.status === "in_progress" ||
-        row.status === "returned",
+        row.status === "returned"),
     )
     .map((row) => row.groupName);
 

@@ -372,7 +372,10 @@ export function GroupReportCard({
             {peers.map((peer) => {
               const peerStatus = REPORT_GROUP_STATUS[peer.status];
               return (
-                <Status key={peer.groupId} variant={peerStatus.variant}>
+                <Status
+                  key={peer.groupId ?? peer.groupName}
+                  variant={peerStatus.variant}
+                >
                   <StatusLabel>
                     {peer.groupName} · {peer.memberCount}
                   </StatusLabel>

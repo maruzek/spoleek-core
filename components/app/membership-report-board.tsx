@@ -382,7 +382,7 @@ export function MembershipReportBoard({
                             <UndoIcon data-icon="inline-start" />
                             Send back
                           </Button>
-                        ) : categoryId ? (
+                        ) : categoryId && group.groupId ? (
                           <Button size="sm" variant="ghost" asChild>
                             <Link
                               href={`/admin/groups/${categoryId}/${group.groupId}`}
