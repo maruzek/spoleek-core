@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  getApprovalDecision,
   getConfirmationBasis,
   isReportGroupFrozen,
 } from "@/server/lib/membership-report";
@@ -110,5 +111,88 @@ describe("report group status presentation", () => {
     expect(describeReportGroupStatus("not_started", "North Region")).not.toContain(
       "{group}",
     );
+  });
+});
+
+/**
+ * The approval rules, shared by the single approve and the bulk approve so the
+ * two cannot drift. The self-approval guard is the one that matters in a batch:
+ * it is per row, and a row it stops has to be reported rather than dropped.
+ */
+describe("getApprovalDecision", () => {
+  const base = {
+    reportStatus: "open",
+    groupStatus: "submitted" as const,
+    submittedByUserId: "user-region",
+    approverUserId: "user-board",
+    allowSelfApproval: false,
+  };
+
+  it("approves a submitted report for somebody who did not submit it", () => {
+    expect(getApprovalDecision(base)).toEqual({
+      approve: true,
+      selfApproved: false,
+    });
+  });
+
+  it("refuses when the report is closed", () => {
+    const decision = getApprovalDecision({ ...base, reportStatus: "closed" });
+    expect(decision).toMatchObject({ approve: false, code: "report_closed" });
+  });
+
+  it.each(["not_started", "in_progress", "returned", "approved"] as const)(
+    "refuses a report that is %s rather than submitted",
+    (groupStatus) => {
+      expect(getApprovalDecision({ ...base, groupStatus })).toMatchObject({
+        approve: false,
+        code: "not_submitted",
+      });
+    },
+  );
+
+  it("refuses a self-approval by default", () => {
+    const decision = getApprovalDecision({
+      ...base,
+      approverUserId: "user-region",
+    });
+
+    expect(decision).toMatchObject({
+      approve: false,
+      code: "self_approval",
+      reason: "you submitted it yourself",
+    });
+  });
+
+  it("allows a self-approval when the organization opted in, and records it", () => {
+    // The flag can be turned back off later, so the exception has to be marked
+    // on the row rather than inferred from the setting afterwards.
+    expect(
+      getApprovalDecision({
+        ...base,
+        approverUserId: "user-region",
+        allowSelfApproval: true,
+      }),
+    ).toEqual({ approve: true, selfApproved: true });
+  });
+
+  it("does not treat an unattributed submission as a self-approval", () => {
+    // `submitted_by_member_id` nulls out when the member record goes. Nobody
+    // owns the submission, so nobody is approving their own work.
+    expect(
+      getApprovalDecision({ ...base, submittedByUserId: null }),
+    ).toEqual({ approve: true, selfApproved: false });
+  });
+
+  it("checks the report before the submission state", () => {
+    // A closed report is the more fundamental refusal: it explains why nothing
+    // on the page can be acted on, where "not waiting for approval" sends the
+    // reader looking at the row.
+    expect(
+      getApprovalDecision({
+        ...base,
+        reportStatus: "closed",
+        groupStatus: "approved",
+      }),
+    ).toMatchObject({ code: "report_closed" });
   });
 });

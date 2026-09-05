@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -17,10 +17,12 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import {
+  getApprovalDecision,
   isReportGroupFrozen,
   listUnassignedConfirmedMembers,
   openMembershipReport,
   recalculateReportGroupCounts,
+  type ApprovalRefusal,
 } from "@/server/lib/membership-report";
 import {
   requireGroupManagementAccess,
@@ -37,6 +39,14 @@ import {
 const dateOnlySchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected a YYYY-MM-DD date.");
+
+/** The single approve's own wording for each refusal the shared rules return. */
+const APPROVAL_REFUSAL_MESSAGE: Record<ApprovalRefusal, string> = {
+  report_closed: "This report is closed. Reopen it before changing anything.",
+  not_submitted: "Only a submitted report can be approved.",
+  self_approval:
+    "You submitted this report, so somebody else has to approve it. An org admin can allow self-approval in Settings → Membership.",
+};
 
 export const openMembershipReportAction = orgAdminActionClient
   .metadata({ actionName: "openMembershipReport" })
@@ -580,26 +590,19 @@ export const approveGroupReportAction = orgAdminActionClient
       parsedInput.reportGroupId,
     );
 
-    if (row.reportStatus !== "open") {
-      throw new Error("This report is closed. Reopen it before changing anything.");
+    const decision = getApprovalDecision({
+      reportStatus: row.reportStatus,
+      groupStatus: row.status,
+      submittedByUserId: row.submittedByUserId,
+      approverUserId: ctx.auth.user.id,
+      allowSelfApproval: row.allowSelfApproval,
+    });
+
+    if (!decision.approve) {
+      throw new Error(APPROVAL_REFUSAL_MESSAGE[decision.code]);
     }
 
-    if (row.status !== "submitted") {
-      throw new Error("Only a submitted report can be approved.");
-    }
-
-    // Two stages where both stages are the same person is a one-stage workflow
-    // with extra clicks. Organizations small enough that the region admin is
-    // also the board can opt out, and the exception is recorded on the row.
-    const isSelfApproval =
-      row.submittedByUserId !== null &&
-      row.submittedByUserId === ctx.auth.user.id;
-
-    if (isSelfApproval && !row.allowSelfApproval) {
-      throw new Error(
-        "You submitted this report, so somebody else has to approve it. An org admin can allow self-approval in Settings → Membership.",
-      );
-    }
+    const isSelfApproval = decision.selfApproved;
 
     await db
       .update(membershipReportGroups)
@@ -618,6 +621,102 @@ export const approveGroupReportAction = orgAdminActionClient
     revalidatePath("/admin/groups", "layout");
 
     return { success: true, selfApproved: isSelfApproval };
+  });
+
+/**
+ * Approves several groups at once.
+ *
+ * Twelve regions is twelve clicks and twelve page refreshes, and the board does
+ * this once a year against rows it has already read. The guards are the single
+ * approve's guards, applied per row rather than to the batch: a row that cannot
+ * be approved is named back to the caller instead of being silently dropped,
+ * because a bulk action that quietly skips the caller's own submission teaches
+ * them that the number they clicked is not the number they got.
+ */
+export const bulkApproveGroupReportsAction = orgAdminActionClient
+  .metadata({ actionName: "bulkApproveGroupReports" })
+  .inputSchema(
+    z.object({
+      reportGroupIds: z.array(z.string().uuid()).min(1).max(200),
+    }),
+  )
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    const rows = await db
+      .select({
+        id: membershipReportGroups.id,
+        groupName: membershipReportGroups.groupName,
+        status: membershipReportGroups.status,
+        submittedByUserId: tenantMembers.userId,
+        reportStatus: membershipReports.status,
+        allowSelfApproval: organizations.membershipReportAllowSelfApproval,
+      })
+      .from(membershipReportGroups)
+      .innerJoin(
+        membershipReports,
+        eq(membershipReportGroups.reportId, membershipReports.id),
+      )
+      .innerJoin(
+        organizations,
+        eq(membershipReportGroups.orgId, organizations.id),
+      )
+      .leftJoin(
+        tenantMembers,
+        eq(membershipReportGroups.submittedByMemberId, tenantMembers.id),
+      )
+      .where(
+        and(
+          inArray(membershipReportGroups.id, parsedInput.reportGroupIds),
+          eq(membershipReportGroups.orgId, organization.id),
+        ),
+      );
+
+    // An id that resolved to nothing belongs to another organization or does
+    // not exist. Refuse the whole batch rather than approving the rest and
+    // reporting a count the caller has to reconcile.
+    if (rows.length !== parsedInput.reportGroupIds.length) forbidden();
+
+    const approved: string[] = [];
+    const skipped: Array<{ groupName: string; reason: string }> = [];
+    const now = new Date();
+
+    for (const row of rows) {
+      const decision = getApprovalDecision({
+        reportStatus: row.reportStatus,
+        groupStatus: row.status,
+        submittedByUserId: row.submittedByUserId,
+        approverUserId: ctx.auth.user.id,
+        allowSelfApproval: row.allowSelfApproval,
+      });
+
+      if (!decision.approve) {
+        skipped.push({ groupName: row.groupName, reason: decision.reason });
+        continue;
+      }
+
+      const isSelfApproval = decision.selfApproved;
+
+      await db
+        .update(membershipReportGroups)
+        .set({
+          status: "approved",
+          approvedAt: now,
+          approvedByUserId: ctx.auth.user.id,
+          selfApproved: isSelfApproval,
+          returnedAt: null,
+          returnedReason: null,
+          updatedAt: now,
+        })
+        .where(eq(membershipReportGroups.id, row.id));
+
+      approved.push(row.groupName);
+    }
+
+    revalidatePath("/admin/reports");
+    revalidatePath("/admin/groups", "layout");
+
+    return { approved, skipped };
   });
 
 export const returnGroupReportAction = orgAdminActionClient

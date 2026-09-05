@@ -51,6 +51,66 @@ export function isReportGroupFrozen(status: MembershipReportGroupStatus) {
   return status === "submitted" || status === "approved";
 }
 
+/** Why a report could not be approved, or that it can be. */
+export type ApprovalDecision =
+  | { approve: true; selfApproved: boolean }
+  | { approve: false; code: ApprovalRefusal; reason: string };
+
+export type ApprovalRefusal =
+  | "report_closed"
+  | "not_submitted"
+  | "self_approval";
+
+/**
+ * Whether this person may approve this report, and whether that is a
+ * self-approval.
+ *
+ * Shared by the single approve and the bulk approve so the two cannot drift:
+ * the rules a board sees when clicking one row are the rules applied to each
+ * row of a batch. `reason` is the short phrase the batch reports per row; the
+ * single approve turns the code into its own sentence.
+ */
+export function getApprovalDecision(params: {
+  reportStatus: string;
+  groupStatus: MembershipReportGroupStatus;
+  submittedByUserId: string | null;
+  approverUserId: string;
+  allowSelfApproval: boolean;
+}): ApprovalDecision {
+  if (params.reportStatus !== "open") {
+    return {
+      approve: false,
+      code: "report_closed",
+      reason: "the report is closed",
+    };
+  }
+
+  if (params.groupStatus !== "submitted") {
+    return {
+      approve: false,
+      code: "not_submitted",
+      reason: "it is not waiting for approval",
+    };
+  }
+
+  // Two stages where both stages are the same person is a one-stage workflow
+  // with extra clicks. Organizations small enough that the region admin is also
+  // the board can opt out, and the exception is recorded on the row.
+  const selfApproved =
+    params.submittedByUserId !== null &&
+    params.submittedByUserId === params.approverUserId;
+
+  if (selfApproved && !params.allowSelfApproval) {
+    return {
+      approve: false,
+      code: "self_approval",
+      reason: "you submitted it yourself",
+    };
+  }
+
+  return { approve: true, selfApproved };
+}
+
 /** The category whose groups are the report's rows, or null when none is flagged. */
 export async function getFeeManagingCategory(orgId: string) {
   const [category] = await db

@@ -29,12 +29,14 @@ import type {
 } from "@/server/queries/membership-reports";
 import {
   approveGroupReportAction,
+  bulkApproveGroupReportsAction,
   returnGroupReportAction,
   setReportDeadlineAction,
 } from "@/server/actions/membership-reports";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -119,10 +121,33 @@ export function MembershipReportBoard({
   const [showUnassigned, setShowUnassigned] = useState(false);
   const [deadlineOpen, setDeadlineOpen] = useState(false);
   const [deadlineValue, setDeadlineValue] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
 
   const onError = ({ error }: { error: { serverError?: string } }) =>
     toast.error(error.serverError ?? "Something went wrong.");
 
+  const bulkApprove = useAction(bulkApproveGroupReportsAction, {
+    onSuccess({ data }) {
+      const approved = data?.approved.length ?? 0;
+      const skipped = data?.skipped ?? [];
+
+      if (approved > 0) {
+        toast.success(
+          `Approved ${approved} report${approved === 1 ? "" : "s"}.`,
+        );
+      }
+
+      // Named, not counted: a batch that quietly drops rows is worse than one
+      // that says which and why.
+      for (const row of skipped) {
+        toast.warning(`${row.groupName} was not approved — ${row.reason}.`);
+      }
+
+      setSelected([]);
+      router.refresh();
+    },
+    onError,
+  });
   const approve = useAction(approveGroupReportAction, {
     onSuccess({ data }) {
       toast.success(
@@ -165,6 +190,29 @@ export function MembershipReportBoard({
         a.groupName.localeCompare(b.groupName, locale),
     );
   }, [groups, statusFilter, locale]);
+
+  // Only submitted rows can be approved, so only they are selectable — the
+  // header checkbox must not appear to offer anything else.
+  const selectableIds = useMemo(
+    () =>
+      isEditable
+        ? visibleGroups
+            .filter((group) => group.status === "submitted")
+            .map((group) => group.reportGroupId)
+        : [],
+    [visibleGroups, isEditable],
+  );
+
+  const selectedVisible = selected.filter((id) => selectableIds.includes(id));
+  const allSelected =
+    selectableIds.length > 0 && selectedVisible.length === selectableIds.length;
+
+  const toggleRow = (reportGroupId: string, checked: boolean) =>
+    setSelected((current) =>
+      checked
+        ? [...current, reportGroupId]
+        : current.filter((id) => id !== reportGroupId),
+    );
 
   const daysLeft = report.confirmDueAt ? daysUntil(report.confirmDueAt) : null;
 
@@ -333,10 +381,52 @@ export function MembershipReportBoard({
         </p>
       </div>
 
+      {selectedVisible.length > 0 ? (
+        <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3">
+          <p className="text-sm">
+            {selectedVisible.length} report
+            {selectedVisible.length === 1 ? "" : "s"} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelected([])}
+              disabled={bulkApprove.isPending}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              disabled={bulkApprove.isPending}
+              onClick={() =>
+                bulkApprove.execute({ reportGroupIds: selectedVisible })
+              }
+            >
+              <CheckIcon data-icon="inline-start" />
+              {bulkApprove.isPending
+                ? "Approving…"
+                : `Approve ${selectedVisible.length}`}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
+              {selectableIds.length > 0 ? (
+                <TableHead className="w-0">
+                  <Checkbox
+                    aria-label="Select every report waiting for approval"
+                    checked={allSelected}
+                    onCheckedChange={(value) =>
+                      setSelected(value === true ? selectableIds : [])
+                    }
+                  />
+                </TableHead>
+              ) : null}
               <TableHead>Group</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Members</TableHead>
@@ -349,7 +439,7 @@ export function MembershipReportBoard({
             {visibleGroups.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6}
+                  colSpan={selectableIds.length > 0 ? 7 : 6}
                   className="py-8 text-center text-muted-foreground text-sm"
                 >
                   No groups with this status.
@@ -360,6 +450,19 @@ export function MembershipReportBoard({
                 const presentation = REPORT_GROUP_STATUS[group.status];
                 return (
                   <TableRow key={group.reportGroupId}>
+                    {selectableIds.length > 0 ? (
+                      <TableCell>
+                        {group.status === "submitted" ? (
+                          <Checkbox
+                            aria-label={`Select ${group.groupName}`}
+                            checked={selected.includes(group.reportGroupId)}
+                            onCheckedChange={(value) =>
+                              toggleRow(group.reportGroupId, value === true)
+                            }
+                          />
+                        ) : null}
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium text-sm">
