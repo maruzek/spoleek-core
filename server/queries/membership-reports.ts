@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
@@ -6,6 +6,7 @@ import {
   type UnassignedConfirmedMember,
 } from "@/server/lib/membership-report";
 import {
+  groupMemberships,
   groups,
   membershipReportGroups,
   membershipReportMembers,
@@ -147,6 +148,18 @@ export type GroupReportView = {
   };
   roster: ReportRosterRow[];
   peers: PeerProgressRow[];
+  /**
+   * Members of this group with no row on the roster yet — the candidates for a
+   * manual add. Empty once the report is closed, where nothing can be added.
+   */
+  addableMembers: AddableMemberRow[];
+};
+
+export type AddableMemberRow = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
 };
 
 /**
@@ -250,6 +263,39 @@ export async function getGroupReportView(
       ),
   ]);
 
+  const rosterMemberIds = roster
+    .map((member) => member.memberId)
+    .filter((id): id is string => id !== null);
+
+  // Only offered while the report is collecting. A closed year takes no
+  // additions of any kind, manual ones included.
+  const addableMembers =
+    row.reportStatus === "open"
+      ? await db
+          .select({
+            id: tenantMembers.id,
+            firstName: tenantMembers.firstName,
+            lastName: tenantMembers.lastName,
+            email: tenantMembers.email,
+          })
+          .from(groupMemberships)
+          .innerJoin(
+            tenantMembers,
+            eq(groupMemberships.memberId, tenantMembers.id),
+          )
+          .where(
+            and(
+              eq(groupMemberships.orgId, orgId),
+              eq(groupMemberships.groupId, groupId),
+              eq(tenantMembers.status, "active"),
+              rosterMemberIds.length > 0
+                ? notInArray(tenantMembers.id, rosterMemberIds)
+                : undefined,
+            ),
+          )
+          .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName))
+      : [];
+
   return {
     periods,
     isEditable: row.reportStatus === "open",
@@ -282,6 +328,7 @@ export async function getGroupReportView(
     },
     roster,
     peers,
+    addableMembers,
   };
 }
 

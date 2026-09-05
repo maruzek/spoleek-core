@@ -16,6 +16,7 @@ import {
   organizations,
   tenantMembers,
   type MembershipReportConfirmationBasis,
+  type MembershipReportGroupStatus,
 } from "@/server/db/schema";
 
 /**
@@ -36,6 +37,18 @@ export function getConfirmationBasis(payment: {
     return "waived";
   }
   return null;
+}
+
+/**
+ * Whether a roster is signed off, so anything confirmed now has to queue.
+ *
+ * The single definition of the freeze (invariant 1). Every write path that can
+ * add a member to a report — the payment sync, the backfill on open, the manual
+ * add — asks this rather than repeating the comparison, because a path that
+ * forgets it silently rewrites numbers the board has already approved.
+ */
+export function isReportGroupFrozen(status: MembershipReportGroupStatus) {
+  return status === "submitted" || status === "approved";
 }
 
 /** The category whose groups are the report's rows, or null when none is flagged. */
@@ -344,8 +357,7 @@ export async function syncReportMemberForPayment(paymentId: string) {
     return;
   }
 
-  const isFrozen =
-    reportGroup.status === "submitted" || reportGroup.status === "approved";
+  const isFrozen = isReportGroupFrozen(reportGroup.status);
 
   await db
     .insert(membershipReportMembers)
@@ -542,9 +554,7 @@ export async function openMembershipReport(params: {
   // has already signed off. They land as pending additions, the same way a late
   // payment does.
   const frozenReportGroupIds = new Set(
-    reportGroups
-      .filter((row) => row.status === "submitted" || row.status === "approved")
-      .map((row) => row.id),
+    reportGroups.filter((row) => isReportGroupFrozen(row.status)).map((row) => row.id),
   );
 
   const membersBackfilled = await backfillReportMembers({

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
-import { CheckIcon, ClockIcon, UndoIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, PlusIcon, UndoIcon } from "lucide-react";
 
 import { formatFeeAmount } from "@/lib/payments";
 import { PERIOD_DATE_TIMEZONE } from "@/lib/membership-period";
@@ -16,6 +16,7 @@ import {
 import type { GroupReportView } from "@/server/queries/membership-reports";
 import {
   acceptPendingAdditionAction,
+  addReportMemberManuallyAction,
   setReportMemberInclusionAction,
   submitGroupReportAction,
 } from "@/server/actions/membership-reports";
@@ -31,6 +32,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Status, StatusLabel } from "@/components/ui/status";
 import {
   Table,
@@ -71,12 +79,15 @@ export function GroupReportCard({
   locale: string;
 }) {
   const router = useRouter();
-  const { report, reportGroup, roster, peers } = view;
+  const { report, reportGroup, roster, peers, addableMembers } = view;
 
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submissionNote, setSubmissionNote] = useState("");
   const [excludeTarget, setExcludeTarget] = useState<string | null>(null);
   const [excludeNote, setExcludeNote] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMemberId, setAddMemberId] = useState("");
+  const [addNote, setAddNote] = useState("");
 
   const refresh = (message: string) => () => {
     toast.success(message);
@@ -98,6 +109,20 @@ export function GroupReportCard({
   });
   const acceptAddition = useAction(acceptPendingAdditionAction, {
     onSuccess: refresh("Member added to the report."),
+    onError,
+  });
+  const addManually = useAction(addReportMemberManuallyAction, {
+    onSuccess({ data }) {
+      toast.success(
+        data?.pendingAddition
+          ? "Added, and waiting for you to accept them into the submitted roster."
+          : "Member added to the report.",
+      );
+      setAddOpen(false);
+      setAddMemberId("");
+      setAddNote("");
+      router.refresh();
+    },
     onError,
   });
 
@@ -261,6 +286,23 @@ export function GroupReportCard({
         </div>
       ) : null}
 
+      {view.isEditable ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-muted-foreground text-sm">
+            Somebody who paid outside the system can be added by hand.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={addableMembers.length === 0}
+            onClick={() => setAddOpen(true)}
+          >
+            <PlusIcon data-icon="inline-start" />
+            Add a member
+          </Button>
+        </div>
+      ) : null}
+
       <div className="rounded-xl border">
         <Table>
           <TableHeader>
@@ -385,6 +427,60 @@ export function GroupReportCard({
           </div>
         </div>
       ) : null}
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add a member to the {report.periodLabel} report</DialogTitle>
+            <DialogDescription>
+              For someone who paid outside the system — cash at a meeting, say.
+              No payment is recorded and the fee total does not move, so do not
+              use this to stand in for a payment that should be entered
+              properly. The reason is shown to the board.
+              {isLocked && view.isEditable
+                ? " This roster is already submitted, so they will wait as a pending addition until you accept them."
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <Select value={addMemberId} onValueChange={setAddMemberId}>
+            <SelectTrigger id="report-add-member">
+              <SelectValue placeholder="Choose a member of this group" />
+            </SelectTrigger>
+            <SelectContent>
+              {addableMembers.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {memberName(member)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Textarea
+            value={addNote}
+            onChange={(e) => setAddNote(e.target.value)}
+            placeholder="Why are they being added by hand?"
+            rows={3}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                addManually.isPending || !addMemberId || !addNote.trim()
+              }
+              onClick={() =>
+                addManually.execute({
+                  reportGroupId: reportGroup.id,
+                  memberId: addMemberId,
+                  note: addNote.trim(),
+                })
+              }
+            >
+              {addManually.isPending ? "Adding…" : "Add member"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={submitOpen} onOpenChange={setSubmitOpen}>
         <DialogContent>

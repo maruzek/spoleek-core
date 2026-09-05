@@ -9,6 +9,7 @@ import { forbidden } from "next/navigation";
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import {
+  groupMemberships,
   membershipReportGroups,
   membershipReportMembers,
   membershipReports,
@@ -16,6 +17,7 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import {
+  isReportGroupFrozen,
   listUnassignedConfirmedMembers,
   openMembershipReport,
   recalculateReportGroupCounts,
@@ -264,13 +266,14 @@ async function requireReportGroupAccess(reportGroupId: string) {
 
   // The group has been deleted. The row stays readable as history, but there
   // is no longer anything to check access against, so it cannot be acted on.
-  if (!row.groupId) forbidden();
+  const groupId = row.groupId;
+  if (!groupId) forbidden();
 
-  const access = await requireGroupManagementAccess(row.groupId);
+  const access = await requireGroupManagementAccess(groupId);
 
   if (access.organization.id !== row.orgId) forbidden();
 
-  return { row, access };
+  return { row: { ...row, groupId }, access };
 }
 
 /** A group may still edit its roster until it submits. */
@@ -325,6 +328,110 @@ export const setReportMemberInclusionAction = authActionClient
     revalidatePath("/admin/groups", "layout");
 
     return { success: true };
+  });
+
+/**
+ * Adds a member the system has no payment for.
+ *
+ * Someone who paid cash at a meeting is a real member of the organization, and
+ * without this the region has one way to report them: mark a payment paid that
+ * never went through the account. That corrupts the payment record to fix the
+ * report, which is exactly what this module exists to prevent — so the escape
+ * hatch is explicit, carries a mandatory reason, and is labelled `manual` on
+ * the roster for the board to see.
+ *
+ * No money is recorded. The member counts, the fee total does not move, because
+ * the organization's accounts never saw it.
+ *
+ * The freeze applies as it does to a late payment: added to a roster that is
+ * already signed off, they queue as a pending addition rather than changing an
+ * approved number behind the board's back.
+ */
+export const addReportMemberManuallyAction = authActionClient
+  .metadata({ actionName: "addReportMemberManually" })
+  .inputSchema(
+    z.object({
+      reportGroupId: z.string().uuid(),
+      memberId: z.string().uuid(),
+      note: z.string().trim().min(1).max(500),
+    }),
+  )
+  .action(async ({ parsedInput }) => {
+    const { row } = await requireReportGroupAccess(parsedInput.reportGroupId);
+
+    if (row.reportStatus !== "open") {
+      throw new Error("This report is no longer collecting.");
+    }
+
+    // Membership of this group is the whole of the authorization: the caller
+    // administers the group, so they may only add people who are in it.
+    const [membership] = await db
+      .select({
+        memberId: tenantMembers.id,
+        firstName: tenantMembers.firstName,
+        lastName: tenantMembers.lastName,
+        email: tenantMembers.email,
+        status: tenantMembers.status,
+      })
+      .from(groupMemberships)
+      .innerJoin(tenantMembers, eq(groupMemberships.memberId, tenantMembers.id))
+      .where(
+        and(
+          eq(groupMemberships.orgId, row.orgId),
+          eq(groupMemberships.groupId, row.groupId),
+          eq(groupMemberships.memberId, parsedInput.memberId),
+        ),
+      )
+      .limit(1);
+
+    if (!membership) {
+      throw new Error("That member is not in this group.");
+    }
+
+    if (membership.status !== "active") {
+      throw new Error("Only an active member can be added to the report.");
+    }
+
+    const [existing] = await db
+      .select({ id: membershipReportMembers.id })
+      .from(membershipReportMembers)
+      .where(
+        and(
+          eq(membershipReportMembers.reportGroupId, parsedInput.reportGroupId),
+          eq(membershipReportMembers.memberId, parsedInput.memberId),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      throw new Error("That member is already on this report.");
+    }
+
+    const pendingAddition = isReportGroupFrozen(row.status);
+
+    await db.insert(membershipReportMembers).values({
+      orgId: row.orgId,
+      reportGroupId: parsedInput.reportGroupId,
+      memberId: membership.memberId,
+      firstName: membership.firstName,
+      lastName: membership.lastName,
+      email: membership.email,
+      confirmationBasis: "manual",
+      // No payment, so no money and no currency. Leaving these null keeps the
+      // member out of the fee total rather than inventing a zero payment.
+      paymentId: null,
+      feeAmountCents: null,
+      currency: null,
+      included: true,
+      pendingAddition,
+      note: parsedInput.note,
+    });
+
+    await recalculateReportGroupCounts(parsedInput.reportGroupId);
+    revalidatePath("/admin/groups", "layout");
+    revalidatePath("/admin/reports");
+
+    return { success: true, pendingAddition };
   });
 
 /**
