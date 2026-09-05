@@ -1,14 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 
 import { getServerEnv } from "@/lib/env";
 import { PERIOD_DATE_TIMEZONE } from "@/lib/membership-period";
 import { daysUntil } from "@/lib/membership-report-status";
 import { MembershipReportDigestEmail } from "@/emails/membership-report-digest-email";
+import { MembershipReportPendingAdditionEmail } from "@/emails/membership-report-pending-addition-email";
 import { MembershipReportReminderEmail } from "@/emails/membership-report-reminder-email";
 import { db } from "@/server/db";
 import {
   groups,
   membershipReportGroups,
+  membershipReportMembers,
   membershipReports,
   organizations,
   type MembershipReportReminderStage,
@@ -44,6 +46,34 @@ const STAGE_RANK: Record<MembershipReportReminderStage, number> = {
 
 /** How often the overdue nudge repeats once the deadline has passed. */
 const OVERDUE_REPEAT_DAYS = 7;
+
+/** How often a group is re-told it has members waiting to be accepted. */
+const PENDING_ADDITION_REPEAT_DAYS = 7;
+
+/**
+ * Whether a group with pending additions should be nudged today.
+ *
+ * The freeze creates a task and, until now, told nobody: a group that has
+ * submitted is skipped by the ladder, which is precisely the group with a late
+ * payer sitting in a queue nobody looks at. This is deliberately not a rung of
+ * the ladder — the ladder counts down to a deadline that has usually already
+ * passed by the time this happens, and its rungs were spent before the group
+ * submitted.
+ */
+export function isPendingAdditionReminderDue(params: {
+  pendingAdditions: number;
+  lastRemindedAt: Date | null;
+  now: Date;
+}): boolean {
+  if (params.pendingAdditions < 1) return false;
+  if (!params.lastRemindedAt) return true;
+
+  const daysSince = Math.floor(
+    (params.now.getTime() - params.lastRemindedAt.getTime()) / 86_400_000,
+  );
+
+  return daysSince >= PENDING_ADDITION_REPEAT_DAYS;
+}
 
 /**
  * Which rung is due today, or null when nothing is.
@@ -158,21 +188,12 @@ async function remindOrganization(
     )
     .limit(1);
 
-  // No open report, or no deadline to count down to.
-  if (!report?.confirmDueAt) return { groupsReminded: 0, digestsSent: 0 };
+  if (!report) return { groupsReminded: 0, digestsSent: 0 };
 
   const category = await getFeeManagingCategory(org.id);
   if (!category) return { groupsReminded: 0, digestsSent: 0 };
 
-  const daysLeft = daysUntil(report.confirmDueAt, today);
-
-  // Nothing to say until the first rung is in range.
-  if (daysLeft > LADDER[0].daysBefore) {
-    return { groupsReminded: 0, digestsSent: 0 };
-  }
-
   const appUrl = getServerEnv().APP_URL.replace(/\/$/, "");
-  const deadline = formatDeadline(report.confirmDueAt, org.locale);
 
   const rows = await db
     .select({
@@ -185,11 +206,37 @@ async function remindOrganization(
       waivedCount: membershipReportGroups.waivedCount,
       reminderStageSent: membershipReportGroups.reminderStageSent,
       reminderSentAt: membershipReportGroups.reminderSentAt,
+      pendingAdditionRemindedAt:
+        membershipReportGroups.pendingAdditionRemindedAt,
       categoryId: groups.categoryId,
     })
     .from(membershipReportGroups)
     .leftJoin(groups, eq(membershipReportGroups.groupId, groups.id))
     .where(eq(membershipReportGroups.reportId, report.id));
+
+  const pendingReminded = await remindPendingAdditions({
+    org,
+    report,
+    rows,
+    appUrl,
+    today,
+  });
+
+  // Everything below counts down to the deadline. Without one there is nothing
+  // to count, and until the first rung is in range there is nothing to say —
+  // but the pending additions above are chased either way, because a member
+  // waiting in a queue is a task whatever the calendar says.
+  if (!report.confirmDueAt) {
+    return { groupsReminded: pendingReminded, digestsSent: 0 };
+  }
+
+  const daysLeft = daysUntil(report.confirmDueAt, today);
+
+  if (daysLeft > LADDER[0].daysBefore) {
+    return { groupsReminded: pendingReminded, digestsSent: 0 };
+  }
+
+  const deadline = formatDeadline(report.confirmDueAt, org.locale);
 
   // A submitted or approved group has done its part. `returned` is chased
   // again, because the board is waiting on it.
@@ -204,7 +251,7 @@ async function remindOrganization(
         row.status === "returned"),
   );
 
-  let groupsReminded = 0;
+  let ladderReminded = 0;
 
   for (const row of outstanding) {
     const stage = getDueStage({
@@ -269,7 +316,7 @@ async function remindOrganization(
       })
       .where(eq(membershipReportGroups.id, row.id));
 
-    groupsReminded += 1;
+    ladderReminded += 1;
   }
 
   const digestsSent = await sendBoardDigest({
@@ -279,11 +326,139 @@ async function remindOrganization(
     daysLeft,
     deadline,
     appUrl,
-    remindedThisRun: groupsReminded,
+    // The ladder's count only. The digest rides the group reminders' cadence,
+    // and a pending-addition nudge is not one of them — counting it here would
+    // send the board a digest every day for as long as a queue stands.
+    remindedThisRun: ladderReminded,
     now: today,
   });
 
-  return { groupsReminded, digestsSent };
+  return { groupsReminded: ladderReminded + pendingReminded, digestsSent };
+}
+
+/**
+ * Chases groups that have submitted but have members waiting to be accepted.
+ *
+ * The freeze holds a late payer out of every count until a group admin accepts
+ * them, which is right — but it created a task and told nobody, so the queue
+ * sat there until somebody happened to open the page. `approved` groups are
+ * chased as well as `submitted` ones: the queue is the same, and accepting is
+ * what sends the report back for the board to look at again.
+ *
+ * Repetition is tracked in its own column rather than on the ladder, which had
+ * already been spent by the time the group submitted.
+ */
+async function remindPendingAdditions(params: {
+  org: typeof organizations.$inferSelect;
+  report: typeof membershipReports.$inferSelect;
+  rows: Array<{
+    id: string;
+    groupId: string | null;
+    groupName: string;
+    status: string;
+    memberCount: number;
+    pendingAdditionRemindedAt: Date | null;
+    categoryId: string | null;
+  }>;
+  appUrl: string;
+  today: Date;
+}): Promise<number> {
+  const { org, report, rows, appUrl, today } = params;
+
+  const frozen = rows.filter(
+    (row): row is (typeof rows)[number] & {
+      groupId: string;
+      categoryId: string;
+    } =>
+      row.groupId !== null &&
+      row.categoryId !== null &&
+      (row.status === "submitted" || row.status === "approved"),
+  );
+
+  if (frozen.length === 0) return 0;
+
+  const pendingCounts = await db
+    .select({
+      reportGroupId: membershipReportMembers.reportGroupId,
+      value: count(),
+    })
+    .from(membershipReportMembers)
+    .where(
+      and(
+        inArray(
+          membershipReportMembers.reportGroupId,
+          frozen.map((row) => row.id),
+        ),
+        eq(membershipReportMembers.pendingAddition, true),
+      ),
+    )
+    .groupBy(membershipReportMembers.reportGroupId);
+
+  const pendingByGroup = new Map(
+    pendingCounts.map((row) => [row.reportGroupId, row.value]),
+  );
+
+  let sent = 0;
+
+  for (const row of frozen) {
+    const pendingAdditions = pendingByGroup.get(row.id) ?? 0;
+
+    if (
+      !isPendingAdditionReminderDue({
+        pendingAdditions,
+        lastRemindedAt: row.pendingAdditionRemindedAt,
+        now: today,
+      })
+    ) {
+      continue;
+    }
+
+    const { recipients, fellBackToOrgAdmins } =
+      await resolveReportReminderRecipients({
+        orgId: org.id,
+        groupId: row.groupId,
+        categoryId: row.categoryId,
+      });
+
+    if (recipients.length === 0) continue;
+
+    await sendNotificationEmails({
+      orgId: org.id,
+      kind: "report_reminder",
+      recipients,
+      subject: `${row.groupName}: ${pendingAdditions} member${
+        pendingAdditions === 1 ? "" : "s"
+      } waiting to join the ${report.periodLabel} report`,
+      react: MembershipReportPendingAdditionEmail({
+        organizationName: org.name,
+        groupName: row.groupName,
+        periodLabel: report.periodLabel,
+        pendingAdditions,
+        memberCount: row.memberCount,
+        isApproved: row.status === "approved",
+        reportUrl: `${appUrl}/admin/groups/${row.categoryId}/${row.groupId}`,
+        toBoardFallback: fellBackToOrgAdmins,
+      }),
+      metadata: {
+        reportId: report.id,
+        reportGroupId: row.id,
+        periodLabel: report.periodLabel,
+        stage: "pending_addition",
+        pendingAdditions,
+      },
+    });
+
+    // Recorded after the send, as the ladder does: a crash mid-batch re-sends
+    // rather than silently swallowing the nudge.
+    await db
+      .update(membershipReportGroups)
+      .set({ pendingAdditionRemindedAt: today, updatedAt: new Date() })
+      .where(eq(membershipReportGroups.id, row.id));
+
+    sent += 1;
+  }
+
+  return sent;
 }
 
 /**

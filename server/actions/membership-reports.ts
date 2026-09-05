@@ -482,22 +482,29 @@ export const acceptPendingAdditionAction = authActionClient
 
     await recalculateReportGroupCounts(member.reportGroupId);
 
-    if (row.status === "submitted" || row.status === "approved") {
-      await db
-        .update(membershipReportGroups)
-        .set({
-          status: "returned",
-          returnedAt: new Date(),
-          returnedReason: "A member was confirmed after this report was submitted.",
-          approvedAt: null,
-          approvedByUserId: null,
-          selfApproved: false,
-          reminderStageSent: null,
-          reminderSentAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(membershipReportGroups.id, member.reportGroupId));
-    }
+    await db
+      .update(membershipReportGroups)
+      .set({
+        // The queue this group was being chased about has been dealt with. A
+        // later addition starts its own cadence rather than inheriting the
+        // last one's timestamp and waiting a week to be mentioned.
+        pendingAdditionRemindedAt: null,
+        ...(isReportGroupFrozen(row.status)
+          ? {
+              status: "returned" as const,
+              returnedAt: new Date(),
+              returnedReason:
+                "A member was confirmed after this report was submitted.",
+              approvedAt: null,
+              approvedByUserId: null,
+              selfApproved: false,
+              reminderStageSent: null,
+              reminderSentAt: null,
+            }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(membershipReportGroups.id, member.reportGroupId));
 
     revalidatePath("/admin/groups", "layout");
 

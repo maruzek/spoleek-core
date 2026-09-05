@@ -1,0 +1,1 @@
+ALTER TABLE "membership_report_groups" ADD COLUMN "pending_addition_reminded_at" timestamp with time zone;

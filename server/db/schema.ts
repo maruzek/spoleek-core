@@ -1354,6 +1354,19 @@ export const membershipReportGroups = pgTable(
      */
     reminderStageSent: membershipReportReminderStageEnum("reminder_stage_sent"),
     reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true }),
+    /**
+     * When the group was last told it has members waiting to be accepted.
+     *
+     * Deliberately not part of the ladder above. The ladder counts down to the
+     * confirmation deadline and its rungs were consumed before this group
+     * submitted; a member confirmed afterwards is a new task on a roster that
+     * is otherwise finished, and it can arrive at any time — including well
+     * after the deadline, when the ladder has nothing left to say. Cleared when
+     * the pending addition is dealt with, so the next one starts fresh.
+     */
+    pendingAdditionRemindedAt: timestamp("pending_addition_reminded_at", {
+      withTimezone: true,
+    }),
     memberCount: integer("member_count").notNull().default(0),
     paidCount: integer("paid_count").notNull().default(0),
     waivedCount: integer("waived_count").notNull().default(0),

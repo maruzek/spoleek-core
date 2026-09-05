@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getDueStage } from "@/server/lib/membership-report-reminders";
+import {
+  getDueStage,
+  isPendingAdditionReminderDue,
+} from "@/server/lib/membership-report-reminders";
 
 /**
  * The ladder is the one piece of this module a cron runs unattended against
@@ -147,5 +150,78 @@ describe("getDueStage", () => {
     expect(
       getDueStage({ daysLeft: 0, lastStage: null, lastSentAt: null, now: NOW }),
     ).toBe("t_minus_1");
+  });
+});
+
+/**
+ * The freeze holds a late payer out of every count until a group admin accepts
+ * them. That is a task nobody was told about: the ladder skips submitted and
+ * approved groups, which is exactly where a queue can form.
+ */
+describe("isPendingAdditionReminderDue", () => {
+  it("says nothing when there is nothing waiting", () => {
+    expect(
+      isPendingAdditionReminderDue({
+        pendingAdditions: 0,
+        lastRemindedAt: null,
+        now: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("nudges as soon as somebody is waiting", () => {
+    expect(
+      isPendingAdditionReminderDue({
+        pendingAdditions: 1,
+        lastRemindedAt: null,
+        now: NOW,
+      }),
+    ).toBe(true);
+  });
+
+  it("holds off until the repeat window is up", () => {
+    for (const days of [0, 1, 6]) {
+      expect(
+        isPendingAdditionReminderDue({
+          pendingAdditions: 3,
+          lastRemindedAt: daysAgo(days),
+          now: NOW,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  it("repeats weekly for as long as the queue stands", () => {
+    for (const days of [7, 21]) {
+      expect(
+        isPendingAdditionReminderDue({
+          pendingAdditions: 1,
+          lastRemindedAt: daysAgo(days),
+          now: NOW,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("goes quiet once the queue is cleared, however long ago the last nudge was", () => {
+    expect(
+      isPendingAdditionReminderDue({
+        pendingAdditions: 0,
+        lastRemindedAt: daysAgo(90),
+        now: NOW,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not depend on the ladder or a deadline", () => {
+    // The whole point of the separate column: a late payment can arrive long
+    // after the deadline, when every rung has been spent.
+    expect(
+      isPendingAdditionReminderDue({
+        pendingAdditions: 2,
+        lastRemindedAt: null,
+        now: new Date("2027-01-01T00:00:00Z"),
+      }),
+    ).toBe(true);
   });
 });
