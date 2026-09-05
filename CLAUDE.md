@@ -13,13 +13,16 @@
 - `pnpm dev` — dev server
 - `pnpm build` — production build (webpack)
 - `pnpm lint` — ESLint
+- `pnpm test` — Vitest (`pnpm test:watch` to watch). Tests live in `tests/`.
+  The pure ones need nothing; `membership-report-freeze.test.ts` talks to the
+  local Postgres and skips itself when it cannot reach one.
 - `pnpm typecheck` — `tsc --noEmit`
 - `pnpm db:generate` — generate migration from `server/db/schema.ts`
 - `pnpm db:migrate` — apply migrations
 - `pnpm db:seed` — seed demo org
 - `docker compose up -d db adminer` — local Postgres + Adminer
 
-Run `pnpm typecheck` and `pnpm lint` before declaring a task done.
+Run `pnpm typecheck`, `pnpm lint` and `pnpm test` before declaring a task done.
 
 # Layout
 

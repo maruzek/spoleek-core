@@ -45,7 +45,11 @@ export function resolveMembershipPeriod(params: {
   renewalDay: number | null;
   today: Date;
 }): MembershipPeriod {
-  const year = params.today.getFullYear();
+  // The UTC year, not the local one. `today` is an instant, and reading the
+  // year off it locally puts the last hours of 31 December into next year for
+  // anyone east of Greenwich — the label would then disagree with the bounds
+  // right below it, which are built in UTC.
+  const year = params.today.getUTCFullYear();
 
   return {
     label: String(year),

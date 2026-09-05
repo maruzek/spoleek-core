@@ -53,7 +53,7 @@ const OVERDUE_REPEAT_DAYS = 7;
  * been told once, not that they were told on an exact date. Overdue repeats on
  * a cadence, so it is the one rung that can fire against itself.
  */
-function getDueStage(params: {
+export function getDueStage(params: {
   daysLeft: number;
   lastStage: MembershipReportReminderStage | null;
   lastSentAt: Date | null;
