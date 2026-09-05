@@ -5,6 +5,9 @@ const nextConfig: NextConfig = {
   experimental: {
     authInterrupts: true,
   },
+  allowedDevOrigins: [
+    "dev.martinruzek.eu"
+  ]
 };
 
 export default nextConfig;
