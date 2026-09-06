@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
@@ -48,7 +49,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate } from "@/lib/format";
 import { formatFeeAmount } from "@/lib/payments";
 import { cn } from "@/lib/utils";
 import {
@@ -118,6 +118,8 @@ export function MemberDetailView({
   workspaceProvisionFields: EnabledProvisionField[];
   defaultTab?: string;
 }) {
+  const { formatDate } = useFormatters();
+
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

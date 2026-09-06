@@ -16,6 +16,7 @@ import {
 import type { MembershipPeriodMode } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
+import { formatLongDate } from "@/lib/format";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
@@ -222,11 +223,7 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
             periodLabel: row.periodLabel,
             amount: feeAmountToDecimal(row.amount),
             currency: row.currency,
-            dueAt: row.dueAt.toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            }),
+            dueAt: formatLongDate(row.dueAt),
             bankAccount: row.bankAccount,
             variableSymbol: row.variableSymbol,
           }),
@@ -279,11 +276,13 @@ async function sendRenewalHeadsupEmails(
         ),
       );
 
-    const renewalDate = new Date(
-      new Date().getFullYear(),
-      org.membershipRenewalMonth! - 1,
-      org.membershipRenewalDay!,
-    ).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const renewalDate = formatLongDate(
+      new Date(
+        new Date().getFullYear(),
+        org.membershipRenewalMonth! - 1,
+        org.membershipRenewalDay!,
+      ),
+    );
 
     const resend = getResendClient();
     const from = getResendFromEmail();

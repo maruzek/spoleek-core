@@ -1,5 +1,6 @@
 "use client";
 
+import { dictionaryFor, type Locale } from "@/lib/i18n/messages";
 import {
   Field,
   FieldContent,
@@ -36,12 +37,15 @@ export function RegistrationGroupInput({
   value,
   error,
   onChange,
+  locale = "en",
 }: {
   category: RegistrationGroupCategoryInput;
   value: string | null | undefined;
   error?: string;
   onChange: (value: string | null) => void;
+  locale?: Locale;
 }) {
+  const dict = dictionaryFor(locale).fields;
   const hasGroups = category.groups.length > 0;
 
   return (
@@ -64,9 +68,7 @@ export function RegistrationGroupInput({
             aria-invalid={Boolean(error)}
           >
             <SelectValue
-              placeholder={
-                hasGroups ? "Select a group…" : "No groups available"
-              }
+              placeholder={hasGroups ? dict.selectGroup : dict.noGroups}
             />
           </SelectTrigger>
           <SelectContent>

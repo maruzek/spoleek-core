@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
+import { type Dictionary, messages } from "@/lib/i18n/messages";
 import {
   normalizeFieldInputValue,
   type MemberCustomFieldAnswersInput,
@@ -18,6 +19,8 @@ type DbLike = {
 export async function validateMemberCustomFieldAnswers(
   fields: MemberCustomField[],
   answers: MemberCustomFieldAnswersInput,
+  /** Omitted by admin/portal callers, which stay English for now. */
+  dict: Dictionary = messages.en,
 ) {
   const errors: Record<string, string[]> = {};
   const normalized = new Map<
@@ -26,7 +29,7 @@ export async function validateMemberCustomFieldAnswers(
   >();
 
   for (const field of fields) {
-    const result = normalizeFieldInputValue(field, answers[field.key]);
+    const result = normalizeFieldInputValue(field, answers[field.key], dict);
 
     if (result.error) {
       errors[field.key] = [result.error];
@@ -49,11 +52,13 @@ export async function upsertMemberCustomFieldAnswers(
     memberId: string;
     fields: MemberCustomField[];
     answers: MemberCustomFieldAnswersInput;
+    dict?: Dictionary;
   },
 ) {
   const validation = await validateMemberCustomFieldAnswers(
     params.fields,
     params.answers,
+    params.dict,
   );
 
   if (Object.keys(validation.errors).length > 0) {

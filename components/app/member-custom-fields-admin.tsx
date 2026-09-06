@@ -82,10 +82,12 @@ function formatStageLabel(stage: MemberCustomField["stage"]) {
 import { MemberCustomFieldSheet } from "./member-custom-field-sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { useFormatters } from "@/components/locale-provider";
 
 export function MemberCustomFieldsAdmin({
   fields,
 }: MemberCustomFieldsAdminProps) {
+  const { formatDate } = useFormatters();
   const router = useRouter();
   const [sheetState, setSheetState] = useState<SheetState>({
     open: false,
@@ -178,7 +180,7 @@ export function MemberCustomFieldsAdmin({
         header: "Updated",
         cell: (info) => (
           <span className="text-muted-foreground">
-            {info.getValue().toLocaleDateString()}
+            {formatDate(info.getValue())}
           </span>
         ),
       }),
@@ -213,7 +215,7 @@ export function MemberCustomFieldsAdmin({
         ),
       }),
     ],
-    [toggleAction],
+    [formatDate, toggleAction],
   );
 
   return (

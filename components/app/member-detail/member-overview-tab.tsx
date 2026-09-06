@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import {
   EllipsisVerticalIcon,
   ExternalLinkIcon,
@@ -26,7 +27,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { formatDateTime } from "@/lib/format";
 import { describeMemberInvite } from "@/lib/member-invite-summary";
 import { cn } from "@/lib/utils";
 import { syncWorkspaceMemberAction } from "@/server/actions/member-admin";
@@ -56,6 +56,8 @@ export function MemberOverviewTab({
   canCreateWorkspaceAccount?: boolean;
   onCreateWorkspaceAccount?: () => void;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const { organization } = useAppShell();
   const invite = describeMemberInvite(member, metadata.inviteState);

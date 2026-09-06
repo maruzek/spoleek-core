@@ -15,6 +15,7 @@ import {
 import { requireAdminAccess } from "@/server/queries/access";
 import { getFeeManagingCategory } from "@/server/lib/membership-report";
 import { getBoardReportView } from "@/server/queries/membership-reports";
+import { orgFormatLocale } from "@/lib/i18n";
 
 export default async function AdminReportsPage({
   searchParams,
@@ -75,7 +76,7 @@ export default async function AdminReportsPage({
         <MembershipReportBoard
           view={view}
           categoryId={category?.id ?? null}
-          locale={organization.locale}
+          locale={orgFormatLocale(organization.locale)}
         />
       ) : (
         <Empty>

@@ -15,6 +15,7 @@ import {
   tenantMembers,
   users,
 } from "@/server/db/schema";
+import { defaultLocale, defaultSortLocale } from "@/lib/i18n";
 
 const setupSchema = z.object({
   organizationName: z.string().min(2, "Organization name is required."),
@@ -65,6 +66,8 @@ export const createOrganizationSetupAction = authActionClient
         legalName: parsedInput.legalName,
         primaryEmail: parsedInput.primaryEmail,
         website: parsedInput.website || null,
+        locale: defaultLocale,
+        membersSortLocale: defaultSortLocale,
         onboardingCompletedAt: new Date(),
       }).returning({ id: organizations.id });
 

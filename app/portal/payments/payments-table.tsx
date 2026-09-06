@@ -1,15 +1,20 @@
 "use client";
 import { formatFeeAmount } from "@/lib/payments";
+import { useFormatters } from "@/components/locale-provider";
+
+import { useMemo } from "react";
 
 import { ColumnDef } from "@tanstack/react-table";
 
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { formatDateTime } from "@/lib/format";
 import { getPaymentTitle } from "@/lib/payments";
 import type { MemberPayment } from "@/server/db/schema";
 
-const columns: ColumnDef<MemberPayment>[] = [
+function buildColumns(
+  formatDateTime: (date: Date | string | null | undefined) => string,
+): ColumnDef<MemberPayment>[] {
+  return [
   {
     accessorKey: "periodLabel",
     header: "Period",
@@ -82,13 +87,17 @@ const columns: ColumnDef<MemberPayment>[] = [
       return <span>{formatDateTime(date)}</span>;
     },
   },
-];
+  ];
+}
 
 interface PaymentsTableProps {
   data: MemberPayment[];
 }
 
 export function PaymentsTable({ data }: PaymentsTableProps) {
+  const { formatDateTime } = useFormatters();
+  const columns = useMemo(() => buildColumns(formatDateTime), [formatDateTime]);
+
   return (
     <DataTable
       columns={columns}

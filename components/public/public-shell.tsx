@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getDictionary } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type PublicShellProps = {
@@ -25,13 +26,16 @@ export function PublicShell({
   width = "wide",
   children,
 }: PublicShellProps) {
+  // Server component, so it reads the locale itself instead of taking a prop.
+  const t = getDictionary();
+
   return (
     <div className="public-surface flex min-h-screen flex-col">
       <a
         href="#public-main"
         className="sr-only rounded-md px-4 py-2 focus-visible:not-sr-only focus-visible:absolute focus-visible:top-4 focus-visible:left-4 focus-visible:z-50 focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-ring"
       >
-        Skip to content
+        {t.common.skipToContent}
       </a>
 
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-6 py-5">
@@ -61,11 +65,11 @@ export function PublicShell({
 
       <footer className="mx-auto flex w-full max-w-5xl items-center justify-center gap-5 px-6 py-6 text-xs text-muted-foreground">
         <Link href="/legal/terms" className="transition-colors hover:text-foreground">
-          Terms
+          {t.common.terms}
         </Link>
         <span aria-hidden="true">·</span>
         <Link href="/legal/privacy" className="transition-colors hover:text-foreground">
-          Privacy
+          {t.common.privacy}
         </Link>
       </footer>
     </div>

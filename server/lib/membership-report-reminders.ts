@@ -21,6 +21,7 @@ import {
   resolveReportReminderRecipients,
 } from "@/server/notifications/recipients";
 import { sendNotificationEmails } from "@/server/notifications/send";
+import { orgFormatLocale } from "@/lib/i18n";
 
 /**
  * The reminder ladder, in ascending urgency.
@@ -236,7 +237,7 @@ async function remindOrganization(
     return { groupsReminded: pendingReminded, digestsSent: 0 };
   }
 
-  const deadline = formatDeadline(report.confirmDueAt, org.locale);
+  const deadline = formatDeadline(report.confirmDueAt, orgFormatLocale(org.locale));
 
   // A submitted or approved group has done its part. `returned` is chased
   // again, because the board is waiting on it.

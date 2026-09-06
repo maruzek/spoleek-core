@@ -16,6 +16,7 @@ import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
 import { syncReportMemberForPayment } from "@/server/lib/membership-report";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
+import { formatLongDate } from "@/lib/format";
 
 const CANCELLATION_REASONS = [
   "duplicate",
@@ -145,7 +146,7 @@ async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
         periodLabel: row.periodLabel,
         amount: feeAmountToDecimal(row.amount),
         currency: row.currency,
-        paidAt: paidAt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+        paidAt: formatLongDate(paidAt),
       }),
     });
   } catch {

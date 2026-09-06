@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { createColumnHelper } from "@tanstack/react-table";
 import { WalletIcon } from "lucide-react";
@@ -17,7 +18,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { formatDate, formatDateTime } from "@/lib/format";
 import { formatBankAccount } from "@/lib/iban";
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import { cn } from "@/lib/utils";
@@ -72,6 +72,8 @@ export function MemberPaymentsTab({
   summary: MemberPaymentSummary;
   memberName: string;
 }) {
+  const { formatDate, formatDateTime } = useFormatters();
+
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentWithMember | null>(
     null,
@@ -264,7 +266,7 @@ export function MemberPaymentsTab({
         ),
       }),
     ],
-    [now, router],
+    [formatDate, formatDateTime, now, router],
   );
 
   if (payments.length === 0) {

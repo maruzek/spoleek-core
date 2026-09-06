@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
@@ -20,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatDateTime } from "@/lib/format";
 import { comparePaymentStatus, formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
@@ -73,6 +73,8 @@ function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
 const ALL_GROUPS = "__all__";
 
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
   const [groupId, setGroupId] = useState<string>(ALL_GROUPS);

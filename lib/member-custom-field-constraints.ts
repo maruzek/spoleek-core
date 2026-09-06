@@ -1,3 +1,4 @@
+import { type Dictionary, messages } from "@/lib/i18n/messages";
 import { addDays, differenceInYears, isValid, parseISO, subYears } from "date-fns";
 import { z } from "zod";
 
@@ -287,21 +288,28 @@ export type ConstraintCheckValue =
 export function validateFieldConstraints(
   field: Pick<MemberCustomField, "type" | "label" | "constraints">,
   input: ConstraintCheckValue,
+  /**
+   * The whole dictionary, not just its `validation` slice: date bounds are
+   * rendered inside these messages and must follow the same locale as the
+   * words around them. Omitted by admin/portal callers, which stay English.
+   */
+  dict: Dictionary = messages.en,
 ): string | null {
   const constraints = pickConstraintsForType(field.type, field.constraints ?? {});
   const label = field.label;
+  const t = dict.validation;
 
   if (input.kind === "number") {
     if (constraints.integerOnly && !Number.isInteger(input.value)) {
-      return `${label} must be a whole number.`;
+      return t.wholeNumber(label);
     }
 
     if (constraints.min !== undefined && input.value < constraints.min) {
-      return `${label} must be at least ${constraints.min}.`;
+      return t.numberMin(label, constraints.min);
     }
 
     if (constraints.max !== undefined && input.value > constraints.max) {
-      return `${label} must be at most ${constraints.max}.`;
+      return t.numberMax(label, constraints.max);
     }
 
     return null;
@@ -311,17 +319,11 @@ export function validateFieldConstraints(
     const count = input.value.length;
 
     if (constraints.minSelected !== undefined && count < constraints.minSelected) {
-      return `${label} needs at least ${constraints.minSelected} ${plural(
-        constraints.minSelected,
-        "option",
-      )} selected.`;
+      return t.optionsMin(label, constraints.minSelected);
     }
 
     if (constraints.maxSelected !== undefined && count > constraints.maxSelected) {
-      return `${label} allows at most ${constraints.maxSelected} ${plural(
-        constraints.maxSelected,
-        "option",
-      )}.`;
+      return t.optionsMax(label, constraints.maxSelected);
     }
 
     return null;
@@ -331,21 +333,21 @@ export function validateFieldConstraints(
     const age = differenceInYears(new Date(), input.value);
 
     if (constraints.minAge !== undefined && age < constraints.minAge) {
-      return `${label} requires an age of at least ${constraints.minAge}.`;
+      return t.ageMin(label, constraints.minAge);
     }
 
     if (constraints.maxAge !== undefined && age > constraints.maxAge) {
-      return `${label} requires an age of at most ${constraints.maxAge}.`;
+      return t.ageMax(label, constraints.maxAge);
     }
 
     const { min, max } = getDateConstraintBounds(constraints);
 
     if (min && startOfDayValue(input.value) < startOfDayValue(min)) {
-      return `${label} must not be earlier than ${formatIsoDay(min)}.`;
+      return t.dateMin(label, formatIsoDay(min, dict.formatLocale));
     }
 
     if (max && startOfDayValue(input.value) > startOfDayValue(max)) {
-      return `${label} must not be later than ${formatIsoDay(max)}.`;
+      return t.dateMax(label, formatIsoDay(max, dict.formatLocale));
     }
 
     return null;
@@ -358,32 +360,22 @@ export function validateFieldConstraints(
     (constraints.format === "custom" ? DEFAULT_PATTERN_MAX_LENGTH : undefined);
 
   if (constraints.minLength !== undefined && text.length < constraints.minLength) {
-    return `${label} must be at least ${constraints.minLength} ${plural(
-      constraints.minLength,
-      "character",
-    )}.`;
+    return t.lengthMin(label, constraints.minLength);
   }
 
   if (effectiveMaxLength !== undefined && text.length > effectiveMaxLength) {
-    return `${label} must be at most ${effectiveMaxLength} ${plural(
-      effectiveMaxLength,
-      "character",
-    )}.`;
+    return t.lengthMax(label, effectiveMaxLength);
   }
 
   const pattern = getTextPattern(constraints);
 
   if (pattern && !pattern.regex.test(text)) {
     return pattern.message
-      ? `${label}: ${pattern.message}`
-      : `${label} is not in the expected format.`;
+      ? t.patternMessage(label, pattern.message)
+      : t.patternGeneric(label);
   }
 
   return null;
-}
-
-function plural(count: number, word: string) {
-  return count === 1 ? word : `${word}s`;
 }
 
 function startOfDayValue(date: Date) {
@@ -394,6 +386,6 @@ function startOfDayValue(date: Date) {
   ).getTime();
 }
 
-function formatIsoDay(date: Date) {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+function formatIsoDay(date: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
 }

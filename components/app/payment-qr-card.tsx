@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import QRCode from "react-qr-code";
 import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDateTime } from "@/lib/format";
 import { formatBankAccount } from "@/lib/iban";
 import {
   buildSpdString,
@@ -29,6 +29,8 @@ export function PaymentQrCard({
    */
   payerName?: string;
 }) {
+  const { formatDateTime, locale } = useFormatters();
+
   const [copied, setCopied] = useState(false);
 
   const memberName = payerName?.trim() || undefined;
@@ -105,7 +107,7 @@ export function PaymentQrCard({
               isOverdue ? "text-destructive" : "text-foreground",
             )}
           >
-            {(feeToMajorUnits(payment.amount) ?? 0).toLocaleString("cs-CZ", {
+            {(feeToMajorUnits(payment.amount) ?? 0).toLocaleString(locale, {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}

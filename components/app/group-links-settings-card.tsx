@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { ExternalLinkIcon, Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { describeLinkHealth, workspaceLinkDirectionOptions } from "@/lib/workspace-group-links";
-import { formatDateTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,6 +40,8 @@ export function GroupLinksSettingsCard({
   links: GroupWorkspaceLinkRow[];
   workspaceConnected: boolean;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
 
   const syncLink = useAction(syncGroupWorkspaceLinkAction, {

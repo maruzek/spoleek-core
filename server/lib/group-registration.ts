@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { groupCategories, groupMemberships, groups } from "@/server/db/schema";
+import { type Dictionary, messages } from "@/lib/i18n/messages";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -21,9 +22,12 @@ export type RegistrationGroupCategory = {
 export async function validateRegistrationGroupSelections({
   categories,
   selections,
+  dict = messages.en.groupRegistration,
 }: {
   categories: RegistrationGroupCategory[];
   selections: Record<string, string | null | undefined>;
+  /** Omitted by admin callers, which stay English for now. */
+  dict?: Dictionary["groupRegistration"];
 }) {
   const categoryById = new Map(categories.map((category) => [category.id, category]));
   const errors: Record<string, string[]> = {};
@@ -36,8 +40,8 @@ export async function validateRegistrationGroupSelections({
       if (category.selectionRequired) {
         errors[category.id] =
           category.groups.length === 0
-            ? ["No groups are currently available in this category."]
-            : ["Choose a group for this category."];
+            ? [dict.noneAvailable]
+            : [dict.chooseGroup];
       }
       continue;
     }
@@ -45,7 +49,7 @@ export async function validateRegistrationGroupSelections({
     const validGroup = category.groups.find((group) => group.id === selectedGroupId);
 
     if (!validGroup) {
-      errors[category.id] = ["Choose a valid group from this category."];
+      errors[category.id] = [dict.chooseValidGroup];
       continue;
     }
 
@@ -57,7 +61,7 @@ export async function validateRegistrationGroupSelections({
 
   for (const categoryId of Object.keys(selections)) {
     if (!categoryById.has(categoryId)) {
-      errors[categoryId] = ["This registration category is no longer available."];
+      errors[categoryId] = [dict.categoryUnavailable];
     }
   }
 

@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
 
-import { getDictionary } from "@/lib/i18n";
+import { defaultLocale, getDictionary } from "@/lib/i18n";
 import "./globals.css";
 import { Geist, Lora } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { LocaleProvider } from "@/components/locale-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -36,7 +37,7 @@ export default function RootLayout({
     // next-themes writes the class on <html> before paint, which React cannot
     // see during hydration — hence suppressHydrationWarning.
     <html
-      lang="en"
+      lang={defaultLocale}
       suppressHydrationWarning
       className={cn(
         "h-full antialiased",
@@ -53,8 +54,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
+          <LocaleProvider locale={defaultLocale}>
+            <TooltipProvider>{children}</TooltipProvider>
+            <Toaster />
+          </LocaleProvider>
         </ThemeProvider>
       </body>
     </html>

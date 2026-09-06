@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 
 import { createColumnHelper } from "@tanstack/react-table";
 import Link from "next/link";
@@ -11,7 +12,6 @@ import { toast } from "sonner";
 
 import { GroupSheet } from "@/components/app/group-sheet";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
-import { formatDateTime } from "@/lib/format";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import type { GroupFormValues } from "@/lib/groups";
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +103,8 @@ export function GroupCategoryDetail({
   workspaceConnected,
   canManageWorkspaceIntegration,
 }: CategoryDetailProps) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const [groupSheetState, setGroupSheetState] = useState<{
     open: boolean;

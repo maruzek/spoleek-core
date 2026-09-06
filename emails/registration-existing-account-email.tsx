@@ -12,6 +12,7 @@ import {
   Text,
   pixelBasedPreset,
 } from "react-email";
+import { getDictionary } from "@/lib/i18n";
 
 type RegistrationExistingAccountEmailProps = {
   organizationName: string;
@@ -32,10 +33,12 @@ export function RegistrationExistingAccountEmail({
   submittedAt,
   signInUrl,
 }: RegistrationExistingAccountEmailProps) {
-  const subject = `You are already a member of ${organizationName}`;
+  const t = getDictionary();
+  const copy = t.emails.existingAccount;
+  const subject = copy.subject(organizationName);
 
   return (
-    <Html lang="en">
+    <Html lang={t.locale}>
       <Tailwind
         config={{
           presets: [pixelBasedPreset],
@@ -59,15 +62,13 @@ export function RegistrationExistingAccountEmail({
                 {organizationName}
               </Text>
               <Heading className="mb-[16px] mt-[12px] text-[30px] leading-[36px] font-semibold text-ink">
-                You already have a membership
+                {copy.heading}
               </Heading>
               <Text className="m-0 text-[16px] leading-[28px] text-ink">
-                Hello {memberName},
+                {copy.greeting(memberName)}
               </Text>
               <Text className="m-0 mt-[16px] text-[16px] leading-[28px] text-ink">
-                A join form was submitted with this email address on {submittedAt}, but it is
-                already registered with {organizationName}. No new application was created and
-                nothing about your membership has changed.
+                {copy.body(organizationName, submittedAt)}
               </Text>
             </Section>
 
@@ -76,16 +77,13 @@ export function RegistrationExistingAccountEmail({
                 href={signInUrl}
                 className="rounded-[12px] bg-brand px-[24px] py-[12px] text-[15px] font-semibold text-white"
               >
-                Sign in instead
+                {copy.cta}
               </Button>
             </Section>
 
             <Section className="mt-[24px] rounded-[16px] border border-[#e5d0a8] bg-[#fff8ed] px-[24px] py-[20px]">
               <Text className="m-0 text-[14px] leading-[24px] text-[#52605a]">
-                If this was you and you cannot get in, use{" "}
-                <strong className="text-ink">Forgot password</strong> on the sign-in page. If it was
-                not you, someone typed your address into a public form — there is nothing to fix,
-                but tell an administrator if it keeps happening.
+                {copy.helpNote}
               </Text>
             </Section>
           </Container>

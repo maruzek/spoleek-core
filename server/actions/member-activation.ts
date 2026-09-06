@@ -22,20 +22,24 @@ import {
 } from "@/server/lib/member-custom-field-values";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import { getAppOrganization } from "@/server/queries/app";
+import { getDictionary } from "@/lib/i18n";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberById } from "@/server/queries/members";
+
+// Server-only module, so the locale is resolvable at import time.
+const t = getDictionary();
 
 const completeMemberActivationSchema = z
   .object({
     memberId: z.string().uuid(),
-    token: z.string().min(1, "Invitation token is required."),
-    password: z.string().min(12, "Password must be at least 12 characters long."),
-    confirmPassword: z.string().min(1, "Confirm your password."),
+    token: z.string().min(1, t.errors.tokenRequired),
+    password: z.string().min(12, t.errors.passwordTooShort),
+    confirmPassword: z.string().min(1, t.errors.confirmPasswordRequired),
     customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
   })
   .refine((value) => value.password === value.confirmPassword, {
     path: ["confirmPassword"],
-    message: "Passwords do not match.",
+    message: t.errors.passwordsDoNotMatch,
   });
 
 export const completeMemberActivationAction = actionClient
@@ -45,7 +49,7 @@ export const completeMemberActivationAction = actionClient
     const organization = await getAppOrganization();
 
     if (!organization) {
-      throw new Error("The application is not set up yet.");
+      throw new Error(t.errors.notSetUp);
     }
 
     await markMemberInviteExpiredIfNeeded(parsedInput.memberId);
@@ -53,7 +57,7 @@ export const completeMemberActivationAction = actionClient
     const member = await getMemberById(organization.id, parsedInput.memberId);
 
     if (!member || !["invited", "active"].includes(member.status) || !member.email) {
-      throw new Error("This invitation is no longer available.");
+      throw new Error(t.errors.inviteUnavailable);
     }
 
     const invite = await getValidMemberInvite({
@@ -62,17 +66,17 @@ export const completeMemberActivationAction = actionClient
     });
 
     if (!invite) {
-      throw new Error("This invitation is invalid or expired. Ask an administrator for a new one.");
+      throw new Error(t.errors.inviteInvalid);
     }
 
     const activationAttempt = await registerActivationAttempt(parsedInput.memberId);
 
     if (activationAttempt.blocked) {
-      throw new Error("Too many activation attempts were detected. Wait a few minutes and try the newest invite link again.");
+      throw new Error(t.errors.tooManyAttempts);
     }
 
     if (!invite.provisionedUserId) {
-      throw new Error("This invitation is no longer available.");
+      throw new Error(t.errors.inviteUnavailable);
     }
 
     const postApprovalFields = await listActiveMemberCustomFields(organization.id, [
@@ -81,6 +85,7 @@ export const completeMemberActivationAction = actionClient
     const validation = await validateMemberCustomFieldAnswers(
       postApprovalFields,
       parsedInput.customFieldAnswers,
+      t,
     );
 
     if (Object.keys(validation.errors).length > 0) {
@@ -99,7 +104,7 @@ export const completeMemberActivationAction = actionClient
     });
 
     if (!resetResult?.status) {
-      throw new Error("Unable to set the password for this invitation.");
+      throw new Error(t.errors.passwordNotSet);
     }
 
     const result = await db.transaction(async (tx) => {
@@ -108,6 +113,7 @@ export const completeMemberActivationAction = actionClient
         memberId: member.id,
         fields: postApprovalFields,
         answers: parsedInput.customFieldAnswers,
+        dict: t,
       });
 
       if (Object.keys(answerResult.errors).length > 0) {
@@ -154,7 +160,7 @@ export const completeMemberActivationAction = actionClient
     });
 
     if (!signInResult?.user?.id) {
-      throw new Error("Your password was saved, but automatic sign-in failed.");
+      throw new Error(t.errors.autoSignInFailed);
     }
 
     return result;

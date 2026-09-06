@@ -4,6 +4,7 @@ import {
   getDateConstraintBounds,
   pickConstraintsForType,
 } from "@/lib/member-custom-field-constraints";
+import { dictionaryFor, type Locale } from "@/lib/i18n/messages";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -32,12 +33,19 @@ export function MemberCustomFieldInput({
   value,
   error,
   onChange,
+  locale = "en",
 }: {
   field: MemberCustomField;
   value: unknown;
   error?: string;
   onChange: (value: unknown) => void;
+  /**
+   * Public pages pass the visitor's language down. Admin and portal callers
+   * omit it and stay English until the internal side is translated too.
+   */
+  locale?: Locale;
 }) {
+  const dict = dictionaryFor(locale).fields;
   const constraints = pickConstraintsForType(field.type, field.constraints ?? {});
 
   const sharedDescription = field.description ? (
@@ -74,7 +82,7 @@ export function MemberCustomFieldInput({
           {sharedDescription}
           {constraints.maxLength ? (
             <FieldDescription>
-              {textValue.length} / {constraints.maxLength} characters
+              {dict.characterCount(textValue.length, constraints.maxLength)}
             </FieldDescription>
           ) : null}
           {error ? <FieldError>{error}</FieldError> : null}
@@ -116,7 +124,7 @@ export function MemberCustomFieldInput({
               className="h-11 w-full px-4"
               aria-invalid={Boolean(error)}
             >
-              <SelectValue placeholder="Select an option" />
+              <SelectValue placeholder={dict.selectOption} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -138,6 +146,7 @@ export function MemberCustomFieldInput({
   if (field.type === "multi_select") {
     const selectedValues = Array.isArray(value) ? value.map(String) : [];
     const selectionHint = describeSelectionLimits(
+      dict,
       constraints.minSelected,
       constraints.maxSelected,
     );
@@ -252,19 +261,23 @@ export function MemberCustomFieldInput({
 }
 
 /** "Select 2 to 3 options." — omitted entirely when neither limit is set. */
-function describeSelectionLimits(min?: number, max?: number) {
+function describeSelectionLimits(
+  dict: ReturnType<typeof dictionaryFor>["fields"],
+  min?: number,
+  max?: number,
+) {
   if (min !== undefined && max !== undefined) {
     return min === max
-      ? `Select exactly ${min}.`
-      : `Select between ${min} and ${max}.`;
+      ? dict.selectExactly(min)
+      : dict.selectBetween(min, max);
   }
 
   if (min !== undefined) {
-    return `Select at least ${min}.`;
+    return dict.selectAtLeast(min);
   }
 
   if (max !== undefined) {
-    return `Select up to ${max}.`;
+    return dict.selectAtMost(max);
   }
 
   return null;

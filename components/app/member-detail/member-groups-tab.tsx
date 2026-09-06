@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useFormatters } from "@/components/locale-provider";
 import { UsersIcon } from "lucide-react";
 
 import {
@@ -18,7 +19,6 @@ import {
 } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
-import { formatDateTime } from "@/lib/format";
 import type { MemberWorkspaceGroupLink } from "@/server/queries/member-detail";
 import type { MemberGroupAssignment } from "@/server/queries/members";
 
@@ -47,6 +47,8 @@ export function MemberGroupsTab({
   assignments: MemberGroupAssignment[];
   workspaceGroupLinks: MemberWorkspaceGroupLink[];
 }) {
+  const { formatDateTime } = useFormatters();
+
   if (assignments.length === 0 && workspaceGroupLinks.length === 0) {
     return (
       <Empty>

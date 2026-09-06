@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 
 import { createColumnHelper } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
@@ -23,7 +24,6 @@ import { GroupReportCard } from "@/components/app/group-report-card";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
-import { formatDateTime } from "@/lib/format";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import type { GroupFormValues } from "@/lib/groups";
 import {
@@ -161,6 +161,8 @@ export function GroupDetail({
   reportView,
   locale,
 }: GroupDetailProps) {
+  const { formatDateTime } = useFormatters();
+
   const openDriftCount = workspaceDrift.filter(
     (row) => row.status === "open",
   ).length;
@@ -310,7 +312,7 @@ export function GroupDetail({
         ),
       }),
     ],
-    [],
+    [formatDateTime],
   );
 
   const adminColumns = useMemo(
@@ -347,7 +349,7 @@ export function GroupDetail({
         ),
       }),
     ],
-    [memberColumns],
+    [formatDateTime, memberColumns],
   );
 
   const availableMembers = assignableMembers.filter(

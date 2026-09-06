@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useFormatters } from "@/components/locale-provider";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
-import { formatDate } from "@/lib/format";
 import type { TenantMember } from "@/server/db/schema";
 import type { MemberGroupAssignment } from "@/server/queries/members";
 
@@ -49,6 +49,8 @@ export function MemberDetailHeader({
   promotedGroups: MemberGroupAssignment[];
   actions: ReactNode;
 }) {
+  const { formatDate } = useFormatters();
+
   const displayName =
     [member.firstName, member.lastName].filter(Boolean).join(" ").trim() ||
     member.email ||

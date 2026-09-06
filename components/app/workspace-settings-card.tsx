@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
@@ -36,7 +37,6 @@ import {
   saveWorkspaceSettingsAction,
   setWorkspaceOrgUnitCategoryAction,
 } from "@/server/actions/organization-settings";
-import { formatDate } from "@/lib/format";
 import { renderWorkspaceEmailLocalPart } from "@/server/lib/workspace/email-template";
 import type { WorkspaceProvisionFieldConfig } from "@/server/lib/workspace/field-catalog";
 import type { MemberPreferredEmail } from "@/server/db/schema";
@@ -60,6 +60,8 @@ export function WorkspaceSettingsCard({
 }: {
   state: WorkspaceSettingsState;
 }) {
+  const { formatDate } = useFormatters();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const workspaceStatus = searchParams.get("workspace");

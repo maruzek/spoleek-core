@@ -8,6 +8,7 @@ import { listWorkspaceGroupDrift } from "@/server/queries/workspace-group-drift"
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
 import { getAppOrganization } from "@/server/queries/app";
 import { getGroupReportView } from "@/server/queries/membership-reports";
+import { orgFormatLocale } from "@/lib/i18n";
 
 export default async function AdminGroupPage({
   params,
@@ -59,7 +60,7 @@ export default async function AdminGroupPage({
           access.adminAccessLevel === "full" || access.member?.role === "leader"
         }
         reportView={reportView}
-        locale={organization?.locale ?? "en"}
+        locale={orgFormatLocale(organization?.locale)}
       />
     </AppPage>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import { createColumnHelper } from "@tanstack/react-table";
 import { HistoryIcon } from "lucide-react";
 
@@ -33,7 +34,6 @@ import {
   TimelineTime,
   TimelineTitle,
 } from "@/components/ui/timeline";
-import { formatDateTime } from "@/lib/format";
 import type { MemberAuthEventType } from "@/server/db/schema";
 import type { MemberAuthEventRow } from "@/server/queries/member-detail";
 import type { MemberTimelineEvent } from "@/server/queries/members";
@@ -73,6 +73,8 @@ export function MemberActivityTab({
   timeline: MemberTimelineEvent[];
   authEvents: MemberAuthEventRow[];
 }) {
+  const { formatDateTime } = useFormatters();
+
   const [typeFilter, setTypeFilter] = useState<"all" | "issues">("all");
 
   const filteredEvents = useMemo(
@@ -147,7 +149,7 @@ export function MemberActivityTab({
         ),
       }),
     ],
-    [],
+    [formatDateTime],
   );
 
   if (timeline.length === 0 && authEvents.length === 0) {

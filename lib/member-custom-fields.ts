@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { type Dictionary, messages } from "@/lib/i18n/messages";
+
 import { formatDateTime } from "@/lib/format";
 import {
   compilePattern,
@@ -225,6 +227,8 @@ export function normalizeFieldInputValue(
     "type" | "required" | "label" | "key" | "constraints"
   >,
   rawValue: unknown,
+  /** Omitted by admin/portal callers, which stay English for now. */
+  dict: Dictionary = messages.en,
 ): {
   normalized: CustomFieldValue;
   publicValue: string | boolean | number | string[] | null;
@@ -239,7 +243,7 @@ export function normalizeFieldInputValue(
       return {
         normalized: null,
         publicValue: null,
-        error: `${label} is required.`,
+        error: dict.validation.required(label),
       };
     }
 
@@ -261,14 +265,15 @@ export function normalizeFieldInputValue(
       return {
         normalized: null,
         publicValue: null,
-        error: `${label} is required.`,
+        error: dict.validation.required(label),
       };
     }
 
-    const constraintError = validateFieldConstraints(field, {
-      kind: "multi_select",
-      value: values,
-    });
+    const constraintError = validateFieldConstraints(
+      field,
+      { kind: "multi_select", value: values },
+      dict,
+    );
 
     if (constraintError) {
       return { normalized: null, publicValue: null, error: constraintError };
@@ -288,7 +293,7 @@ export function normalizeFieldInputValue(
     return {
       normalized: null,
       publicValue: null,
-      error: `${label} is required.`,
+      error: dict.validation.required(label),
     };
   }
 
@@ -307,14 +312,15 @@ export function normalizeFieldInputValue(
       return {
         normalized: null,
         publicValue: null,
-        error: `${label} must be a valid number.`,
+        error: dict.validation.mustBeNumber(label),
       };
     }
 
-    const constraintError = validateFieldConstraints(field, {
-      kind: "number",
-      value: numberValue,
-    });
+    const constraintError = validateFieldConstraints(
+      field,
+      { kind: "number", value: numberValue },
+      dict,
+    );
 
     if (constraintError) {
       return { normalized: null, publicValue: null, error: constraintError };
@@ -334,7 +340,7 @@ export function normalizeFieldInputValue(
       return {
         normalized: null,
         publicValue: null,
-        error: `${label} must be a valid email address.`,
+        error: dict.validation.mustBeEmail(label),
       };
     }
   }
@@ -346,14 +352,15 @@ export function normalizeFieldInputValue(
       return {
         normalized: null,
         publicValue: null,
-        error: `${label} must be a valid date.`,
+        error: dict.validation.mustBeDate(label),
       };
     }
 
-    const constraintError = validateFieldConstraints(field, {
-      kind: "date",
-      value: dateValue,
-    });
+    const constraintError = validateFieldConstraints(
+      field,
+      { kind: "date", value: dateValue },
+      dict,
+    );
 
     if (constraintError) {
       return { normalized: null, publicValue: null, error: constraintError };
@@ -366,10 +373,11 @@ export function normalizeFieldInputValue(
     };
   }
 
-  const constraintError = validateFieldConstraints(field, {
-    kind: "text",
-    value: textValue,
-  });
+  const constraintError = validateFieldConstraints(
+    field,
+    { kind: "text", value: textValue },
+    dict,
+  );
 
   if (constraintError) {
     return { normalized: null, publicValue: null, error: constraintError };

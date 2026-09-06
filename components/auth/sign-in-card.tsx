@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { CircleAlertIcon, Loader2Icon } from "lucide-react";
 
 import { type SetupAuthStrategy } from "@/lib/bootstrap";
+import { dictionaryFor, type Locale } from "@/lib/i18n/messages";
 import { authClient } from "@/lib/auth/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type SignInCardProps = {
+  /** Chosen by the server; the copy itself is resolved in this bundle. */
+  locale: Locale;
   organizationName: string;
   authStrategy: SetupAuthStrategy;
   googleAvailable: boolean;
@@ -42,10 +45,12 @@ function GoogleMark() {
 }
 
 export function SignInCard({
+  locale,
   organizationName,
   authStrategy,
   googleAvailable,
 }: SignInCardProps) {
+  const dict = dictionaryFor(locale).auth;
   const router = useRouter();
   const emailRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState(false);
@@ -68,9 +73,7 @@ export function SignInCard({
     setPending(false);
 
     if (result.error) {
-      setError(
-        "Check your email and password, or contact your administrator for a fresh invite.",
-      );
+      setError(dict.errorBody);
       // Put the cursor back where the correction has to happen.
       emailRef.current?.focus();
       return;
@@ -87,10 +90,10 @@ export function SignInCard({
           {organizationName}
         </p>
         <h1 className="text-3xl leading-tight font-semibold text-balance">
-          Sign in
+          {dict.title}
         </h1>
         <p className="text-sm leading-6 text-muted-foreground text-balance">
-          Use your organization account to reach the member portal.
+          {dict.subtitle}
         </p>
       </div>
 
@@ -115,14 +118,16 @@ export function SignInCard({
               ) : (
                 <GoogleMark />
               )}
-              Continue with Google
+              {dict.continueWithGoogle}
             </Button>
           ) : null}
 
           {googleAllowed && emailAllowed ? (
             <div className="flex items-center gap-3" aria-hidden="true">
               <span className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground uppercase">or</span>
+              <span className="text-xs text-muted-foreground uppercase">
+                {dict.or}
+              </span>
               <span className="h-px flex-1 bg-border" />
             </div>
           ) : null}
@@ -130,7 +135,7 @@ export function SignInCard({
           {emailAllowed ? (
             <form action={handleSubmit} className="grid gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="auth-email">Email</Label>
+                <Label htmlFor="auth-email">{dict.emailLabel}</Label>
                 <Input
                   id="auth-email"
                   ref={emailRef}
@@ -144,7 +149,7 @@ export function SignInCard({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="auth-password">Password</Label>
+                <Label htmlFor="auth-password">{dict.passwordLabel}</Label>
                 <Input
                   id="auth-password"
                   name="password"
@@ -159,7 +164,7 @@ export function SignInCard({
               {error ? (
                 <Alert variant="destructive" aria-live="polite">
                   <CircleAlertIcon aria-hidden="true" />
-                  <AlertTitle>Authentication failed</AlertTitle>
+                  <AlertTitle>{dict.errorTitle}</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               ) : null}
@@ -168,24 +173,24 @@ export function SignInCard({
                 {pending ? (
                   <Loader2Icon className="animate-spin" aria-hidden="true" />
                 ) : null}
-                Sign in
+                {dict.submit}
               </Button>
             </form>
           ) : (
             <p className="text-center text-sm leading-6 text-muted-foreground">
-              This workspace signs members in through Google.
+              {dict.googleOnlyNotice}
             </p>
           )}
         </div>
       </div>
 
       <p className="text-center text-sm leading-6 text-muted-foreground">
-        Accounts are created after an administrator approves a join request.{" "}
+        {dict.applyPrompt}{" "}
         <Link
           href="/join"
           className="font-medium text-foreground underline underline-offset-4"
         >
-          Apply to join
+          {dict.applyLink}
         </Link>
       </p>
     </div>

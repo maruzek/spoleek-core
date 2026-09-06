@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useFormatters } from "@/components/locale-provider";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
@@ -31,7 +32,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
-import { formatDateTime } from "@/lib/format";
 import { resendMemberInviteAction } from "@/server/actions/member-admin";
 import type { EmailActivityStatus, EmailKind } from "@/server/db/schema";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
@@ -55,6 +55,8 @@ export function EmailActivityTable({
   scope: EmailActivityScope;
   onOpenDetail: (activityId: string) => void;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const isOrgScope = scope === "organization";
 
@@ -284,7 +286,7 @@ export function EmailActivityTable({
     return isOrgScope
       ? [...base, relatedColumn, ...trailing]
       : [...base, ...trailing];
-  }, [isOrgScope, onOpenDetail, resendInviteAction]);
+  }, [formatDateTime, isOrgScope, onOpenDetail, resendInviteAction]);
 
   return (
     <div className="flex flex-col gap-4">

@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { eq } from "drizzle-orm";
 
+import { getDictionary } from "@/lib/i18n";
 import { joinApplicationSchema } from "@/lib/join";
 import { actionClient } from "@/lib/safe-action";
 import { db } from "@/server/db";
@@ -29,16 +30,17 @@ export const submitJoinApplicationAction = actionClient
   .metadata({ actionName: "submitJoinApplication" })
   .inputSchema(joinApplicationSchema)
   .action(async ({ parsedInput }) => {
+    const t = getDictionary();
     const organization = await getAppOrganization();
 
     if (!organization) {
-      throw new Error("The application is not set up yet.");
+      throw new Error(t.errors.notSetUp);
     }
 
     const policy = await getOrganizationPolicy(organization.id);
 
     if (!policy) {
-      throw new Error("Organization policy setup is incomplete.");
+      throw new Error(t.errors.policyIncomplete);
     }
 
     const existingMember = await findTenantMemberByEmail(organization.id, parsedInput.email);
@@ -53,6 +55,7 @@ export const submitJoinApplicationAction = actionClient
     const registrationSelections = await validateRegistrationGroupSelections({
       categories: registrationGroupCategories,
       selections: parsedInput.registrationGroupSelections,
+      dict: t.groupRegistration,
     });
 
     if (Object.keys(registrationSelections.errors).length > 0) {
@@ -70,6 +73,7 @@ export const submitJoinApplicationAction = actionClient
     const answerValidation = await validateMemberCustomFieldAnswers(
       registrationFields,
       parsedInput.customFieldAnswers,
+      t,
     );
 
     if (Object.keys(answerValidation.errors).length > 0) {
@@ -138,7 +142,7 @@ export const submitJoinApplicationAction = actionClient
       }
 
       if (!targetMemberId) {
-        throw new Error("Unable to resolve the applicant record.");
+        throw new Error(t.errors.unableToResolveApplicant);
       }
 
       await upsertMemberCustomFieldAnswers(tx, {
@@ -146,6 +150,7 @@ export const submitJoinApplicationAction = actionClient
         memberId: targetMemberId,
         fields: registrationFields,
         answers: parsedInput.customFieldAnswers,
+        dict: t,
       });
 
       await syncRegistrationGroupSelections(tx, {

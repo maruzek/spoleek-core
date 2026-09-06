@@ -6,11 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { PaymentStats } from "@/server/queries/payments";
 import { feeToMajorUnits, PAYMENT_STATUS_COLORS } from "@/lib/payments";
+import { useFormatLocale } from "@/components/locale-provider";
 
-function formatCents(cents: number, currency: string): string {
-  return new Intl.NumberFormat("cs-CZ", { style: "currency", currency, maximumFractionDigits: 0 }).format(
-    feeToMajorUnits(cents) ?? 0,
-  );
+function formatCents(cents: number, currency: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(feeToMajorUnits(cents) ?? 0);
 }
 
 function StatCard({
@@ -51,6 +54,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: PaymentStats; currency?: string }) {
+  const locale = useFormatLocale();
   const donutData = [
     { name: "paid", value: stats.paid.count, fill: chartConfig.paid.color },
     { name: "pending", value: stats.pending.count, fill: chartConfig.pending.color },
@@ -66,19 +70,19 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard
           label="Collected"
-          value={formatCents(stats.paid.totalCents, currency)}
+          value={formatCents(stats.paid.totalCents, currency, locale)}
           sub={`${stats.paid.count} payment${stats.paid.count !== 1 ? "s" : ""}`}
           accent="green"
         />
         <StatCard
           label="Pending"
-          value={formatCents(stats.pending.totalCents, currency)}
+          value={formatCents(stats.pending.totalCents, currency, locale)}
           sub={`${stats.pending.count} payment${stats.pending.count !== 1 ? "s" : ""}`}
           accent="blue"
         />
         <StatCard
           label="Overdue"
-          value={formatCents(stats.overdue.totalCents, currency)}
+          value={formatCents(stats.overdue.totalCents, currency, locale)}
           sub={`${stats.overdue.count} payment${stats.overdue.count !== 1 ? "s" : ""}`}
           accent="red"
         />
@@ -150,7 +154,7 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
                     </div>
                     <div className="ml-4 shrink-0 text-right">
                       <p className="font-medium text-red-600">
-                        {formatCents(row.amountCents, row.currency)}
+                        {formatCents(row.amountCents, row.currency, locale)}
                       </p>
                       <p className="text-xs text-muted-foreground">{row.daysOverdue}d overdue</p>
                     </div>

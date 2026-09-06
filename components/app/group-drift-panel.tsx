@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 
 import { createColumnHelper } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
@@ -19,7 +20,6 @@ import {
   canAdoptDrift,
   describeDriftMemberType,
 } from "@/lib/workspace-group-drift";
-import { formatDateTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,6 +67,8 @@ export function GroupDriftPanel({
   canManage: boolean;
   workspaceDomain: string | null;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const [busyIds, setBusyIds] = useState<string[]>([]);
 

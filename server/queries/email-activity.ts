@@ -9,6 +9,7 @@ import {
   type EmailKind,
 } from "@/server/db/schema";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
+import { formatDateTime } from "@/lib/format";
 
 function getResendAvailability(params: {
   kind: EmailKind;
@@ -64,7 +65,7 @@ function getResendAvailability(params: {
   if (params.inviteResendAvailableAt && params.inviteResendAvailableAt > new Date()) {
     return {
       canResend: false,
-      resendDisabledReason: `Resend becomes available at ${params.inviteResendAvailableAt.toLocaleString()}.`,
+      resendDisabledReason: `Resend becomes available at ${formatDateTime(params.inviteResendAvailableAt)}.`,
     };
   }
 

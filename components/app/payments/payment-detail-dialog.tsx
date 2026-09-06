@@ -1,6 +1,7 @@
 "use client";
 
 import QRCode from "react-qr-code";
+import { useFormatters } from "@/components/locale-provider";
 
 import { DefinitionList, DefinitionRow } from "@/components/app/definition-list";
 import { PaymentActions } from "@/components/app/payments/payment-actions";
@@ -16,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { formatDateTime } from "@/lib/format";
 import { formatBankAccount } from "@/lib/iban";
 import { buildSpdString, formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,8 @@ export function PaymentDetailDialog({
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 }) {
+  const { formatDateTime } = useFormatters();
+
   if (!payment) {
     return null;
   }

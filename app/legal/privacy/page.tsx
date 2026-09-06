@@ -10,9 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getDictionary } from "@/lib/i18n";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 
 export default async function PrivacyPage() {
+  const t = getDictionary();
   const organization = await getAppOrganization();
 
   if (!organization) {
@@ -32,13 +34,13 @@ export default async function PrivacyPage() {
           <Button asChild variant="ghost">
             <Link href="/join">
               <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-              Back to application
+              {t.legal.backToApplication}
             </Link>
           </Button>
         </div>
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Privacy policy</CardTitle>
+            <CardTitle>{t.legal.privacyTitle}</CardTitle>
             <CardDescription>{organization.name}</CardDescription>
           </CardHeader>
           <CardContent>

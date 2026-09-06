@@ -15,6 +15,7 @@ import { memberCustomFields, workspaceConnections } from "@/server/db/schema";
 import type { EmailNotificationSettingsState } from "@/components/app/email-notification-settings-card";
 import type { MembershipSettingsState } from "@/components/app/membership-settings-card";
 import type { WorkspaceSettingsState } from "@/components/app/workspace-settings-card";
+import { orgFormatLocale } from "@/lib/i18n";
 
 export default async function AdminSettingsPage({
   searchParams,
@@ -146,7 +147,7 @@ export default async function AdminSettingsPage({
         organization={organization}
         policy={policy}
         membershipState={membershipState}
-        membershipLocale={organization.locale}
+        membershipLocale={orgFormatLocale(organization.locale)}
         feeManagingCategoryName={feeManagingCategory?.name ?? null}
         localizationState={localizationState}
         emailNotificationState={emailNotificationState}

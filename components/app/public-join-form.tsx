@@ -12,6 +12,7 @@ import {
   RegistrationGroupInput,
   type RegistrationGroupCategoryInput,
 } from "@/components/app/registration-group-input";
+import { dictionaryFor, type Dictionary, type Locale } from "@/lib/i18n/messages";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import { submitJoinApplicationAction } from "@/server/actions/join";
 import type { MemberCustomField } from "@/server/db/schema";
 
 type PublicJoinFormProps = {
+  locale: Locale;
   organizationName: string;
   customFields: MemberCustomField[];
   registrationGroupCategories: RegistrationGroupCategoryInput[];
@@ -43,12 +45,15 @@ type PublicJoinFormProps = {
 };
 
 export function PublicJoinForm({
+  locale,
   organizationName,
   customFields,
   registrationGroupCategories,
   termsLabel,
   privacyLabel,
 }: PublicJoinFormProps) {
+  const dict = dictionaryFor(locale);
+  const t = dict.join;
   const [submitted, setSubmitted] = useState(false);
   const submitAction = useAction(submitJoinApplicationAction, {
     onSuccess({ data }) {
@@ -82,16 +87,13 @@ export function PublicJoinForm({
   if (submitted) {
     return (
       <JoinShellCard>
-        <JoinSuccessPanel organizationName={organizationName} />
+        <JoinSuccessPanel dict={dict} organizationName={organizationName} />
       </JoinShellCard>
     );
   }
 
   return (
-    <JoinShellCard
-      title="Apply to join"
-      description="Fill in your contact details, answer the organization's questions, and submit your application for review."
-    >
+    <JoinShellCard title={t.formTitle} description={t.formDescription}>
     <form
       className="flex flex-col gap-6"
       onSubmit={(event) => {
@@ -105,7 +107,7 @@ export function PublicJoinForm({
           <form.Field name="firstName">
             {(formField) => (
               <Field data-invalid={Boolean(fieldErrors?.firstName?._errors?.[0])}>
-                <FieldLabel htmlFor="join-first-name">First name</FieldLabel>
+                <FieldLabel htmlFor="join-first-name">{t.firstName}</FieldLabel>
                 <FieldContent>
                   <Input
                     id="join-first-name"
@@ -127,7 +129,7 @@ export function PublicJoinForm({
           <form.Field name="lastName">
             {(formField) => (
               <Field data-invalid={Boolean(fieldErrors?.lastName?._errors?.[0])}>
-                <FieldLabel htmlFor="join-last-name">Last name</FieldLabel>
+                <FieldLabel htmlFor="join-last-name">{t.lastName}</FieldLabel>
                 <FieldContent>
                   <Input
                     id="join-last-name"
@@ -150,7 +152,7 @@ export function PublicJoinForm({
         <form.Field name="email">
           {(formField) => (
             <Field data-invalid={Boolean(fieldErrors?.email?._errors?.[0])}>
-              <FieldLabel htmlFor="join-email">Email</FieldLabel>
+              <FieldLabel htmlFor="join-email">{t.email}</FieldLabel>
               <FieldContent>
                   <Input
                     id="join-email"
@@ -164,9 +166,7 @@ export function PublicJoinForm({
                   onChange={(event) => formField.handleChange(event.target.value)}
                   aria-invalid={Boolean(fieldErrors?.email?._errors?.[0])}
                 />
-                <FieldDescription>
-                  Use the address where you want the organization to contact you.
-                </FieldDescription>
+                <FieldDescription>{t.emailHint}</FieldDescription>
                 {fieldErrors?.email?._errors?.[0] ? (
                   <FieldError>{fieldErrors.email._errors[0]}</FieldError>
                 ) : null}
@@ -182,6 +182,7 @@ export function PublicJoinForm({
           >
             {(formField) => (
               <RegistrationGroupInput
+                locale={locale}
                 category={category}
                 value={formField.state.value as string | null | undefined}
                 error={registrationGroupErrors[category.id]?.[0]}
@@ -198,6 +199,7 @@ export function PublicJoinForm({
           >
             {(formField) => (
               <MemberCustomFieldInput
+                locale={locale}
                 field={field}
                 value={formField.state.value}
                 error={customFieldErrors[field.key]?.[0]}
@@ -223,7 +225,7 @@ export function PublicJoinForm({
                     <FieldLabel htmlFor="join-accept-terms" className="leading-6">
                       {termsLabel}{" "}
                       <Link href="/legal/terms" className="underline underline-offset-4">
-                        Read terms
+                        {t.readTerms}
                       </Link>
                     </FieldLabel>
                     {fieldErrors?.acceptTerms?._errors?.[0] ? (
@@ -252,7 +254,7 @@ export function PublicJoinForm({
                     <FieldLabel htmlFor="join-accept-privacy" className="leading-6">
                       {privacyLabel}{" "}
                       <Link href="/legal/privacy" className="underline underline-offset-4">
-                        Read privacy policy
+                        {t.readPrivacy}
                       </Link>
                     </FieldLabel>
                     {fieldErrors?.acceptPrivacy?._errors?.[0] ? (
@@ -268,7 +270,7 @@ export function PublicJoinForm({
 
       {submitAction.result.serverError ? (
         <Alert variant="destructive" aria-live="polite">
-          <AlertTitle>We couldn&apos;t submit the application</AlertTitle>
+          <AlertTitle>{t.serverErrorTitle}</AlertTitle>
           <AlertDescription>{submitAction.result.serverError}</AlertDescription>
         </Alert>
       ) : null}
@@ -277,7 +279,7 @@ export function PublicJoinForm({
         {submitAction.isPending ? (
           <Loader2Icon className="animate-spin" aria-hidden="true" />
         ) : null}
-        {submitAction.isPending ? "Submitting…" : "Submit application"}
+        {submitAction.isPending ? t.submitting : t.submit}
         {submitAction.isPending ? null : (
           <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
         )}
@@ -311,13 +313,14 @@ function JoinShellCard({
   );
 }
 
-const NEXT_STEPS = [
-  "An administrator reviews your application.",
-  "If they approve it, you get an email at the address you gave us.",
-  "That email carries a secure activation link that sets up your login.",
-];
-
-function JoinSuccessPanel({ organizationName }: { organizationName: string }) {
+function JoinSuccessPanel({
+  dict,
+  organizationName,
+}: {
+  dict: Dictionary;
+  organizationName: string;
+}) {
+  const t = dict.join;
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // The form is gone from the DOM, so move focus somewhere meaningful rather
@@ -342,16 +345,15 @@ function JoinSuccessPanel({ organizationName }: { organizationName: string }) {
           tabIndex={-1}
           className="text-3xl font-semibold outline-none"
         >
-          Application received
+          {t.successTitle}
         </h2>
         <p className="max-w-sm text-sm leading-7 text-balance text-muted-foreground">
-          Thank you for applying to {organizationName}. Your details are recorded and there is
-          nothing else to send.
+          {t.successBody(organizationName)}
         </p>
       </div>
 
       <ol className="flex w-full max-w-sm flex-col gap-4 text-left">
-        {NEXT_STEPS.map((step, index) => (
+        {t.successSteps.map((step, index) => (
           <li key={step} className="flex items-start gap-3">
             <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-public-hairline text-xs font-medium text-muted-foreground">
               {index + 1}
@@ -362,7 +364,7 @@ function JoinSuccessPanel({ organizationName }: { organizationName: string }) {
       </ol>
 
       <Button asChild variant="outline">
-        <Link href="/login">Back to sign in</Link>
+        <Link href="/login">{dict.common.backToSignIn}</Link>
       </Button>
     </div>
   );

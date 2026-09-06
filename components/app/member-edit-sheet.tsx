@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useForm } from "@tanstack/react-form";
 import {
@@ -86,7 +87,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatDateTime } from "@/lib/format";
 import { describeMemberInvite } from "@/lib/member-invite-summary";
 import { cn } from "@/lib/utils";
 import {
@@ -225,6 +225,8 @@ export function MemberEditSheet({
   onOpenChange,
   onSubmit,
 }: MemberEditSheetProps) {
+  const { formatDateTime } = useFormatters();
+
   const syncAction = useAction(syncWorkspaceMemberAction, {
     onExecute: () => {
       toast.loading("Syncing Workspace identity...", { id: "sync-workspace" });

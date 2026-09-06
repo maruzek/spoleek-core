@@ -15,13 +15,20 @@ import {
 } from "@/server/db/schema";
 import { resolveRegistrationRecipients } from "@/server/notifications/recipients";
 import { sendNotificationEmails } from "@/server/notifications/send";
+import { getDictionary, orgFormatLocale } from "@/lib/i18n";
+
+// The admin-facing "new application" notification below stays English on
+// purpose: this pass covers the public surface only.
+const t = getDictionary();
 
 function appUrl(path: string) {
   return `${getServerEnv().APP_URL.replace(/\/$/, "")}${path}`;
 }
 
-function formatDate(date: Date, locale: string) {
-  return new Intl.DateTimeFormat(locale || "en", { dateStyle: "long" }).format(date);
+function formatDate(date: Date, locale: string | null | undefined) {
+  return new Intl.DateTimeFormat(orgFormatLocale(locale), {
+    dateStyle: "long",
+  }).format(date);
 }
 
 /**
@@ -178,7 +185,7 @@ export async function notifyRegistrationReceived(params: {
       kind: "registration_acknowledgement",
       memberId: params.memberId,
       recipients: [{ email: toEmail, name: displayName, reason: "applicant" }],
-      subject: `We received your application to ${organization.name}`,
+      subject: t.emails.received.subject(organization.name),
       metadata: {
         groupIds: params.groupIds,
         // The version as accepted, not as currently configured — a policy bump
@@ -225,7 +232,7 @@ export async function notifyRegistrationDuplicate(params: {
       kind: "registration_duplicate_notice",
       memberId: params.memberId,
       recipients: [{ email: toEmail, name: displayName, reason: "account_owner" }],
-      subject: `You are already a member of ${organization.name}`,
+      subject: t.emails.existingAccount.subject(organization.name),
       react: RegistrationExistingAccountEmail({
         organizationName: organization.name,
         memberName: displayName,
@@ -272,7 +279,7 @@ export async function notifyRegistrationRejected(params: {
       recipients: [
         { email: params.toEmail, name: params.applicantName, reason: "applicant" },
       ],
-      subject: `Your application to ${organization.name}`,
+      subject: t.emails.rejected.subject(organization.name),
       metadata: { hasReason: params.reason !== null },
       react: RegistrationRejectedEmail({
         organizationName: organization.name,

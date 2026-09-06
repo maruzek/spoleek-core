@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { MemberActivationForm } from "@/components/app/member-activation-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { defaultLocale, getDictionary } from "@/lib/i18n";
 import { getViewerSession } from "@/server/queries/auth";
 import {
   getMemberCustomFieldAnswerMap,
@@ -20,6 +21,7 @@ export default async function ActivateAccountPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = getDictionary();
   const session = await getViewerSession();
 
   if (session) {
@@ -79,21 +81,22 @@ export default async function ActivateAccountPage({
       <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="flex flex-col justify-center gap-5 py-6">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            Account activation
+            {t.activation.eyebrow}
           </p>
           <h1 className="max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
-            Finish setting up your member account.
+            {t.activation.title}
           </h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">
-            Your membership at {member.organizationName} has been approved. Create your password
-            and complete the remaining profile details to enter the member portal.
+            {t.activation.body(member.organizationName)}
           </p>
           <p className="text-sm leading-7 text-muted-foreground">
-            Sign-in email: <span className="font-medium text-foreground">{member.email}</span>
+            {t.activation.signInEmailLabel}{" "}
+            <span className="font-medium text-foreground">{member.email}</span>
           </p>
         </section>
 
         <MemberActivationForm
+          locale={defaultLocale}
           memberId={memberId}
           token={token}
           customFields={customFields}
@@ -111,27 +114,25 @@ function InvalidActivationState({
   state: "invalid" | "expired" | "completed" | "blocked";
   blockedUntil?: Date;
 }) {
+  const t = getDictionary();
   const content = {
     invalid: {
-      title: "This activation link is invalid.",
-      description:
-        "Ask an organization administrator to send you a fresh invitation email, then open only the newest link they send.",
+      title: t.activation.invalidTitle,
+      description: t.activation.invalidBody,
     },
     expired: {
-      title: "This activation link has expired.",
-      description:
-        "Ask an organization administrator to resend your invitation email and use the latest link only.",
+      title: t.activation.expiredTitle,
+      description: t.activation.expiredBody,
     },
     completed: {
-      title: "This account has already been activated.",
-      description:
-        "Your membership is already linked. Return to sign in with your approved email address and password.",
+      title: t.activation.completedTitle,
+      description: t.activation.completedBody,
     },
     blocked: {
-      title: "Too many activation attempts were detected.",
-      description: blockedUntil
-        ? `Wait until ${blockedUntil.toLocaleString()} and then try again with the newest invite link, or ask an administrator to resend it.`
-        : "Wait a few minutes and then try again with the newest invite link, or ask an administrator to resend it.",
+      title: t.activation.blockedTitle,
+      description: t.activation.blockedBody(
+        blockedUntil ? blockedUntil.toLocaleString(t.formatLocale) : null,
+      ),
     },
   }[state];
 
@@ -144,7 +145,7 @@ function InvalidActivationState({
         </Alert>
         <div>
           <Button asChild variant="outline">
-            <Link href="/login">Back to sign in</Link>
+            <Link href="/login">{t.common.backToSignIn}</Link>
           </Button>
         </div>
       </div>

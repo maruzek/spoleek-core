@@ -11,6 +11,7 @@ import {
   Text,
   pixelBasedPreset,
 } from "react-email";
+import { getDictionary } from "@/lib/i18n";
 
 type RegistrationRejectedEmailProps = {
   organizationName: string;
@@ -28,10 +29,12 @@ export function RegistrationRejectedEmail({
   reason,
   contactEmail,
 }: RegistrationRejectedEmailProps) {
-  const subject = `Your application to ${organizationName}`;
+  const t = getDictionary();
+  const copy = t.emails.rejected;
+  const subject = copy.subject(organizationName);
 
   return (
-    <Html lang="en">
+    <Html lang={t.locale}>
       <Tailwind
         config={{
           presets: [pixelBasedPreset],
@@ -55,21 +58,20 @@ export function RegistrationRejectedEmail({
                 {organizationName}
               </Text>
               <Heading className="mb-[16px] mt-[12px] text-[30px] leading-[36px] font-semibold text-ink">
-                About your application
+                {copy.heading}
               </Heading>
               <Text className="m-0 text-[16px] leading-[28px] text-ink">
-                Hello {applicantName},
+                {copy.greeting(applicantName)}
               </Text>
               <Text className="m-0 mt-[16px] text-[16px] leading-[28px] text-ink">
-                Thank you for your interest in {organizationName}. Your membership application was
-                reviewed on {decidedAt} and we are not able to accept it at this time.
+                {copy.body(organizationName, decidedAt)}
               </Text>
             </Section>
 
             {reason ? (
               <Section className="mt-[24px] rounded-[16px] border border-[#e2e6e4] bg-[#f8f9f9] px-[24px] py-[20px]">
                 <Text className="m-0 text-[12px] uppercase tracking-[2px] text-[#52605a]">
-                  From the reviewer
+                  {copy.reasonTitle}
                 </Text>
                 <Text className="m-0 mt-[8px] text-[15px] leading-[26px] text-ink">{reason}</Text>
               </Section>
@@ -77,16 +79,8 @@ export function RegistrationRejectedEmail({
 
             <Section className="mt-[24px]">
               <Text className="m-0 text-[14px] leading-[24px] text-[#52605a]">
-                Your application and everything you submitted with it have been deleted. All we
-                keep is a record of this message. You are welcome to apply again later if your
-                circumstances change.
-                {contactEmail ? (
-                  <>
-                    {" "}
-                    If you have questions about this decision, write to{" "}
-                    <strong className="text-ink">{contactEmail}</strong>.
-                  </>
-                ) : null}
+                {copy.deleted}
+                {contactEmail ? <> {copy.contact(contactEmail)}</> : null}
               </Text>
             </Section>
           </Container>

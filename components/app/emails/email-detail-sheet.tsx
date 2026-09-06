@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { ArrowUpRightIcon, MailIcon, TriangleAlertIcon } from "lucide-react";
@@ -33,7 +34,6 @@ import {
   TimelineTime,
   TimelineTitle,
 } from "@/components/ui/timeline";
-import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { resendMemberInviteAction } from "@/server/actions/member-admin";
 import type { EmailActivityDetail } from "@/server/queries/email-activity";
@@ -66,6 +66,8 @@ export function EmailDetailSheet({
   /** Off on a member's own page, where "related member" is the page itself. */
   showRelatedMember?: boolean;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
 
   const resendInviteAction = useAction(resendMemberInviteAction, {
@@ -227,34 +229,34 @@ export function EmailDetailSheet({
                 <div className="flex flex-col gap-3">
                   <DeliveryRow
                     label="Accepted"
-                    value={formatMaybeDate(activity.sentAt)}
+                    value={formatMaybeDate(activity.sentAt, formatDateTime)}
                   />
                   <DeliveryRow
                     label="Delivered"
-                    value={formatMaybeDate(activity.deliveredAt)}
+                    value={formatMaybeDate(activity.deliveredAt, formatDateTime)}
                   />
                   {activity.bouncedAt ? (
                     <DeliveryRow
                       label="Bounced"
-                      value={formatMaybeDate(activity.bouncedAt)}
+                      value={formatMaybeDate(activity.bouncedAt, formatDateTime)}
                     />
                   ) : null}
                   {activity.complainedAt ? (
                     <DeliveryRow
                       label="Complained"
-                      value={formatMaybeDate(activity.complainedAt)}
+                      value={formatMaybeDate(activity.complainedAt, formatDateTime)}
                     />
                   ) : null}
                   {activity.suppressedAt ? (
                     <DeliveryRow
                       label="Suppressed"
-                      value={formatMaybeDate(activity.suppressedAt)}
+                      value={formatMaybeDate(activity.suppressedAt, formatDateTime)}
                     />
                   ) : null}
                   {activity.failedAt ? (
                     <DeliveryRow
                       label="Failed"
-                      value={formatMaybeDate(activity.failedAt)}
+                      value={formatMaybeDate(activity.failedAt, formatDateTime)}
                     />
                   ) : null}
                 </div>

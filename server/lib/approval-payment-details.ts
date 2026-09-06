@@ -4,6 +4,7 @@ import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import { db } from "@/server/db";
 import { groups, memberPayments } from "@/server/db/schema";
 import { buildPaymentQrUrl } from "@/server/lib/payment-qr";
+import { formatLongDate } from "@/lib/format";
 
 export type ApprovalPaymentDetails = {
   title: string;
@@ -69,11 +70,7 @@ export async function getApprovalPaymentDetails(
     // Raw IBAN — the email template renders the local format alongside it.
     bankAccount: payment.bankAccount,
     variableSymbol: payment.variableSymbol,
-    dueDate: payment.dueAt.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }),
+    dueDate: formatLongDate(payment.dueAt),
     periodLabel: payment.periodLabel,
     sourceGroupName,
     qrUrl: payment.bankAccount ? buildPaymentQrUrl(payment.id) : null,

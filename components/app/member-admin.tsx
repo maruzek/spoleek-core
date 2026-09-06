@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
@@ -42,7 +43,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { useAppShell } from "@/components/app/app-shell-provider";
-import { formatDateTime } from "@/lib/format";
 import { formatFeeAmount } from "@/lib/payments";
 import { copyToClipboard } from "@/utils/copy";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
@@ -219,6 +219,8 @@ export function MemberAdmin({
   groupsById?: Map<string, { id: string; name: string; categoryId: string; workspaceOrgUnitPath: string | null }>;
   orgUnitCategoryId?: string | null;
 }) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -845,6 +847,7 @@ export function MemberAdmin({
       ...trailingColumns,
     ];
   }, [
+    formatDateTime,
     approvingMemberId,
     startApproval,
     defaultEmailPreference,

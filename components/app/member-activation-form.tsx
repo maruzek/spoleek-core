@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
+import { dictionaryFor, type Locale } from "@/lib/i18n/messages";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ import { completeMemberActivationAction } from "@/server/actions/member-activati
 import type { MemberCustomField } from "@/server/db/schema";
 
 type MemberActivationFormProps = {
+  locale: Locale;
   memberId: string;
   token: string;
   customFields: MemberCustomField[];
@@ -27,11 +29,13 @@ type MemberActivationFormProps = {
 };
 
 export function MemberActivationForm({
+  locale,
   memberId,
   token,
   customFields,
   customFieldAnswers,
 }: MemberActivationFormProps) {
+  const t = dictionaryFor(locale).activation;
   const router = useRouter();
   const activationAction = useAction(completeMemberActivationAction, {
     onSuccess({ data }) {
@@ -74,7 +78,7 @@ export function MemberActivationForm({
               data-invalid={Boolean(validationErrors?.password?._errors?.[0])}
             >
               <FieldLabel htmlFor="activation-password">
-                Create password
+                {t.passwordLabel}
               </FieldLabel>
               <FieldContent>
                 <Input
@@ -110,7 +114,7 @@ export function MemberActivationForm({
               )}
             >
               <FieldLabel htmlFor="activation-confirm-password">
-                Confirm password
+                {t.confirmPasswordLabel}
               </FieldLabel>
               <FieldContent>
                 <Input
@@ -140,12 +144,9 @@ export function MemberActivationForm({
 
         {customFields.length > 0 ? (
           <Field>
-            <FieldLabel>Required profile fields</FieldLabel>
+            <FieldLabel>{t.profileFieldsLabel}</FieldLabel>
             <FieldContent>
-              <FieldDescription>
-                Finish the organization-specific questions below before entering
-                the portal.
-              </FieldDescription>
+              <FieldDescription>{t.profileFieldsHint}</FieldDescription>
             </FieldContent>
           </Field>
         ) : null}
@@ -157,6 +158,7 @@ export function MemberActivationForm({
           >
             {(formField) => (
               <MemberCustomFieldInput
+                locale={locale}
                 field={field}
                 value={formField.state.value}
                 error={customFieldErrors[field.key]?.[0]}
@@ -169,7 +171,7 @@ export function MemberActivationForm({
 
       {activationAction.result.serverError ? (
         <Alert variant="destructive" aria-live="polite">
-          <AlertTitle>We couldn&apos;t finish the activation</AlertTitle>
+          <AlertTitle>{t.serverErrorTitle}</AlertTitle>
           <AlertDescription>
             {activationAction.result.serverError}
           </AlertDescription>
@@ -177,9 +179,7 @@ export function MemberActivationForm({
       ) : null}
 
       <Button type="submit" size="lg" disabled={activationAction.isPending}>
-        {activationAction.isPending
-          ? "Finishing setup..."
-          : "Finish account setup"}
+        {activationAction.isPending ? t.submitting : t.submit}
       </Button>
     </form>
   );

@@ -1,21 +1,27 @@
 import { z } from "zod";
 
+import { getDictionary } from "@/lib/i18n";
 import { memberCustomFieldAnswersSchema } from "@/lib/member-custom-fields";
+
+// Only ever imported from server actions, so reading the server-side locale at
+// module scope is safe. joinPageSettingsSchema below is admin-facing and stays
+// English on purpose.
+const t = getDictionary().errors;
 
 export const registrationGroupSelectionsSchema = z
   .record(z.string(), z.union([z.string().uuid(), z.literal(""), z.null()]))
   .default({});
 
 export const joinApplicationSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required."),
-  lastName: z.string().trim().min(1, "Last name is required."),
-  email: z.email("Enter a valid email address."),
+  firstName: z.string().trim().min(1, t.firstNameRequired),
+  lastName: z.string().trim().min(1, t.lastNameRequired),
+  email: z.email(t.invalidEmail),
   acceptTerms: z
     .boolean()
-    .refine((value) => value, "You must accept the organization terms."),
+    .refine((value) => value, t.acceptTerms),
   acceptPrivacy: z
     .boolean()
-    .refine((value) => value, "You must accept the privacy policy."),
+    .refine((value) => value, t.acceptPrivacy),
   registrationGroupSelections: registrationGroupSelectionsSchema,
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });

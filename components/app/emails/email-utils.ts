@@ -1,4 +1,3 @@
-import { formatDateTime } from "@/lib/format";
 import type { EmailActivityStatus, EmailKind } from "@/server/db/schema";
 
 export function getEmailStatusVariant(status: EmailActivityStatus) {
@@ -52,6 +51,9 @@ export function isInsideWindow(date: Date | null, range: EmailDateRange) {
   return Date.now() - date.getTime() <= days * 24 * 60 * 60 * 1000;
 }
 
-export function formatMaybeDate(value: Date | null) {
+export function formatMaybeDate(
+  value: Date | null,
+  formatDateTime: (date: Date | string | null | undefined) => string,
+) {
   return value ? formatDateTime(value) : "Not recorded";
 }

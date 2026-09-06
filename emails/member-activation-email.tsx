@@ -13,6 +13,7 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import { getDictionary } from "@/lib/i18n";
 import {
   PaymentDetailsSection,
   previewPaymentDetails,
@@ -39,8 +40,11 @@ export function MemberActivationEmail({
   memberName,
   payment = null,
 }: MemberActivationEmailProps) {
+  // Emails render on the server, so they resolve the locale themselves.
+  const t = getDictionary();
+
   return (
-    <Html lang="en">
+    <Html lang={t.locale}>
       <Tailwind
         config={{
           presets: [pixelBasedPreset],
@@ -64,10 +68,10 @@ export function MemberActivationEmail({
                 {organizationName}
               </Text>
               <Heading className="mb-[16px] mt-[12px] text-[30px] leading-[36px] font-semibold text-ink">
-                Your membership has been approved
+                {t.emails.activation.heading}
               </Heading>
               <Text className="m-0 text-[16px] leading-[28px] text-ink">
-                Hello {memberName},
+                {t.emails.activation.greeting(memberName)}
               </Text>
               {body
                 .split("\n")
@@ -88,7 +92,7 @@ export function MemberActivationEmail({
                 href={activationUrl}
                 className="box-border rounded-[16px] bg-brand px-[24px] py-[14px] text-[16px] font-semibold text-white no-underline"
               >
-                Create password and finish setup
+                {t.emails.activation.cta}
               </Button>
             </Section>
 
@@ -97,11 +101,10 @@ export function MemberActivationEmail({
 
             <Section>
               <Text className="m-0 mt-[24px] text-[14px] leading-[24px] text-[#52605a]">
-                This link expires in 1 hour. If it stops working, ask an administrator to send a
-                fresh invitation.
+                {t.emails.activation.expiry}
               </Text>
               <Text className="m-0 mt-[16px] text-[14px] leading-[24px] text-[#52605a]">
-                If the button does not open, paste this URL into your browser:
+                {t.emails.activation.fallbackIntro}
               </Text>
               <Text className="m-0 mt-[8px] break-all text-[14px] leading-[24px] text-brand">
                 {activationUrl}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useFormatters } from "@/components/locale-provider";
 
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
@@ -20,7 +21,6 @@ import {
   type WorkspaceLinkPlanRow,
   type WorkspaceLinkSettings,
 } from "@/lib/workspace-group-links";
-import { formatDateTime } from "@/lib/format";
 import {
   WorkspaceGroupPicker,
   WorkspaceLinkSettingsFields,
@@ -93,6 +93,8 @@ export function GroupWorkspaceLinksCard({
   workspaceConnected,
   canManage,
 }: GroupWorkspaceLinksCardProps) {
+  const { formatDateTime } = useFormatters();
+
   const router = useRouter();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
