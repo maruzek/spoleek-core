@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/sidebar";
 import { getViewerAppContext } from "@/server/queries/access";
 import { AppShellProvider } from "@/components/app/app-shell-provider";
-import { ThemeProvider } from "../theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export async function AuthenticatedAppLayout({
@@ -25,33 +24,26 @@ export async function AuthenticatedAppLayout({
     sidebarState === undefined ? true : sidebarState === "true";
 
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <AppShellProvider context={appContext}>
-        <SidebarProvider defaultOpen={defaultOpen}>
-          <AppSidebar appContext={appContext} />
-          <SidebarInset>
-            <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-              <div className="flex items-center gap-2 px-4 md:px-6">
-                <SidebarTrigger className="-ml-1" />
-                <Separator
-                  orientation="vertical"
-                  className="mr-2 data-vertical:h-4 data-vertical:self-auto"
-                />
-                <AppBreadcrumbs />
-              </div>
-              <div className="flex items-center gap-2 px-4 md:px-6">
-                <ThemeToggle />
-              </div>
-            </header>
-            <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
-          </SidebarInset>
-        </SidebarProvider>
-      </AppShellProvider>
-    </ThemeProvider>
+    <AppShellProvider context={appContext}>
+      <SidebarProvider defaultOpen={defaultOpen}>
+        <AppSidebar appContext={appContext} />
+        <SidebarInset>
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            <div className="flex items-center gap-2 px-4 md:px-6">
+              <SidebarTrigger className="-ml-1" />
+              <Separator
+                orientation="vertical"
+                className="mr-2 data-vertical:h-4 data-vertical:self-auto"
+              />
+              <AppBreadcrumbs />
+            </div>
+            <div className="flex items-center gap-2 px-4 md:px-6">
+              <ThemeToggle />
+            </div>
+          </header>
+          <main className="flex flex-1 flex-col p-4 md:p-6">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+    </AppShellProvider>
   );
 }

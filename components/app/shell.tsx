@@ -19,7 +19,7 @@ export function AppShell({
   actions,
 }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(170,230,201,0.35),_transparent_32%),linear-gradient(180deg,#f8f7f3_0%,#f4efe4_100%)] text-slate-950">
+    <div className="min-h-screen public-surface">
       <header className="border-b border-slate-950/10 bg-white/75 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-sm font-semibold tracking-[0.24em] uppercase">

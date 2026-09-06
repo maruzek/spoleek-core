@@ -1,4 +1,4 @@
-import type { MemberPayment, MemberPaymentType } from "@/server/db/schema";
+import type { MemberPayment, MemberPaymentStatus, MemberPaymentType } from "@/server/db/schema";
 
 export function getPaymentTitle(type: MemberPaymentType, periodLabel: string): string {
   switch (type) {
@@ -47,4 +47,27 @@ export function feeAmountToDecimal(minor: number): string {
 /** Human-readable amount from a stored minor-unit value, e.g. "100.00 CZK". */
 export function formatFeeAmount(minor: number, currency: string): string {
   return `${feeAmountToDecimal(minor)} ${currency}`;
+}
+
+/**
+ * Dashboard ordering for payment statuses: lower rank sorts higher up the
+ * table. Outstanding work comes first — an admin opens this page to see who
+ * still owes money, not to admire settled rows — and closed records sink.
+ *
+ * Kept here rather than in the query so the server ordering and any
+ * client-side re-sort agree on one definition.
+ */
+export const PAYMENT_STATUS_SORT_ORDER: Record<MemberPaymentStatus, number> = {
+  overdue: 0,
+  pending: 1,
+  // Settled records — paid and cancelled alike — are closed business, so they
+  // share a rank and fall through to the due-date tiebreaker instead of being
+  // split into two blocks.
+  paid: 2,
+  cancelled: 2,
+};
+
+/** Comparator for TanStack Table / Array#sort over payment statuses. */
+export function comparePaymentStatus(a: MemberPaymentStatus, b: MemberPaymentStatus): number {
+  return PAYMENT_STATUS_SORT_ORDER[a] - PAYMENT_STATUS_SORT_ORDER[b];
 }

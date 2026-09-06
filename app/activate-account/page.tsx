@@ -75,7 +75,7 @@ export default async function ActivateAccountPage({
   ]);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(214,240,224,0.92),_rgba(249,246,238,0.96)_40%,_rgba(244,238,227,1)_100%)] px-6 py-10 text-foreground">
+    <main className="min-h-screen public-surface px-6 py-10 text-foreground">
       <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <section className="flex flex-col justify-center gap-5 py-6">
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
@@ -136,7 +136,7 @@ function InvalidActivationState({
   }[state];
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(214,240,224,0.92),_rgba(249,246,238,0.96)_40%,_rgba(244,238,227,1)_100%)] px-6 py-10 text-foreground">
+    <main className="min-h-screen public-surface px-6 py-10 text-foreground">
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <Alert variant="destructive">
           <AlertTitle>{content.title}</AlertTitle>
@@ -144,7 +144,7 @@ function InvalidActivationState({
         </Alert>
         <div>
           <Button asChild variant="outline">
-            <Link href="/">Back to sign in</Link>
+            <Link href="/login">Back to sign in</Link>
           </Button>
         </div>
       </div>

@@ -7,6 +7,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-public-canvas: var(--public-canvas);
+  --color-public-tint: var(--public-tint);
+  --color-public-card: var(--public-card);
+  --color-public-hairline: var(--public-hairline);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-heading: var(--font-heading);
@@ -84,6 +88,12 @@
   --font-mono: "IBM Plex Mono", monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.148 0.004 228.8);
+
+  /* Public surface: the beige/green canvas used by every signed-out page. */
+  --public-canvas: oklch(0.962 0.013 92.4);
+  --public-tint: oklch(0.947 0.048 155.2);
+  --public-card: oklch(0.995 0.003 92.4);
+  --public-hairline: oklch(0.898 0.009 92.4);
 }
 
 .dark {
@@ -118,6 +128,13 @@
   --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.56 0.021 213.5);
+
+  /* Same composition as light, inverted luminance: a deep green glow
+     falling off into a warm near-black rather than into beige. */
+  --public-canvas: oklch(0.172 0.014 92.4);
+  --public-tint: oklch(0.343 0.086 155.2);
+  --public-card: oklch(0.216 0.011 160);
+  --public-hairline: oklch(1 0 0 / 10%);
 }
 
 @layer base {
@@ -140,5 +157,24 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+}
+
+@layer components {
+  /* One gradient for every signed-out page; both themes read from tokens. */
+  .public-surface {
+    background-color: var(--public-canvas);
+    background-image: radial-gradient(
+      ellipse 130% 85% at 50% -12%,
+      var(--public-tint),
+      transparent 62%
+    );
+    background-repeat: no-repeat;
+    color: var(--foreground);
+  }
+
+  .public-card {
+    background-color: var(--public-card);
+    border-color: var(--public-hairline);
   }
 }

@@ -93,7 +93,7 @@ SMTP_FROM=`}
               <a href="/setup">Retry setup</a>
             </Button>
             <Button asChild variant="outline">
-              <a href="/auth">Open auth</a>
+              <a href="/login">Open sign-in</a>
             </Button>
           </div>
         </article>

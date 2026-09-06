@@ -230,7 +230,7 @@ export async function notifyRegistrationDuplicate(params: {
         organizationName: organization.name,
         memberName: displayName,
         submittedAt: formatDate(new Date(), organization.locale),
-        signInUrl: appUrl("/auth"),
+        signInUrl: appUrl("/login"),
       }),
     });
   } catch (error) {

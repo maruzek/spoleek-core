@@ -26,7 +26,7 @@ export default async function TermsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(214,240,224,0.9),_rgba(249,246,238,0.92)_38%,_rgba(244,238,227,0.98)_100%)] px-6 py-10">
+    <main className="min-h-screen public-surface px-6 py-10">
       <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <div>
           <Button asChild variant="ghost">

@@ -1284,7 +1284,7 @@ export const createWorkspaceAccountAction = authActionClient
         .filter(Boolean)
         .join(" ")
         .trim() || primaryEmail;
-      const signInUrl = buildAbsoluteAppUrl("/auth");
+      const signInUrl = buildAbsoluteAppUrl("/login");
 
       try {
         const resend = getResendClient();

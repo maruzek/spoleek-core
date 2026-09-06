@@ -681,7 +681,7 @@ export function SetupWizard({
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(218,255,231,0.85),_rgba(250,248,240,0.9)_42%,_rgba(242,235,223,0.95)_100%)]">
+    <div className="min-h-screen public-surface">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-6 py-10">
         <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">

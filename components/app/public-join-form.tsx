@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
-import { ArrowRightIcon, CheckCircle2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckIcon, Loader2Icon } from "lucide-react";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import {
@@ -14,6 +14,13 @@ import {
 } from "@/components/app/registration-group-input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -28,6 +35,7 @@ import { submitJoinApplicationAction } from "@/server/actions/join";
 import type { MemberCustomField } from "@/server/db/schema";
 
 type PublicJoinFormProps = {
+  organizationName: string;
   customFields: MemberCustomField[];
   registrationGroupCategories: RegistrationGroupCategoryInput[];
   termsLabel: string;
@@ -35,6 +43,7 @@ type PublicJoinFormProps = {
 };
 
 export function PublicJoinForm({
+  organizationName,
   customFields,
   registrationGroupCategories,
   termsLabel,
@@ -72,19 +81,17 @@ export function PublicJoinForm({
 
   if (submitted) {
     return (
-      <Alert className="rounded-3xl border bg-card shadow-sm" aria-live="polite">
-        <CheckCircle2Icon aria-hidden="true" />
-        <AlertTitle>Application received</AlertTitle>
-        <AlertDescription className="leading-7">
-          Thank you for applying. We&apos;ve recorded your details and the organization can review
-          your request now. If they approve you, they will email you a secure activation link with
-          the next login steps.
-        </AlertDescription>
-      </Alert>
+      <JoinShellCard>
+        <JoinSuccessPanel organizationName={organizationName} />
+      </JoinShellCard>
     );
   }
 
   return (
+    <JoinShellCard
+      title="Apply to join"
+      description="Fill in your contact details, answer the organization's questions, and submit your application for review."
+    >
     <form
       className="flex flex-col gap-6"
       onSubmit={(event) => {
@@ -267,9 +274,96 @@ export function PublicJoinForm({
       ) : null}
 
       <Button type="submit" size="lg" disabled={submitAction.isPending}>
+        {submitAction.isPending ? (
+          <Loader2Icon className="animate-spin" aria-hidden="true" />
+        ) : null}
         {submitAction.isPending ? "Submitting…" : "Submit application"}
-        <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
+        {submitAction.isPending ? null : (
+          <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
+        )}
       </Button>
     </form>
+    </JoinShellCard>
+  );
+}
+
+function JoinShellCard({
+  title,
+  description,
+  children,
+}: {
+  title?: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="public-card min-h-[32rem] justify-center shadow-[0_24px_60px_-28px_rgba(16,24,40,0.3)]">
+      {title ? (
+        <CardHeader className="gap-3">
+          <CardTitle className="text-2xl">{title}</CardTitle>
+          {description ? (
+            <CardDescription className="text-sm leading-6">{description}</CardDescription>
+          ) : null}
+        </CardHeader>
+      ) : null}
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+const NEXT_STEPS = [
+  "An administrator reviews your application.",
+  "If they approve it, you get an email at the address you gave us.",
+  "That email carries a secure activation link that sets up your login.",
+];
+
+function JoinSuccessPanel({ organizationName }: { organizationName: string }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  // The form is gone from the DOM, so move focus somewhere meaningful rather
+  // than letting it fall back to <body>.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="flex flex-col items-center gap-6 py-6 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="flex size-14 items-center justify-center rounded-full bg-primary/12 text-primary">
+        <CheckIcon className="size-7" aria-hidden="true" />
+      </span>
+
+      <div className="flex flex-col gap-3">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-3xl font-semibold outline-none"
+        >
+          Application received
+        </h2>
+        <p className="max-w-sm text-sm leading-7 text-balance text-muted-foreground">
+          Thank you for applying to {organizationName}. Your details are recorded and there is
+          nothing else to send.
+        </p>
+      </div>
+
+      <ol className="flex w-full max-w-sm flex-col gap-4 text-left">
+        {NEXT_STEPS.map((step, index) => (
+          <li key={step} className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border border-public-hairline text-xs font-medium text-muted-foreground">
+              {index + 1}
+            </span>
+            <span className="text-sm leading-6 text-muted-foreground">{step}</span>
+          </li>
+        ))}
+      </ol>
+
+      <Button asChild variant="outline">
+        <Link href="/login">Back to sign in</Link>
+      </Button>
+    </div>
   );
 }

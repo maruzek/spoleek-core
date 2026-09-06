@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, sql, sum } from "drizzle-orm";
 
+import { PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
   groupMemberships,
@@ -50,6 +51,23 @@ export async function listMemberIdsInGroups(
   return [...new Set(rows.map((r) => r.memberId))];
 }
 
+/**
+ * `CASE status WHEN ... END` built from PAYMENT_STATUS_SORT_ORDER, so the
+ * dashboard ordering lives in one place instead of being spelled out in SQL.
+ * Sorting in Postgres (rather than after the fetch) keeps the ordering correct
+ * for any future pagination.
+ */
+const statusRank = sql.join(
+  [
+    sql`case`,
+    ...Object.entries(PAYMENT_STATUS_SORT_ORDER).map(
+      ([status, rank]) => sql`when ${memberPayments.status} = ${status} then ${rank}`,
+    ),
+    sql`else ${Object.keys(PAYMENT_STATUS_SORT_ORDER).length} end`,
+  ],
+  sql` `,
+);
+
 export async function listPaymentsForOrg(
   orgId: string,
   options?: {
@@ -81,7 +99,9 @@ export async function listPaymentsForOrg(
           : undefined,
       ),
     )
-    .orderBy(desc(memberPayments.createdAt));
+    // Outstanding first, then the most pressing due date, with createdAt only
+    // as a tiebreaker so the order is stable across renders.
+    .orderBy(asc(statusRank), asc(memberPayments.dueAt), desc(memberPayments.createdAt));
 
   return rows.map((row) => ({
     ...row.payment,

@@ -114,7 +114,7 @@ export async function provisionWorkspaceAccountForMember(
     .filter(Boolean)
     .join(" ")
     .trim() || primaryEmail;
-  const signInUrl = buildAbsoluteAppUrl("/auth");
+  const signInUrl = buildAbsoluteAppUrl("/login");
   // Null when the org charges no membership fee; the approval flow creates the
   // payment row before calling this so the details are already available.
   const payment = await getApprovalPaymentDetails(input.orgId, input.memberId);
