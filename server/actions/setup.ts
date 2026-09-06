@@ -9,6 +9,7 @@ import { splitMemberName } from "@/lib/member-custom-fields";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { slugify } from "@/lib/slugify";
 import { db } from "@/server/db";
+import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 import {
   organizationPolicies,
   organizations,
@@ -73,13 +74,16 @@ export const createOrganizationSetupAction = authActionClient
 
       orgId = org!.id;
 
-      await tx.insert(organizationPolicies).values({
+      await tx.insert(organizationPolicies).values({ orgId });
+
+      // The wizard collects plain text; it is wrapped in a paragraph so the
+      // published version is valid HTML from the start.
+      await seedOrganizationPolicies(tx, {
         orgId,
-        termsOfServiceLabel: parsedInput.termsLabel,
-        termsOfServiceText: parsedInput.termsText,
-        privacyPolicyLabel: parsedInput.privacyLabel,
-        privacyPolicyText: parsedInput.privacyText,
-        version: "v1",
+        organizationName: parsedInput.organizationName,
+        locale: defaultLocale,
+        terms: { html: `<p>${parsedInput.termsText}</p>` },
+        privacy: { html: `<p>${parsedInput.privacyText}</p>` },
       });
 
       await tx

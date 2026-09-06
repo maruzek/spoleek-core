@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "@/server/db";
 import { organizationPolicies, organizations } from "@/server/db/schema";
+import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 
 async function main() {
   const existing = await db.select().from(organizations).limit(1);
@@ -22,16 +23,12 @@ async function main() {
     locale: "en",
   });
 
-  await db.insert(organizationPolicies).values({
-    id: randomUUID(),
+  await db.insert(organizationPolicies).values({ id: randomUUID(), orgId });
+
+  await seedOrganizationPolicies(db, {
     orgId,
-    termsOfServiceLabel: "I agree with the demo organization terms.",
-    termsOfServiceText:
-      "Demo terms of service. Replace this content during organization setup.",
-    privacyPolicyLabel: "I agree with the demo organization privacy policy.",
-    privacyPolicyText:
-      "Demo privacy policy. Replace this content during organization setup.",
-    version: "demo-v1",
+    organizationName: "Demo Organization",
+    locale: "en",
   });
 
   console.log("Seeded demo organization.");

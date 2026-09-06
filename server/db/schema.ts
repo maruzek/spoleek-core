@@ -553,10 +553,9 @@ export const organizationPolicies = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    termsOfServiceLabel: text("terms_of_service_label").notNull(),
-    termsOfServiceText: text("terms_of_service_text").notNull(),
-    privacyPolicyLabel: text("privacy_policy_label").notNull(),
-    privacyPolicyText: text("privacy_policy_text").notNull(),
+    // The legal documents moved to policy_documents / policy_versions, where a
+    // published version is immutable. What is left here is the invite email
+    // copy, which is not a legal document and is edited freely.
     memberInviteEmailSubject: text("member_invite_email_subject")
       .notNull()
       .default("Your membership has been approved"),
@@ -565,7 +564,6 @@ export const organizationPolicies = pgTable(
       .default(
         "Your membership request has been approved. Use the button below to create your password and complete the remaining profile fields before signing in to the app.",
       ),
-    version: text("version").notNull().default("v1"),
     ...timestamps,
   },
   (table) => [
@@ -586,14 +584,9 @@ export const tenantMembers = pgTable(
     lastName: text("last_name").notNull().default(""),
     role: tenantRoleEnum("role").notNull().default("member"),
     status: membershipStatusEnum("status").notNull().default("pending"),
-    acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
-    acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
-    /**
-     * The `organization_policies.version` in force when this member accepted.
-     * Stored so the acknowledgement email states something checkable, and so a
-     * later version bump can tell who still needs to re-consent.
-     */
-    acceptedPolicyVersion: text("accepted_policy_version"),
+    // Consent lives in member_policy_acknowledgements, one row per document
+    // version, so the record says which text was agreed to and how. The three
+    // columns that used to sit here could not.
     linkedAt: timestamp("linked_at", { withTimezone: true }),
     workspaceUserEmail: text("workspace_user_email"),
     workspaceUserId: text("workspace_user_id"),

@@ -23,6 +23,8 @@ import { splitMemberName } from "@/lib/member-custom-fields";
 import { feeToMinorUnits } from "@/lib/payments";
 import { actionClient } from "@/lib/safe-action";
 import { slugify } from "@/lib/slugify";
+import { defaultLocale } from "@/lib/i18n";
+import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 import {
   clearSetupWizardState,
   getBootstrapState,
@@ -465,13 +467,12 @@ export const createBootstrapOrganizationAction = actionClient
 
       orgId = org!.id;
 
-      await tx.insert(organizationPolicies).values({
+      await tx.insert(organizationPolicies).values({ orgId });
+
+      await seedOrganizationPolicies(tx, {
         orgId,
-        termsOfServiceLabel: `I agree to ${parsedInput.organizationName}'s terms of service.`,
-        termsOfServiceText: `${parsedInput.organizationName} terms of service placeholder. Replace this in administration after first login.`,
-        privacyPolicyLabel: `I agree to ${parsedInput.organizationName}'s privacy policy.`,
-        privacyPolicyText: `${parsedInput.organizationName} privacy policy placeholder. Replace this in administration after first login.`,
-        version: "v1",
+        organizationName: parsedInput.organizationName,
+        locale: defaultLocale,
       });
 
       await tx
