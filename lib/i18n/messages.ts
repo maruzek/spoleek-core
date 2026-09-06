@@ -59,6 +59,15 @@ const en = {
     emailHint: "Use the address where you want the organization to contact you.",
     readTerms: "Read terms",
     readPrivacy: "Read privacy policy",
+    /** Consent wording follows the document kind; see docs/legal-policies.md §2.2. */
+    /**
+     * The title is rendered as a link to the document, so these take a
+     * placeholder and the form splits the sentence around it. Interpolating
+     * keeps the grammar natural in both locales, which prefix/suffix pairs
+     * cannot do.
+     */
+    acceptDocument: (title: string) => `I accept the ${title}.`,
+    confirmReadDocument: (title: string) => `I confirm I have read the ${title}.`,
     serverErrorTitle: "We couldn't submit the application",
     submit: "Submit application",
     submitting: "Submitting…",
@@ -171,6 +180,7 @@ const en = {
     invalidEmail: "Enter a valid email address.",
     acceptTerms: "You must accept the organization terms.",
     acceptPrivacy: "You must accept the privacy policy.",
+    acceptDocument: "You must respond to every document above.",
     tokenRequired: "Invitation token is required.",
     passwordTooShort: "Password must be at least 12 characters long.",
     confirmPasswordRequired: "Confirm your password.",
@@ -206,10 +216,11 @@ const en = {
         `Thank you for applying to join ${organizationName} on ${submittedAt}. An administrator will review your application. Once it is approved you will get a second email with a link to set your password and finish your profile — there is nothing more for you to do until then.`,
       selectionsTitle: "What you selected",
       agreedTitle: "What you agreed to",
-      agreedBody: (terms: string, privacy: string, submittedAt: string) =>
-        `You accepted the ${terms} and the ${privacy} on ${submittedAt}.`,
-      versionNote: (policyVersion: string) =>
-        `Document version ${policyVersion}. Keep this email as your record — quote this version if you ever need to ask which text you agreed to.`,
+      agreedBody: (submittedAt: string) =>
+        `On ${submittedAt} you responded to the documents below. Each link opens the exact version you were shown, kept unchanged on record.`,
+      documentLine: (title: string, version: string) => `${title} — version ${version}`,
+      versionNote:
+        "Keep this email as your record. These links stay pointed at the versions you responded to, even after the documents are updated.",
       notYou: (organizationName: string) =>
         `If you did not apply to ${organizationName}, you can ignore this email. Nothing further happens without an administrator approving the application.`,
     },
@@ -318,6 +329,9 @@ const cs: Dictionary = {
     emailHint: "Uveďte adresu, na které vás má organizace kontaktovat.",
     readTerms: "Přečíst podmínky",
     readPrivacy: "Přečíst zásady ochrany osobních údajů",
+    acceptDocument: (title: string) => `Souhlasím s dokumentem ${title}.`,
+    confirmReadDocument: (title: string) =>
+      `Potvrzuji, že jsem si přečetl(a) dokument ${title}.`,
     serverErrorTitle: "Přihlášku se nepodařilo odeslat",
     submit: "Odeslat přihlášku",
     submitting: "Odesílání…",
@@ -431,6 +445,7 @@ const cs: Dictionary = {
     invalidEmail: "Zadejte platnou e-mailovou adresu.",
     acceptTerms: "Musíte souhlasit s podmínkami organizace.",
     acceptPrivacy: "Musíte souhlasit se zásadami ochrany osobních údajů.",
+    acceptDocument: "Musíte se vyjádřit ke každému dokumentu výše.",
     tokenRequired: "Chybí token pozvánky.",
     passwordTooShort: "Heslo musí mít alespoň 12 znaků.",
     confirmPasswordRequired: "Potvrďte heslo.",
@@ -466,10 +481,11 @@ const cs: Dictionary = {
         `Děkujeme za přihlášku do organizace ${organizationName} podanou ${submittedAt}. Vaši přihlášku posoudí správce. Jakmile ji schválí, přijde vám druhý e-mail s odkazem pro nastavení hesla a doplnění profilu — do té doby nemusíte nic dělat.`,
       selectionsTitle: "Co jste vybrali",
       agreedTitle: "S čím jste souhlasili",
-      agreedBody: (terms: string, privacy: string, submittedAt: string) =>
-        `Dne ${submittedAt} jste odsouhlasili dokumenty ${terms} a ${privacy}.`,
-      versionNote: (policyVersion: string) =>
-        `Verze dokumentů: ${policyVersion}. Uschovejte si tento e-mail jako doklad — tuto verzi uveďte, pokud budete potřebovat zjistit, s jakým textem jste souhlasili.`,
+      agreedBody: (submittedAt: string) =>
+        `Dne ${submittedAt} jste se vyjádřili k níže uvedeným dokumentům. Každý odkaz otevře přesně tu verzi, která vám byla zobrazena; zůstává uložena beze změny.`,
+      documentLine: (title: string, version: string) => `${title} — verze ${version}`,
+      versionNote:
+        "Uschovejte si tento e-mail jako doklad. Odkazy vedou na verze, ke kterým jste se vyjádřili, i po pozdější aktualizaci dokumentů.",
       notYou: (organizationName: string) =>
         `Pokud jste se do organizace ${organizationName} nepřihlašovali, můžete tento e-mail ignorovat. Bez schválení správcem se nic dalšího neděje.`,
     },

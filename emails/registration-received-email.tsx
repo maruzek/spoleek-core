@@ -6,6 +6,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Tailwind,
@@ -20,9 +21,13 @@ type RegistrationReceivedEmailProps = {
   submittedAt: string;
   /** Groups the applicant picked, grouped by the category they came from. */
   selections: Array<{ categoryName: string; groupNames: string[] }>;
-  termsLabel: string;
-  privacyLabel: string;
-  policyVersion: string;
+  /**
+   * What the applicant responded to, each pinned to its archived version URL.
+   *
+   * The link must never point at the current version: the whole purpose of the
+   * record is that it survives the document being updated.
+   */
+  policies: Array<{ title: string; version: string; url: string }>;
 };
 
 export function RegistrationReceivedEmail({
@@ -30,9 +35,7 @@ export function RegistrationReceivedEmail({
   applicantName,
   submittedAt,
   selections,
-  termsLabel,
-  privacyLabel,
-  policyVersion,
+  policies,
 }: RegistrationReceivedEmailProps) {
   const t = getDictionary();
   const copy = t.emails.received;
@@ -95,11 +98,21 @@ export function RegistrationReceivedEmail({
                 {copy.agreedTitle}
               </Text>
               <Text className="m-0 mt-[8px] text-[14px] leading-[22px] text-[#52605a]">
-                {copy.agreedBody(termsLabel, privacyLabel, submittedAt)}
+                {copy.agreedBody(submittedAt)}
               </Text>
+              {policies.map((policy) => (
+                <Text
+                  key={policy.url}
+                  className="m-0 mt-[10px] text-[14px] leading-[22px]"
+                >
+                  <Link href={policy.url} className="text-brand underline">
+                    {copy.documentLine(policy.title, policy.version)}
+                  </Link>
+                </Text>
+              ))}
               <Hr className="my-[14px] border-[#e2e6e4]" />
               <Text className="m-0 text-[13px] leading-[20px] text-[#52605a]">
-                {copy.versionNote(policyVersion)}
+                {copy.versionNote}
               </Text>
             </Section>
 
@@ -123,9 +136,18 @@ RegistrationReceivedEmail.PreviewProps = {
     { categoryName: "Region", groupNames: ["Prague"] },
     { categoryName: "Activities", groupNames: ["Hiking", "Climbing"] },
   ],
-  termsLabel: "Membership terms",
-  privacyLabel: "Privacy policy",
-  policyVersion: "v1",
+  policies: [
+    {
+      title: "Membership terms",
+      version: "2.0",
+      url: "https://example.test/legal/terms/v/2.0",
+    },
+    {
+      title: "Privacy policy",
+      version: "1.0",
+      url: "https://example.test/legal/privacy/v/1.0",
+    },
+  ],
 } satisfies RegistrationReceivedEmailProps;
 
 export default RegistrationReceivedEmail;

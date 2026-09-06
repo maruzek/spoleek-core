@@ -22,7 +22,11 @@ import {
   notifyRegistrationReceived,
   notifyRegistrationSubmitted,
 } from "@/server/notifications/registration";
-import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
+import { getAppOrganization } from "@/server/queries/app";
+import {
+  listPoliciesForRegistration,
+  recordPolicyAcknowledgements,
+} from "@/server/queries/policies";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { findTenantMemberByEmail } from "@/server/queries/members";
 
@@ -37,10 +41,26 @@ export const submitJoinApplicationAction = actionClient
       throw new Error(t.errors.notSetUp);
     }
 
-    const policy = await getOrganizationPolicy(organization.id);
+    // Every published document has to be acknowledged to join. The required
+    // set is recomputed server-side; the form only decides what to render.
+    const requiredPolicies = await listPoliciesForRegistration(organization.id);
 
-    if (!policy) {
+    if (requiredPolicies.length === 0) {
       throw new Error(t.errors.policyIncomplete);
+    }
+
+    const acknowledged = new Set(parsedInput.acknowledgedPolicyVersionIds);
+    const missing = requiredPolicies.filter(
+      (entry) => !acknowledged.has(entry.version.id),
+    );
+
+    if (missing.length > 0) {
+      return {
+        success: false as const,
+        customFieldErrors: {} as Record<string, string[]>,
+        registrationGroupErrors: {} as Record<string, string[]>,
+        policyErrors: missing.map((entry) => entry.version.id),
+      };
     }
 
     const existingMember = await findTenantMemberByEmail(organization.id, parsedInput.email);
@@ -120,9 +140,6 @@ export const submitJoinApplicationAction = actionClient
         lastName,
         role: "member" as const,
         status: "pending" as const,
-        acceptedTermsAt: acceptedAt,
-        acceptedPrivacyAt: acceptedAt,
-        acceptedPolicyVersion: policy.version,
         updatedAt: acceptedAt,
       };
 
@@ -144,6 +161,15 @@ export const submitJoinApplicationAction = actionClient
       if (!targetMemberId) {
         throw new Error(t.errors.unableToResolveApplicant);
       }
+
+      // The applicant genuinely acted, so this is a real acknowledgement --
+      // one row per document, against the exact version they were shown.
+      await recordPolicyAcknowledgements(tx, {
+        orgId: organization.id,
+        memberId: targetMemberId,
+        policyVersionIds: requiredPolicies.map((entry) => entry.version.id),
+        method: "registration",
+      });
 
       await upsertMemberCustomFieldAnswers(tx, {
         orgId: organization.id,

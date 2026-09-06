@@ -40,8 +40,19 @@ type PublicJoinFormProps = {
   organizationName: string;
   customFields: MemberCustomField[];
   registrationGroupCategories: RegistrationGroupCategoryInput[];
-  termsLabel: string;
-  privacyLabel: string;
+  /** Published documents in force, one checkbox each. */
+  policies: JoinPolicy[];
+};
+
+/** Split point for the consent sentence; never rendered. */
+const TITLE_PLACEHOLDER = "\u0000";
+
+export type JoinPolicy = {
+  versionId: string;
+  slug: string;
+  title: string;
+  /** True: an agreement to accept. False: a disclosure to confirm reading. */
+  requiresAcceptance: boolean;
 };
 
 export function PublicJoinForm({
@@ -49,8 +60,7 @@ export function PublicJoinForm({
   organizationName,
   customFields,
   registrationGroupCategories,
-  termsLabel,
-  privacyLabel,
+  policies,
 }: PublicJoinFormProps) {
   const dict = dictionaryFor(locale);
   const t = dict.join;
@@ -68,8 +78,7 @@ export function PublicJoinForm({
       firstName: "",
       lastName: "",
       email: "",
-      acceptTerms: false,
-      acceptPrivacy: false,
+      acknowledgedPolicyVersionIds: [] as string[],
       registrationGroupSelections: Object.fromEntries(
         registrationGroupCategories.map((category) => [category.id, null]),
       ),
@@ -83,6 +92,9 @@ export function PublicJoinForm({
   const fieldErrors = submitAction.result.validationErrors;
   const customFieldErrors = submitAction.result.data?.customFieldErrors ?? {};
   const registrationGroupErrors = submitAction.result.data?.registrationGroupErrors ?? {};
+  // Version ids the server rejected as unacknowledged. The server recomputes the
+  // required set, so this is authoritative even if the form rendered otherwise.
+  const policyErrors = submitAction.result.data?.policyErrors ?? [];
 
   if (submitted) {
     return (
@@ -209,62 +221,72 @@ export function PublicJoinForm({
           </form.Field>
         ))}
 
-        <form.Field name="acceptTerms">
-          {(formField) => (
-            <Field data-invalid={Boolean(fieldErrors?.acceptTerms?._errors?.[0])}>
-              <FieldContent className="gap-3">
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="join-accept-terms"
-                    name="acceptTerms"
-                    checked={formField.state.value}
-                    onCheckedChange={(checked) => formField.handleChange(Boolean(checked))}
-                    aria-invalid={Boolean(fieldErrors?.acceptTerms?._errors?.[0])}
-                  />
-                  <div className="flex flex-col gap-2">
-                    <FieldLabel htmlFor="join-accept-terms" className="leading-6">
-                      {termsLabel}{" "}
-                      <Link href="/legal/terms" className="underline underline-offset-4">
-                        {t.readTerms}
-                      </Link>
-                    </FieldLabel>
-                    {fieldErrors?.acceptTerms?._errors?.[0] ? (
-                      <FieldError>{fieldErrors.acceptTerms._errors[0]}</FieldError>
-                    ) : null}
-                  </div>
-                </div>
-              </FieldContent>
-            </Field>
-          )}
-        </form.Field>
+        <form.Field name="acknowledgedPolicyVersionIds">
+          {(formField) => {
+            const accepted = formField.state.value;
+            const missing =
+              policyErrors.length > 0 || Boolean(fieldErrors?.acknowledgedPolicyVersionIds);
 
-        <form.Field name="acceptPrivacy">
-          {(formField) => (
-            <Field data-invalid={Boolean(fieldErrors?.acceptPrivacy?._errors?.[0])}>
-              <FieldContent className="gap-3">
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="join-accept-privacy"
-                    name="acceptPrivacy"
-                    checked={formField.state.value}
-                    onCheckedChange={(checked) => formField.handleChange(Boolean(checked))}
-                    aria-invalid={Boolean(fieldErrors?.acceptPrivacy?._errors?.[0])}
-                  />
-                  <div className="flex flex-col gap-2">
-                    <FieldLabel htmlFor="join-accept-privacy" className="leading-6">
-                      {privacyLabel}{" "}
-                      <Link href="/legal/privacy" className="underline underline-offset-4">
-                        {t.readPrivacy}
-                      </Link>
-                    </FieldLabel>
-                    {fieldErrors?.acceptPrivacy?._errors?.[0] ? (
-                      <FieldError>{fieldErrors.acceptPrivacy._errors[0]}</FieldError>
-                    ) : null}
-                  </div>
-                </div>
-              </FieldContent>
-            </Field>
-          )}
+            return (
+              <Field data-invalid={missing}>
+                <FieldContent className="gap-3">
+                  {policies.map((policy) => {
+                    const checked = accepted.includes(policy.versionId);
+                    // The sentence is interpolated with a placeholder and split
+                    // around it, so the document title itself becomes the link
+                    // without hard-coding word order that differs per locale.
+                    const [before, after] = (
+                      policy.requiresAcceptance
+                        ? t.acceptDocument(TITLE_PLACEHOLDER)
+                        : t.confirmReadDocument(TITLE_PLACEHOLDER)
+                    ).split(TITLE_PLACEHOLDER);
+
+                    return (
+                      <div key={policy.versionId} className="flex items-start gap-3">
+                        <Checkbox
+                          id={`join-policy-${policy.versionId}`}
+                          // Nudged down to sit on the first line's centre:
+                          // FieldLabel runs at leading-6, the box is 16px.
+                          className="mt-1 shrink-0"
+                          checked={checked}
+                          aria-invalid={missing}
+                          onCheckedChange={(value) =>
+                            formField.handleChange(
+                              value
+                                ? [...accepted, policy.versionId]
+                                : accepted.filter((id) => id !== policy.versionId),
+                            )
+                          }
+                        />
+                        <FieldLabel
+                          htmlFor={`join-policy-${policy.versionId}`}
+                          // FieldLabel is a flex row, so a bare text + link pair
+                          // becomes two flex items and the link floats off to
+                          // the side once the text wraps. One inline child keeps
+                          // it a single sentence.
+                          className="block leading-6 font-normal"
+                        >
+                          {before}
+                          <Link
+                            href={`/legal/${policy.slug}`}
+                            target="_blank"
+                            className="underline underline-offset-4"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {policy.title}
+                          </Link>
+                          {after}
+                        </FieldLabel>
+                      </div>
+                    );
+                  })}
+                  {missing ? (
+                    <FieldError>{dict.errors.acceptDocument}</FieldError>
+                  ) : null}
+                </FieldContent>
+              </Field>
+            );
+          }}
         </form.Field>
       </FieldGroup>
 

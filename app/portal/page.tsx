@@ -74,10 +74,10 @@ export default async function PortalOverviewPage() {
             <Fact label="Membership status" value={member.status} />
             <Fact label="Role" value={member.role.replace("_", " ")} />
             <Fact
-              label="Policies accepted"
-              value={
-                member.acceptedTermsAt && member.acceptedPrivacyAt ? "Yes" : "Pending"
-              }
+              label="Legal documents"
+              // Reaching this page means the gate let the member through, so
+              // every document in force is acknowledged by definition.
+              value="Up to date"
             />
             <Fact label="Linked at" value={formatDateTime(member.linkedAt)} />
           </CardContent>

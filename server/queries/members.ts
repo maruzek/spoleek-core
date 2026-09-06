@@ -32,6 +32,11 @@ import {
   resolveMemberManagementScope,
 } from "@/server/lib/member-management-scope";
 import { getOverdueFeesByMember } from "@/server/queries/payments";
+import { listMemberAcknowledgements } from "@/server/queries/policies";
+
+export type MemberPolicyAcknowledgementRow = Awaited<
+  ReturnType<typeof listMemberAcknowledgements>
+>[number];
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
 
@@ -76,6 +81,8 @@ export type MemberEditorMetadata = {
   customFieldDetails: MemberCustomFieldDisplay[];
   inviteState: MemberInviteState;
   memberTimeline: MemberTimelineEvent[];
+  /** Empty means never shown a document, which is not the same as refused. */
+  policyAcknowledgements: MemberPolicyAcknowledgementRow[];
 };
 
 export type MemberEditorData = {
@@ -155,8 +162,9 @@ function buildMemberTimeline(args: {
   member: typeof tenantMembers.$inferSelect;
   invite: MemberInviteRow | null;
   primaryGroup: MemberGroupAssignment | null;
+  policyAcknowledgements: MemberPolicyAcknowledgementRow[];
 }) {
-  const { member, invite, primaryGroup } = args;
+  const { member, invite, primaryGroup, policyAcknowledgements } = args;
   const events: MemberTimelineEvent[] = [
     {
       id: "member-created",
@@ -209,22 +217,23 @@ function buildMemberTimeline(args: {
     });
   }
 
-  if (member.acceptedTermsAt) {
+  // One event per document version actually acknowledged. The old pair of
+  // timestamps could not say *which* text was agreed to, which is the only
+  // thing that makes the record worth keeping.
+  for (const acknowledgement of policyAcknowledgements) {
     events.push({
-      id: "accepted-terms",
-      title: "Terms accepted",
-      description: "The member accepted the organization terms of service.",
-      date: member.acceptedTermsAt,
-      tone: "success",
-    });
-  }
-
-  if (member.acceptedPrivacyAt) {
-    events.push({
-      id: "accepted-privacy",
-      title: "Privacy policy accepted",
-      description: "The member accepted the organization privacy policy.",
-      date: member.acceptedPrivacyAt,
+      id: `policy-${acknowledgement.versionId}`,
+      title: acknowledgement.requiresAcceptance
+        ? `${acknowledgement.documentTitle} accepted`
+        : `${acknowledgement.documentTitle} acknowledged`,
+      description:
+        `Version ${acknowledgement.version ?? "—"}` +
+        (acknowledgement.method === "admin_recorded"
+          ? ", recorded by an administrator from a signature made outside the app."
+          : acknowledgement.method === "registration"
+            ? ", during registration."
+            : "."),
+      date: acknowledgement.acknowledgedAt,
       tone: "success",
     });
   }
@@ -660,6 +669,7 @@ export async function getMemberEditorData(
   const primaryGroup = getPrimaryGroup(groupAssignments);
   const customFieldDetails = customFieldDisplayByMember.get(member.id) ?? [];
   const inviteState = toInviteState(invite);
+  const policyAcknowledgements = await listMemberAcknowledgements(orgId, member.id);
 
   return {
     member,
@@ -674,7 +684,9 @@ export async function getMemberEditorData(
         member,
         invite,
         primaryGroup,
+        policyAcknowledgements,
       }),
+      policyAcknowledgements,
     },
   };
 }

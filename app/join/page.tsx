@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { defaultLocale, getDictionary } from "@/lib/i18n";
 import { listRegistrationGroupCategories } from "@/server/lib/group-registration";
 import { getAppOrganization, getOrganizationJoinPage } from "@/server/queries/app";
+import { listPoliciesForRegistration } from "@/server/queries/policies";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 
 export default async function JoinPage() {
@@ -19,11 +20,20 @@ export default async function JoinPage() {
     redirect("/setup");
   }
 
-  const [joinPage, registrationFields, registrationGroupCategories] = await Promise.all([
-    getOrganizationJoinPage(organization.id),
-    listActiveMemberCustomFields(organization.id, ["registration"]),
-    listRegistrationGroupCategories(organization.id),
-  ]);
+  const [joinPage, registrationFields, registrationGroupCategories, policyEntries] =
+    await Promise.all([
+      getOrganizationJoinPage(organization.id),
+      listActiveMemberCustomFields(organization.id, ["registration"]),
+      listRegistrationGroupCategories(organization.id),
+      listPoliciesForRegistration(organization.id),
+    ]);
+
+  const policies = policyEntries.map(({ document, version }) => ({
+    versionId: version.id,
+    slug: document.slug,
+    title: document.title,
+    requiresAcceptance: document.requiresAcceptance,
+  }));
 
   if (!joinPage) {
     redirect("/setup");
@@ -63,8 +73,7 @@ export default async function JoinPage() {
           organizationName={organization.name}
           customFields={registrationFields}
           registrationGroupCategories={registrationGroupCategories}
-          termsLabel={joinPage.termsOfServiceLabel}
-          privacyLabel={joinPage.privacyPolicyLabel}
+          policies={policies}
         />
       </section>
     </PublicShell>

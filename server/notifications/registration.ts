@@ -9,12 +9,12 @@ import { db } from "@/server/db";
 import {
   groupCategories,
   groups,
-  organizationPolicies,
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
 import { resolveRegistrationRecipients } from "@/server/notifications/recipients";
 import { sendNotificationEmails } from "@/server/notifications/send";
+import { listMemberAcknowledgements } from "@/server/queries/policies";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 
 // The admin-facing "new application" notification below stays English on
@@ -80,7 +80,6 @@ async function loadApplicant(orgId: string, memberId: string) {
       lastName: tenantMembers.lastName,
       email: tenantMembers.email,
       createdAt: tenantMembers.createdAt,
-      acceptedPolicyVersion: tenantMembers.acceptedPolicyVersion,
     })
     .from(tenantMembers)
     .where(and(eq(tenantMembers.orgId, orgId), eq(tenantMembers.id, memberId)))
@@ -167,15 +166,25 @@ export async function notifyRegistrationReceived(params: {
 
     const { organization, member, displayName } = applicant;
 
-    const [policy] = await db
-      .select({
-        termsOfServiceLabel: organizationPolicies.termsOfServiceLabel,
-        privacyPolicyLabel: organizationPolicies.privacyPolicyLabel,
-        version: organizationPolicies.version,
-      })
-      .from(organizationPolicies)
-      .where(eq(organizationPolicies.orgId, params.orgId))
-      .limit(1);
+    // Read back what the applicant actually acknowledged, not what is
+    // configured now: a policy bump between the application and this send must
+    // not rewrite the record the email states.
+    const acknowledgements = await listMemberAcknowledgements(
+      params.orgId,
+      params.memberId,
+    );
+    // Pinned to the archived version URL, never to /legal/<slug>: the record is
+    // only worth keeping if it still resolves to the text that was shown after
+    // the document has moved on.
+    const policies = acknowledgements
+      .filter((row) => row.version !== null)
+      .map((row) => ({
+        title: row.documentTitle,
+        version: row.version as string,
+        url: appUrl(
+          `/legal/${row.documentSlug}/v/${encodeURIComponent(row.version as string)}`,
+        ),
+      }));
 
     const selections = await loadSelectionsByCategory(params.orgId, params.groupIds);
     const submittedAt = formatDate(member.createdAt ?? new Date(), organization.locale);
@@ -188,18 +197,14 @@ export async function notifyRegistrationReceived(params: {
       subject: t.emails.received.subject(organization.name),
       metadata: {
         groupIds: params.groupIds,
-        // The version as accepted, not as currently configured — a policy bump
-        // between the application and this send must not rewrite the record.
-        policyVersion: member.acceptedPolicyVersion,
+        policyVersions: policies.map((policy) => policy.version),
       },
       react: RegistrationReceivedEmail({
         organizationName: organization.name,
         applicantName: displayName,
         submittedAt,
         selections,
-        termsLabel: policy?.termsOfServiceLabel ?? "Terms of service",
-        privacyLabel: policy?.privacyPolicyLabel ?? "Privacy policy",
-        policyVersion: member.acceptedPolicyVersion ?? policy?.version ?? "v1",
+        policies,
       }),
     });
   } catch (error) {

@@ -16,12 +16,12 @@ export const joinApplicationSchema = z.object({
   firstName: z.string().trim().min(1, t.firstNameRequired),
   lastName: z.string().trim().min(1, t.lastNameRequired),
   email: z.email(t.invalidEmail),
-  acceptTerms: z
-    .boolean()
-    .refine((value) => value, t.acceptTerms),
-  acceptPrivacy: z
-    .boolean()
-    .refine((value) => value, t.acceptPrivacy),
+  /**
+   * Version ids the applicant ticked. The set of documents is whatever the org
+   * has published, so this replaces the two hardcoded booleans; the action
+   * recomputes what is actually required rather than trusting the client.
+   */
+  acknowledgedPolicyVersionIds: z.array(z.uuid()).default([]),
   registrationGroupSelections: registrationGroupSelectionsSchema,
   customFieldAnswers: memberCustomFieldAnswersSchema.default({}),
 });

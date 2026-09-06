@@ -237,8 +237,6 @@ async function main() {
         lastName: `Admin ${fixture.name}`,
         role: "member",
         status: "active",
-        acceptedTermsAt: new Date(),
-        acceptedPrivacyAt: new Date(),
       })
       .returning({ id: tenantMembers.id });
 
@@ -263,8 +261,6 @@ async function main() {
           lastName,
           role: "member",
           status: "active",
-          acceptedTermsAt: new Date(),
-          acceptedPrivacyAt: new Date(),
         })
         .returning({ id: tenantMembers.id });
 
@@ -442,8 +438,6 @@ async function main() {
           lastName: "Opožděný",
           role: "member",
           status: "active",
-          acceptedTermsAt: new Date(),
-          acceptedPrivacyAt: new Date(),
         })
         .returning({ id: tenantMembers.id });
 

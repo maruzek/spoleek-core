@@ -91,8 +91,9 @@ export const joinOrganizationAction = authActionClient
       const patch = {
         firstName,
         lastName,
-        acceptedTermsAt: new Date(),
-        acceptedPrivacyAt: new Date(),
+        // No consent recorded: this flow never asks for one. The portal gate
+        // presents the documents on the member's next page load, which is the
+        // only place the acknowledgement is real.
         updatedAt: new Date(),
       };
 
@@ -131,8 +132,6 @@ export const joinOrganizationAction = authActionClient
           role: "member",
           status: "pending",
           linkedAt: new Date(),
-          acceptedTermsAt: new Date(),
-          acceptedPrivacyAt: new Date(),
         }).returning({ id: tenantMembers.id });
 
         memberId = inserted!.id;

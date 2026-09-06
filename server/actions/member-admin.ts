@@ -307,8 +307,10 @@ export const createShadowMemberAction = authActionClient
         ),
         status: parsedInput.status,
         linkedAt: matchedUser ? new Date() : null,
-        acceptedTermsAt: matchedUser ? new Date() : null,
-        acceptedPrivacyAt: matchedUser ? new Date() : null,
+        // No consent is recorded here. Matching an existing user account means
+        // the person has a login, not that they were shown anything — the two
+        // used to be conflated. They are asked by the portal gate on their next
+        // visit; see docs/legal-policies.md §5.
       }).returning({ id: tenantMembers.id });
 
       await syncManageableGroupMemberships({
@@ -813,12 +815,7 @@ export const updateMemberAction = authActionClient
           linkedAt:
             member.linkedAt ??
             (member.userId == null && matchedUser ? new Date() : null),
-          acceptedTermsAt:
-            member.acceptedTermsAt ??
-            (member.userId == null && matchedUser ? new Date() : null),
-          acceptedPrivacyAt:
-            member.acceptedPrivacyAt ??
-            (member.userId == null && matchedUser ? new Date() : null),
+          // Linking an account is not consent; nothing is stamped here.
           updatedAt: new Date(),
         })
         .where(
@@ -1123,8 +1120,9 @@ export const importMembersAction = authActionClient
                 workspaceUserId: row.workspaceUserId ?? null,
                 workspaceUserEmail: row.workspaceUserEmail ?? null,
                 linkedAt: matchedUser ? new Date() : null,
-                acceptedTermsAt: matchedUser ? new Date() : null,
-                acceptedPrivacyAt: matchedUser ? new Date() : null,
+                // Imported members have never been shown anything. Backdating a
+                // consent that did not happen is worse than an empty record:
+                // they are asked at first login by the portal gate.
               })
               .returning({ id: tenantMembers.id });
 

@@ -281,3 +281,91 @@ export async function getPolicyVersionByLabel(documentId: string, version: strin
 
   return row ?? null;
 }
+
+/**
+ * The documents a registration form must collect, with the version in force.
+ *
+ * Every active document counts: registration is the one moment where the whole
+ * set can be presented at once, and a member who joins without seeing the
+ * privacy notice is one the portal gate has to stop on their first visit.
+ */
+export async function listPoliciesForRegistration(orgId: string, now = new Date()) {
+  const documents = await listPolicyDocuments(orgId);
+
+  const entries = await Promise.all(
+    documents.map(async (document) => {
+      const version = await getCurrentPolicyVersion(document.id, now);
+      return version ? { document, version } : null;
+    }),
+  );
+
+  return entries.filter((entry) => entry !== null);
+}
+
+/**
+ * What a member has acknowledged, newest first, for the admin and portal views.
+ *
+ * An empty result is meaningful and must not be rendered as a blank date: it
+ * means the member has never been shown anything, which is the normal state for
+ * an imported or admin-created member and the thing an admin needs to see.
+ */
+export async function listMemberAcknowledgements(orgId: string, memberId: string) {
+  return db
+    .select({
+      acknowledgedAt: memberPolicyAcknowledgements.acknowledgedAt,
+      method: memberPolicyAcknowledgements.method,
+      documentId: policyDocuments.id,
+      documentTitle: policyDocuments.title,
+      documentSlug: policyDocuments.slug,
+      requiresAcceptance: policyDocuments.requiresAcceptance,
+      version: policyVersions.version,
+      versionId: policyVersions.id,
+    })
+    .from(memberPolicyAcknowledgements)
+    .innerJoin(
+      policyVersions,
+      eq(policyVersions.id, memberPolicyAcknowledgements.policyVersionId),
+    )
+    .innerJoin(policyDocuments, eq(policyDocuments.id, policyVersions.documentId))
+    .where(
+      and(
+        eq(memberPolicyAcknowledgements.orgId, orgId),
+        eq(memberPolicyAcknowledgements.memberId, memberId),
+      ),
+    )
+    .orderBy(desc(memberPolicyAcknowledgements.acknowledgedAt));
+}
+
+/**
+ * Records a member's acknowledgements inside an existing transaction.
+ *
+ * Shared by every path where a member genuinely acts: the public join form and
+ * the authenticated registration flow. Import and admin-create deliberately do
+ * NOT call it — nobody acted there, and a fabricated record is worse than an
+ * empty one.
+ */
+export async function recordPolicyAcknowledgements(
+  tx: Pick<typeof db, "insert">,
+  params: {
+    orgId: string;
+    memberId: string;
+    policyVersionIds: string[];
+    method: "registration" | "portal_prompt" | "admin_recorded" | "import_notice";
+  },
+) {
+  if (params.policyVersionIds.length === 0) {
+    return;
+  }
+
+  await tx
+    .insert(memberPolicyAcknowledgements)
+    .values(
+      params.policyVersionIds.map((policyVersionId) => ({
+        orgId: params.orgId,
+        memberId: params.memberId,
+        policyVersionId,
+        method: params.method,
+      })),
+    )
+    .onConflictDoNothing();
+}

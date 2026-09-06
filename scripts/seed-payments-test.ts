@@ -239,8 +239,6 @@ async function main() {
         status: scenario.memberStatus,
         workspaceUserEmail: workspaceEmail,
         workspaceProvisionedAt: workspaceEmail ? new Date() : null,
-        acceptedTermsAt: new Date(),
-        acceptedPrivacyAt: new Date(),
       })
       .returning({ id: tenantMembers.id });
 

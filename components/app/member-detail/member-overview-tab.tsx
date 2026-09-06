@@ -57,6 +57,7 @@ export function MemberOverviewTab({
   onCreateWorkspaceAccount?: () => void;
 }) {
   const { formatDateTime } = useFormatters();
+  const policyAcknowledgements = metadata.policyAcknowledgements;
 
   const router = useRouter();
   const { organization } = useAppShell();
@@ -247,27 +248,31 @@ export function MemberOverviewTab({
             value={<span className="capitalize">{invite.value}</span>}
             description={invite.description}
           />
-          <DefinitionRow
-            label="Terms accepted"
-            value={
-              member.acceptedTermsAt
-                ? formatDateTime(member.acceptedTermsAt)
-                : "Not accepted"
-            }
-            description={
-              member.acceptedPolicyVersion
-                ? `Policy version ${member.acceptedPolicyVersion}`
-                : undefined
-            }
-          />
-          <DefinitionRow
-            label="Privacy accepted"
-            value={
-              member.acceptedPrivacyAt
-                ? formatDateTime(member.acceptedPrivacyAt)
-                : "Not accepted"
-            }
-          />
+          {policyAcknowledgements.length === 0 ? (
+            <DefinitionRow
+              label="Legal documents"
+              value="Never shown"
+              // "Never shown" rather than "not accepted": this is the normal
+              // state for an imported or admin-created member, and reporting it
+              // as a refusal would misdescribe what happened.
+              description="This member has not been presented with any document yet. The portal asks them on their next visit."
+            />
+          ) : (
+            policyAcknowledgements.map((acknowledgement) => (
+              <DefinitionRow
+                key={acknowledgement.versionId}
+                label={acknowledgement.documentTitle}
+                value={formatDateTime(acknowledgement.acknowledgedAt)}
+                description={`Version ${acknowledgement.version ?? "—"}${
+                  acknowledgement.method === "admin_recorded"
+                    ? " · recorded by an administrator"
+                    : acknowledgement.method === "registration"
+                      ? " · at registration"
+                      : ""
+                }`}
+              />
+            ))
+          )}
         </DefinitionList>
       </DetailSection>
     </div>

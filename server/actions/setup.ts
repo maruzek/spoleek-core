@@ -111,8 +111,8 @@ export const createOrganizationSetupAction = authActionClient
           lastName: adminName.lastName,
           role: "org_admin",
           status: "active",
-          acceptedTermsAt: new Date(),
-          acceptedPrivacyAt: new Date(),
+          // No consent stamped: at first-run there are no published policy
+          // versions to acknowledge yet.
           linkedAt: new Date(),
         });
       }
