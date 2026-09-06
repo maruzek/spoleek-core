@@ -1,15 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { PAYMENT_STATUS_COLORS } from "@/lib/payments";
 import type { MemberPaymentStatus } from "@/server/db/schema";
-
-const STATUS_VARIANTS: Record<
-  MemberPaymentStatus,
-  "destructive" | "secondary" | "default" | "outline"
-> = {
-  overdue: "destructive",
-  pending: "secondary",
-  paid: "default",
-  cancelled: "outline",
-};
 
 export function PaymentStatusBadge({
   status,
@@ -25,13 +17,15 @@ export function PaymentStatusBadge({
    */
   emphasizeUnpaid?: boolean;
 }) {
-  const variant =
+  // The badge carries its own tint, so it always renders on the neutral
+  // `outline` base rather than one of the themed variants.
+  const tint =
     emphasizeUnpaid && status === "pending"
-      ? "destructive"
-      : STATUS_VARIANTS[status];
+      ? PAYMENT_STATUS_COLORS.overdue.badge
+      : PAYMENT_STATUS_COLORS[status].badge;
 
   return (
-    <Badge variant={variant} className={className}>
+    <Badge variant="outline" className={cn("capitalize", tint, className)}>
       {status}
     </Badge>
   );

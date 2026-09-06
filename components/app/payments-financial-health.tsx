@@ -5,7 +5,7 @@ import * as RechartsPrimitive from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { PaymentStats } from "@/server/queries/payments";
-import { feeToMajorUnits } from "@/lib/payments";
+import { feeToMajorUnits, PAYMENT_STATUS_COLORS } from "@/lib/payments";
 
 function formatCents(cents: number, currency: string): string {
   return new Intl.NumberFormat("cs-CZ", { style: "currency", currency, maximumFractionDigits: 0 }).format(
@@ -45,9 +45,9 @@ function StatCard({
 }
 
 const chartConfig = {
-  paid: { label: "Paid", color: "#176b4d" },
-  pending: { label: "Pending", color: "#3b82f6" },
-  overdue: { label: "Overdue", color: "#ef4444" },
+  paid: { label: "Paid", color: PAYMENT_STATUS_COLORS.paid.chart },
+  pending: { label: "Pending", color: PAYMENT_STATUS_COLORS.pending.chart },
+  overdue: { label: "Overdue", color: PAYMENT_STATUS_COLORS.overdue.chart },
 } satisfies ChartConfig;
 
 export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: PaymentStats; currency?: string }) {

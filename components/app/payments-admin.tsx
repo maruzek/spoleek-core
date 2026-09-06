@@ -166,13 +166,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       header: "Groups",
       meta: { label: "Groups" },
       cell: ({ row }) =>
-        row.original.memberGroups.length ? (
-          <span className="text-xs text-muted-foreground">
-            {row.original.memberGroups.map((g) => g.name).join(", ")}
-          </span>
-        ) : (
-          "—"
-        ),
+        row.original.memberGroups.map((g) => g.name).join(", ") || "—",
     }),
     columnHelper.accessor("variableSymbol", {
       header: "VS",

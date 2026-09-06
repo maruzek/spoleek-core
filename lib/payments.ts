@@ -1,6 +1,13 @@
-import type { MemberPayment, MemberPaymentStatus, MemberPaymentType } from "@/server/db/schema";
+import type {
+  MemberPayment,
+  MemberPaymentStatus,
+  MemberPaymentType,
+} from "@/server/db/schema";
 
-export function getPaymentTitle(type: MemberPaymentType, periodLabel: string): string {
+export function getPaymentTitle(
+  type: MemberPaymentType,
+  periodLabel: string,
+): string {
   switch (type) {
     case "membership_fee":
       return `Membership payment for ${periodLabel}`;
@@ -10,7 +17,10 @@ export function getPaymentTitle(type: MemberPaymentType, periodLabel: string): s
 }
 
 export function buildSpdString(
-  payment: Pick<MemberPayment, "bankAccount" | "amount" | "currency" | "periodLabel" | "variableSymbol">,
+  payment: Pick<
+    MemberPayment,
+    "bankAccount" | "amount" | "currency" | "periodLabel" | "variableSymbol"
+  >,
   memberName?: string,
 ): string | null {
   if (!payment.bankAccount) return null;
@@ -21,7 +31,9 @@ export function buildSpdString(
     ? `${memberName} ${payment.periodLabel}`.slice(0, 60)
     : payment.periodLabel;
   const base = `SPD*1.0*ACC:${iban}*AM:${amount}*CC:${payment.currency}*MSG:${msg}`;
-  return payment.variableSymbol ? `${base}*X-VS:${payment.variableSymbol}` : base;
+  return payment.variableSymbol
+    ? `${base}*X-VS:${payment.variableSymbol}`
+    : base;
 }
 
 /**
@@ -31,11 +43,15 @@ export function buildSpdString(
  * previously skipped them, which is why an org default of 100 CZK surfaced as
  * "10000" on the group override.
  */
-export function feeToMajorUnits(minor: number | null | undefined): number | null {
+export function feeToMajorUnits(
+  minor: number | null | undefined,
+): number | null {
   return minor == null ? null : minor / 100;
 }
 
-export function feeToMinorUnits(major: number | null | undefined): number | null {
+export function feeToMinorUnits(
+  major: number | null | undefined,
+): number | null {
   return major == null ? null : Math.round(major * 100);
 }
 
@@ -68,6 +84,44 @@ export const PAYMENT_STATUS_SORT_ORDER: Record<MemberPaymentStatus, number> = {
 };
 
 /** Comparator for TanStack Table / Array#sort over payment statuses. */
-export function comparePaymentStatus(a: MemberPaymentStatus, b: MemberPaymentStatus): number {
+export function comparePaymentStatus(
+  a: MemberPaymentStatus,
+  b: MemberPaymentStatus,
+): number {
   return PAYMENT_STATUS_SORT_ORDER[a] - PAYMENT_STATUS_SORT_ORDER[b];
 }
+
+/**
+ * One palette for payment statuses, shared by the badges, the stat cards and
+ * the pie chart. These lived in three places before — the chart drew pending in
+ * blue while the table badge used the grey `secondary` variant, so a pending
+ * row simply vanished among the muted text.
+ *
+ * `chart` is a raw hex because Recharts fills SVG, not classes; `badge` is a
+ * tinted background plus foreground so the badge stays legible in both themes.
+ */
+export const PAYMENT_STATUS_COLORS: Record<
+  MemberPaymentStatus,
+  { chart: string; badge: string }
+> = {
+  overdue: {
+    chart: "#ef4444",
+    badge:
+      "border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200",
+  },
+  pending: {
+    chart: "#3b82f6",
+    badge:
+      "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200",
+  },
+  paid: {
+    chart: "#176b4d",
+    badge:
+      "border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
+  },
+  cancelled: {
+    chart: "#94a3b8",
+    badge:
+      "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
+  },
+};
