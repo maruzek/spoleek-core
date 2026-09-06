@@ -8,6 +8,7 @@ import {
   GlobeIcon,
   LanguagesIcon,
   Link2Icon,
+  ScaleIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -30,20 +31,18 @@ import {
   type LocalizationSettingsState,
 } from "@/components/app/localization-settings-card";
 import { GroupLinksSettingsCard } from "@/components/app/group-links-settings-card";
+import { LegalSettingsCard } from "@/components/app/legal-settings-card";
 import type { GroupWorkspaceLinkRow } from "@/server/queries/workspace-group-links";
+import type { PolicyDocumentRow } from "@/server/queries/policies";
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 
 type AdminSettingsTabsProps = {
   organization: Pick<Organization, "joinPageHeadline" | "joinPageBody">;
   policy: Pick<
     OrganizationPolicy,
-    | "memberInviteEmailSubject"
-    | "memberInviteEmailBody"
-    | "termsOfServiceLabel"
-    | "termsOfServiceText"
-    | "privacyPolicyLabel"
-    | "privacyPolicyText"
+    "memberInviteEmailSubject" | "memberInviteEmailBody"
   >;
+  policyDocuments: PolicyDocumentRow[];
   membershipState: MembershipSettingsState;
   membershipLocale: string;
   feeManagingCategoryName: string | null;
@@ -56,6 +55,7 @@ type AdminSettingsTabsProps = {
 
 const VALID_TABS = [
   "join",
+  "legal",
   "membership",
   "notifications",
   "groups",
@@ -71,6 +71,7 @@ function toValidTab(tab: string | undefined): TabValue {
 export function AdminSettingsTabs({
   organization,
   policy,
+  policyDocuments,
   membershipState,
   membershipLocale,
   feeManagingCategoryName,
@@ -95,6 +96,10 @@ export function AdminSettingsTabs({
         <TabsTrigger value="join">
           <FileTextIcon data-icon="inline-start" />
           Join page
+        </TabsTrigger>
+        <TabsTrigger value="legal">
+          <ScaleIcon data-icon="inline-start" />
+          Legal
         </TabsTrigger>
         <TabsTrigger value="membership">
           <UsersIcon data-icon="inline-start" />
@@ -121,6 +126,12 @@ export function AdminSettingsTabs({
       <TabsContent value="join">
         <div className="max-w-2xl pt-6">
           <JoinPageSettingsForm organization={organization} policy={policy} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="legal">
+        <div className="pt-6">
+          <LegalSettingsCard documents={policyDocuments} />
         </div>
       </TabsContent>
 

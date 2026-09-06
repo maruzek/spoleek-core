@@ -45,10 +45,6 @@ export const saveJoinPageSettingsAction = orgAdminActionClient
         .set({
           memberInviteEmailSubject: parsedInput.memberInviteEmailSubject.trim(),
           memberInviteEmailBody: parsedInput.memberInviteEmailBody.trim(),
-          termsOfServiceLabel: parsedInput.termsOfServiceLabel.trim(),
-          termsOfServiceText: parsedInput.termsOfServiceText.trim(),
-          privacyPolicyLabel: parsedInput.privacyPolicyLabel.trim(),
-          privacyPolicyText: parsedInput.privacyPolicyText.trim(),
           updatedAt: new Date(),
         })
         .where(and(eq(organizationPolicies.orgId, organization.id)));

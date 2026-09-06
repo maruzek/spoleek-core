@@ -64,14 +64,20 @@ export async function getPolicyDraft(documentId: string) {
 }
 
 /**
- * How many members a publish would affect, split by what they have done so far.
+ * Where the membership stands on this document *right now*.
  *
- * Shown in the publish dialog before anything is written, because "312 members
- * will be asked to re-acknowledge" is the number that stops a careless publish
- * — and it is the recipient count if the admin also chooses to email them.
+ * These are facts about the present, not a forecast. The publish dialog turns
+ * them into a forecast itself, because the answer depends on the material-change
+ * checkbox the admin is still holding:
  *
- * Deleted members are excluded: they are not going to log in, and counting
- * them makes the number look alarming for no reason.
+ * - a material publish asks **everyone** (`total`). Nobody has acknowledged the
+ *   new version yet, and the members already on the current one are re-prompted
+ *   precisely because the change is material.
+ * - a non-material publish asks only `neverShown` — existing acknowledgements
+ *   stand, but somebody who has never seen the document is still owed it.
+ *
+ * Deleted members are excluded: they are not going to log in, and counting them
+ * makes the number look alarming for no reason.
  */
 export async function countPolicyAudience(orgId: string, documentId: string) {
   const current = await getCurrentPolicyVersion(documentId);
@@ -121,11 +127,14 @@ export async function countPolicyAudience(orgId: string, documentId: string) {
     );
 
   return {
+    /** Active members, the ceiling for any prompt. */
     total,
+    /** Acknowledged the version currently in force. */
     onCurrent,
+    /** Never acknowledged any version of this document. */
     neverShown,
-    /** Everyone who would be prompted by a material publish. */
-    outstanding: total - onCurrent,
+    /** On an older version: acknowledged something, but not the current one. */
+    behindCurrent: Math.max(total - onCurrent - neverShown, 0),
   };
 }
 
@@ -199,4 +208,76 @@ export async function listOutstandingPolicies(
 
     return !documentsEverAcknowledged.has(document.id) || version.isMaterialChange;
   });
+}
+
+export type PolicyDocumentRow = Awaited<
+  ReturnType<typeof listPolicyDocumentsForAdmin>
+>[number];
+
+/**
+ * Everything the Legal settings tab renders, in one call.
+ *
+ * Inactive documents are included here (unlike `listPolicyDocuments`): the
+ * admin screen is where a retired document has to stay visible, or
+ * deactivating one would look like deleting it.
+ */
+export async function listPolicyDocumentsForAdmin(orgId: string) {
+  const documents = await db
+    .select()
+    .from(policyDocuments)
+    .where(eq(policyDocuments.orgId, orgId))
+    .orderBy(asc(policyDocuments.sortOrder), asc(policyDocuments.title));
+
+  return Promise.all(
+    documents.map(async (document) => {
+      const [versions, current, draft, audience] = await Promise.all([
+        listPolicyVersions(document.id),
+        getCurrentPolicyVersion(document.id),
+        getPolicyDraft(document.id),
+        countPolicyAudience(orgId, document.id),
+      ]);
+
+      return {
+        document,
+        // Drafts are shown separately, so the history is the real record.
+        versions: versions.filter((version) => version.status !== "draft"),
+        current,
+        draft,
+        audience,
+      };
+    }),
+  );
+}
+
+/** A document by its public slug. Inactive documents stay reachable by URL. */
+export async function getPolicyDocumentBySlug(orgId: string, slug: string) {
+  const [document] = await db
+    .select()
+    .from(policyDocuments)
+    .where(and(eq(policyDocuments.orgId, orgId), eq(policyDocuments.slug, slug)))
+    .limit(1);
+
+  return document ?? null;
+}
+
+/**
+ * One archived version by its label.
+ *
+ * Drafts are excluded: an unpublished draft has no public existence, and a
+ * guessable URL onto one would leak text the org has not committed to.
+ */
+export async function getPolicyVersionByLabel(documentId: string, version: string) {
+  const [row] = await db
+    .select()
+    .from(policyVersions)
+    .where(
+      and(
+        eq(policyVersions.documentId, documentId),
+        eq(policyVersions.version, version),
+        ne(policyVersions.status, "draft"),
+      ),
+    )
+    .limit(1);
+
+  return row ?? null;
 }

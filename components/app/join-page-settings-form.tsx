@@ -24,12 +24,7 @@ type JoinPageSettingsFormProps = {
   organization: Pick<Organization, "joinPageHeadline" | "joinPageBody">;
   policy: Pick<
     OrganizationPolicy,
-    | "memberInviteEmailSubject"
-    | "memberInviteEmailBody"
-    | "termsOfServiceLabel"
-    | "termsOfServiceText"
-    | "privacyPolicyLabel"
-    | "privacyPolicyText"
+    "memberInviteEmailSubject" | "memberInviteEmailBody"
   >;
 };
 
@@ -78,10 +73,6 @@ export function JoinPageSettingsForm({
       joinPageBody: organization.joinPageBody,
       memberInviteEmailSubject: policy.memberInviteEmailSubject,
       memberInviteEmailBody: policy.memberInviteEmailBody,
-      termsOfServiceLabel: policy.termsOfServiceLabel,
-      termsOfServiceText: policy.termsOfServiceText,
-      privacyPolicyLabel: policy.privacyPolicyLabel,
-      privacyPolicyText: policy.privacyPolicyText,
     },
     onSubmit: async ({ value }) => {
       await saveAction.executeAsync(value);
@@ -231,120 +222,11 @@ export function JoinPageSettingsForm({
         </FieldGroup>
       </div>
 
-      <div className="flex flex-col gap-4">
-        <SectionHeading>Legal agreements</SectionHeading>
-        <FieldGroup>
-          <form.Field name="termsOfServiceLabel">
-            {(formField) => {
-              const errors = [
-                ...getFormFieldErrors(formField.state.meta.errors),
-                ...getErrorMessages(validationErrors?.termsOfServiceLabel),
-              ];
-
-              return (
-                <Field data-invalid={errors.length > 0}>
-                  <FieldLabel htmlFor="terms-label">Terms checkbox label</FieldLabel>
-                  <FieldContent>
-                    <Input
-                      id="terms-label"
-                      name="termsOfServiceLabel"
-                      autoComplete="off"
-                      value={formField.state.value}
-                      onBlur={formField.handleBlur}
-                      onChange={(event) => formField.handleChange(event.target.value)}
-                      aria-invalid={errors.length > 0}
-                    />
-                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
-                  </FieldContent>
-                </Field>
-              );
-            }}
-          </form.Field>
-
-          <form.Field name="termsOfServiceText">
-            {(formField) => {
-              const errors = [
-                ...getFormFieldErrors(formField.state.meta.errors),
-                ...getErrorMessages(validationErrors?.termsOfServiceText),
-              ];
-
-              return (
-                <Field data-invalid={errors.length > 0}>
-                  <FieldLabel htmlFor="terms-text">Terms page content</FieldLabel>
-                  <FieldContent>
-                    <Textarea
-                      id="terms-text"
-                      name="termsOfServiceText"
-                      autoComplete="off"
-                      value={formField.state.value}
-                      onBlur={formField.handleBlur}
-                      onChange={(event) => formField.handleChange(event.target.value)}
-                      aria-invalid={errors.length > 0}
-                      rows={6}
-                    />
-                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
-                  </FieldContent>
-                </Field>
-              );
-            }}
-          </form.Field>
-
-          <form.Field name="privacyPolicyLabel">
-            {(formField) => {
-              const errors = [
-                ...getFormFieldErrors(formField.state.meta.errors),
-                ...getErrorMessages(validationErrors?.privacyPolicyLabel),
-              ];
-
-              return (
-                <Field data-invalid={errors.length > 0}>
-                  <FieldLabel htmlFor="privacy-label">Privacy checkbox label</FieldLabel>
-                  <FieldContent>
-                    <Input
-                      id="privacy-label"
-                      name="privacyPolicyLabel"
-                      autoComplete="off"
-                      value={formField.state.value}
-                      onBlur={formField.handleBlur}
-                      onChange={(event) => formField.handleChange(event.target.value)}
-                      aria-invalid={errors.length > 0}
-                    />
-                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
-                  </FieldContent>
-                </Field>
-              );
-            }}
-          </form.Field>
-
-          <form.Field name="privacyPolicyText">
-            {(formField) => {
-              const errors = [
-                ...getFormFieldErrors(formField.state.meta.errors),
-                ...getErrorMessages(validationErrors?.privacyPolicyText),
-              ];
-
-              return (
-                <Field data-invalid={errors.length > 0}>
-                  <FieldLabel htmlFor="privacy-text">Privacy page content</FieldLabel>
-                  <FieldContent>
-                    <Textarea
-                      id="privacy-text"
-                      name="privacyPolicyText"
-                      autoComplete="off"
-                      value={formField.state.value}
-                      onBlur={formField.handleBlur}
-                      onChange={(event) => formField.handleChange(event.target.value)}
-                      aria-invalid={errors.length > 0}
-                      rows={6}
-                    />
-                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
-                  </FieldContent>
-                </Field>
-              );
-            }}
-          </form.Field>
-        </FieldGroup>
-      </div>
+      {/*
+        The legal documents used to be four plain textareas here. They now live
+        in the Legal tab, where they are versioned and every published version
+        stays readable — see docs/legal-policies.md.
+      */}
 
       {saveAction.result.serverError ? (
         <Alert variant="destructive" aria-live="polite">

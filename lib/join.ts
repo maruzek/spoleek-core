@@ -37,10 +37,8 @@ export const joinPageSettingsSchema = z.object({
     .string()
     .trim()
     .min(20, "Add the invite email instructions members should receive after approval."),
-  termsOfServiceLabel: z.string().trim().min(5, "Terms label is required."),
-  termsOfServiceText: z.string().trim().min(20, "Add the full terms of service text."),
-  privacyPolicyLabel: z.string().trim().min(5, "Privacy label is required."),
-  privacyPolicyText: z.string().trim().min(20, "Add the full privacy policy text."),
+  // The legal documents moved to their own versioned tables and the Legal
+  // settings tab; see docs/legal-policies.md.
 });
 
 export type JoinApplicationInput = z.infer<typeof joinApplicationSchema>;

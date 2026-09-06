@@ -10,6 +10,7 @@ import { requireAdminAccess } from "@/server/queries/access";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listGroupCategories } from "@/server/queries/groups";
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
+import { listPolicyDocumentsForAdmin } from "@/server/queries/policies";
 import { db } from "@/server/db";
 import { memberCustomFields, workspaceConnections } from "@/server/db/schema";
 import type { EmailNotificationSettingsState } from "@/components/app/email-notification-settings-card";
@@ -41,7 +42,8 @@ export default async function AdminSettingsPage({
     throw new Error("Organization policy setup is incomplete.");
   }
 
-  const [categories, connections, customFields, workspaceLinks] = await Promise.all([
+  const [categories, connections, customFields, workspaceLinks, policyDocuments] =
+    await Promise.all([
     listGroupCategories(organization.id),
     db
       .select({
@@ -66,6 +68,7 @@ export default async function AdminSettingsPage({
         ),
       ),
     listGroupWorkspaceLinks(organization.id),
+    listPolicyDocumentsForAdmin(organization.id),
   ]);
   const [connection] = connections;
 
@@ -146,6 +149,7 @@ export default async function AdminSettingsPage({
       <AdminSettingsTabs
         organization={organization}
         policy={policy}
+        policyDocuments={policyDocuments}
         membershipState={membershipState}
         membershipLocale={orgFormatLocale(organization.locale)}
         feeManagingCategoryName={feeManagingCategory?.name ?? null}
