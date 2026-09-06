@@ -120,3 +120,14 @@ export const deletePolicyDocumentSchema = z.object({
 });
 
 export type CreatePolicyDocumentInput = z.infer<typeof createPolicyDocumentSchema>;
+
+/**
+ * A member acting on the documents blocking their portal.
+ *
+ * The client sends what it displayed; the action recomputes what is actually
+ * outstanding and records only that intersection, so a crafted request cannot
+ * acknowledge a version the member was never shown.
+ */
+export const acknowledgePoliciesSchema = z.object({
+  policyVersionIds: z.array(z.uuid()).min(1, "Nothing to acknowledge."),
+});

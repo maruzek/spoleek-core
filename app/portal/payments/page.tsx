@@ -8,6 +8,7 @@ import { PaymentsTable } from "./payments-table";
 export default async function PortalPaymentsPage() {
   const { member, organization } = await requireCurrentMemberAccess({
     requireProfileComplete: true,
+    requirePolicyAcknowledgement: true,
   });
 
   const payments = await listPaymentsForMember(organization.id, member.id);

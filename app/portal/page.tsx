@@ -30,6 +30,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 export default async function PortalOverviewPage() {
   const { member, organization, session } = await requireCurrentMemberAccess({
     requireProfileComplete: true,
+    requirePolicyAcknowledgement: true,
   });
 
   const pendingPayments = await getPendingPaymentsForMember(organization.id, member.id);

@@ -12,7 +12,11 @@ export default async function PortalProfilePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { member, organization } = await requireCurrentMemberAccess();
+  // Gated on policies but not on profile completeness: this page is where a
+  // member completes their profile, so gating it on that would trap them.
+  const { member, organization } = await requireCurrentMemberAccess({
+    requirePolicyAcknowledgement: true,
+  });
   const params = searchParams ? await searchParams : {};
   const workspaceReady =
     organization.workspaceModuleEnabled &&

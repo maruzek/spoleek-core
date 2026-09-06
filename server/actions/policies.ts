@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { and, count, eq, max } from "drizzle-orm";
 
 import {
+  acknowledgePoliciesSchema,
   createPolicyDocumentSchema,
   deletePolicyDocumentSchema,
   discardPolicyDraftSchema,
@@ -12,16 +13,20 @@ import {
   savePolicyDraftSchema,
   setPolicyDocumentActiveSchema,
 } from "@/lib/policies";
-import { orgAdminActionClient } from "@/lib/safe-action-auth";
+import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import {
   memberPolicyAcknowledgements,
   policyDocuments,
   policyVersions,
 } from "@/server/db/schema";
+import { requireCurrentMemberAccess } from "@/server/queries/access";
 import { isPolicyHtmlEmpty, sanitizePolicyHtml } from "@/server/lib/policy-html";
 import { requireOrgAdminAccess } from "@/server/queries/access";
-import { getCurrentPolicyVersion } from "@/server/queries/policies";
+import {
+  getCurrentPolicyVersion,
+  listOutstandingPolicies,
+} from "@/server/queries/policies";
 
 /**
  * Loads a document and proves it belongs to the caller's org.
@@ -347,4 +352,54 @@ export const deletePolicyDocumentAction = orgAdminActionClient
     revalidatePath("/admin/settings");
 
     return { success: true as const };
+  });
+
+/**
+ * Records a member acting on the documents blocking their portal.
+ *
+ * Member-facing, so it uses `authActionClient` rather than the admin client,
+ * and it calls `requireCurrentMemberAccess` with no options — gating it on
+ * policy acknowledgement would redirect the very request that clears the gate.
+ *
+ * The submitted ids are filtered against what is genuinely outstanding for
+ * this member. A crafted request therefore cannot record consent to a version
+ * the member was never shown, and replaying one is harmless: the unique index
+ * on (member_id, policy_version_id) keeps the first acknowledgement, which is
+ * the one with the honest timestamp.
+ */
+export const acknowledgePoliciesAction = authActionClient
+  .metadata({ actionName: "acknowledgePolicies" })
+  .inputSchema(acknowledgePoliciesSchema)
+  .action(async ({ parsedInput }) => {
+    const { member, organization } = await requireCurrentMemberAccess();
+
+    const outstanding = await listOutstandingPolicies(organization.id, member.id);
+    const outstandingIds = new Set(outstanding.map((entry) => entry.version.id));
+    const accepted = parsedInput.policyVersionIds.filter((id) =>
+      outstandingIds.has(id),
+    );
+
+    if (accepted.length === 0) {
+      return { success: true as const, recorded: 0, remaining: outstanding.length };
+    }
+
+    await db
+      .insert(memberPolicyAcknowledgements)
+      .values(
+        accepted.map((policyVersionId) => ({
+          orgId: organization.id,
+          memberId: member.id,
+          policyVersionId,
+          method: "portal_prompt" as const,
+        })),
+      )
+      .onConflictDoNothing();
+
+    revalidatePath("/portal", "layout");
+
+    return {
+      success: true as const,
+      recorded: accepted.length,
+      remaining: outstanding.length - accepted.length,
+    };
   });

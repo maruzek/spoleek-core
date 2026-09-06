@@ -3,7 +3,10 @@ import { AppPlaceholder } from "@/components/app/app-placeholder";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 
 export default async function PortalEventsPage() {
-  await requireCurrentMemberAccess({ requireProfileComplete: true });
+  await requireCurrentMemberAccess({
+    requireProfileComplete: true,
+    requirePolicyAcknowledgement: true,
+  });
 
   return (
     <AppPage

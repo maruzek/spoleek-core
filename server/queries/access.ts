@@ -17,6 +17,7 @@ import {
 } from "@/server/db/schema";
 import { getAppOrganization } from "@/server/queries/app";
 import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
+import { listOutstandingPolicies } from "@/server/queries/policies";
 import { requireViewerSession } from "@/server/queries/auth";
 import { listPinnedGroupCategoriesForSidebar } from "@/server/queries/groups";
 
@@ -518,6 +519,7 @@ export async function requireWorkspaceLinkAccess(groupId: string) {
 
 export async function requireCurrentMemberAccess(options?: {
   requireProfileComplete?: boolean;
+  requirePolicyAcknowledgement?: boolean;
 }) {
   const session = await requireViewerSession();
   const organization = await requireOrganization();
@@ -533,6 +535,17 @@ export async function requireCurrentMemberAccess(options?: {
       .limit(1);
 
     redirect(user?.systemRole === "system_admin" ? "/admin" : "/join");
+  }
+
+  // Deliberately ahead of the profile check: nobody should be asked to fill in
+  // custom fields before being told how their data is handled. A legal
+  // obligation outranks profile hygiene.
+  if (options?.requirePolicyAcknowledgement && member.status === "active") {
+    const outstanding = await listOutstandingPolicies(organization.id, member.id);
+
+    if (outstanding.length > 0) {
+      redirect("/portal/legal");
+    }
   }
 
   if (options?.requireProfileComplete && member.status === "active") {
