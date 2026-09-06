@@ -289,6 +289,28 @@ export const workspaceSyncOperationStatusEnum = pgEnum(
   ["pending", "succeeded", "failed"],
 );
 
+export const policyDocumentKindEnum = pgEnum("policy_document_kind", [
+  "terms",
+  "privacy",
+  "other",
+]);
+
+export const policyVersionStatusEnum = pgEnum("policy_version_status", [
+  "draft",
+  "published",
+  "archived",
+]);
+
+export const policyAcknowledgementMethodEnum = pgEnum(
+  "policy_acknowledgement_method",
+  [
+    "registration",
+    "portal_prompt",
+    "admin_recorded",
+    "import_notice",
+  ],
+);
+
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -593,6 +615,126 @@ export const tenantMembers = pgTable(
     index("tenant_members_active_idx")
       .on(table.orgId, table.status)
       .where(sql`status != 'deleted'`),
+  ],
+);
+
+// ─── Versioned legal policies ────────────────────────────────────────────────
+//
+// A published version is IMMUTABLE. Editing one produces a new draft; the old
+// row keeps the exact text somebody accepted. That is the entire point of the
+// three tables below — `organization_policies` holds a single mutable row, so
+// every edit there silently destroys the evidence behind an acknowledgement.
+//
+// See docs/legal-policies.md §3.
+
+export const policyDocuments = pgTable(
+  "policy_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    kind: policyDocumentKindEnum("kind").notNull(),
+    /** Public URL segment: /legal/<slug>. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /**
+     * True for an agreement the member accepts (terms, membership rules).
+     * False for a disclosure the member confirms having read (privacy notice) —
+     * nobody can "agree to" a statement of fact, and the prompt wording follows
+     * this flag. Both still gate the portal; see docs/legal-policies.md §2.2.
+     */
+    requiresAcceptance: boolean("requires_acceptance").notNull().default(true),
+    isActive: boolean("is_active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("policy_documents_org_slug_idx").on(table.orgId, table.slug),
+    index("policy_documents_org_active_idx")
+      .on(table.orgId)
+      .where(sql`is_active`),
+  ],
+);
+
+export const policyVersions = pgTable(
+  "policy_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => policyDocuments.id, { onDelete: "cascade" }),
+    /** Admin-facing label, e.g. "2.0" or "2026-09". Unique per document. */
+    version: text("version").notNull(),
+    /**
+     * Sanitized at publish time and stored as-is. Archived versions render
+     * straight from this string and are never passed back through a
+     * current-day pipeline, or "immutable" would quietly change whenever the
+     * sanitizer or the editor is upgraded.
+     */
+    bodyHtml: text("body_html").notNull().default(""),
+    summaryOfChanges: text("summary_of_changes").notNull().default(""),
+    status: policyVersionStatusEnum("status").notNull().default("draft"),
+    /**
+     * Whether members must act on this version. A typo fix should not re-prompt
+     * the whole roster, and keeping it per-version means the reason a given
+     * cohort was re-prompted stays auditable.
+     */
+    isMaterialChange: boolean("is_material_change").notNull().default(true),
+    effectiveFrom: timestamp("effective_from", { withTimezone: true }),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    publishedByUserId: text("published_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("policy_versions_document_version_idx").on(
+      table.documentId,
+      table.version,
+    ),
+    // At most one draft per document: the editor edits "the" draft, and two of
+    // them would make "publish" ambiguous.
+    uniqueIndex("policy_versions_document_draft_idx")
+      .on(table.documentId)
+      .where(sql`status = 'draft'`),
+    index("policy_versions_document_status_idx").on(table.documentId, table.status),
+  ],
+);
+
+export const memberPolicyAcknowledgements = pgTable(
+  "member_policy_acknowledgements",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    // Deliberately `restrict`: deleting a version somebody accepted must be
+    // impossible, otherwise the record proves nothing.
+    policyVersionId: uuid("policy_version_id")
+      .notNull()
+      .references(() => policyVersions.id, { onDelete: "restrict" }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * How the acknowledgement was obtained. Without this a paper form signed at
+     * a regional meeting and a click in the app are indistinguishable, which
+     * turns a true statement into an unverifiable one.
+     */
+    method: policyAcknowledgementMethodEnum("method").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("member_policy_ack_member_version_idx").on(
+      table.memberId,
+      table.policyVersionId,
+    ),
+    index("member_policy_ack_org_member_idx").on(table.orgId, table.memberId),
+    index("member_policy_ack_version_idx").on(table.policyVersionId),
   ],
 );
 
@@ -1452,6 +1594,9 @@ export const schema = {
   verifications,
   organizations,
   organizationPolicies,
+  policyDocuments,
+  policyVersions,
+  memberPolicyAcknowledgements,
   tenantMembers,
   groupCategories,
   groups,
@@ -1512,6 +1657,14 @@ export type MembershipReportMember = typeof membershipReportMembers.$inferSelect
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type OrganizationPolicy = typeof organizationPolicies.$inferSelect;
+export type PolicyDocumentKind = typeof policyDocumentKindEnum.enumValues[number];
+export type PolicyVersionStatus = typeof policyVersionStatusEnum.enumValues[number];
+export type PolicyAcknowledgementMethod =
+  typeof policyAcknowledgementMethodEnum.enumValues[number];
+export type PolicyDocument = typeof policyDocuments.$inferSelect;
+export type PolicyVersion = typeof policyVersions.$inferSelect;
+export type MemberPolicyAcknowledgement =
+  typeof memberPolicyAcknowledgements.$inferSelect;
 export type TenantMember = typeof tenantMembers.$inferSelect;
 export type GroupCategory = typeof groupCategories.$inferSelect;
 export type Group = typeof groups.$inferSelect;

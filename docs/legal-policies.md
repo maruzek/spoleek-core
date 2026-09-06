@@ -1,6 +1,7 @@
 # Legal policies — versioning, consent & GDPR design
 
-Status: planned. Nothing below is implemented yet; MAR-7 and its sub-issues track the work.
+Status: phase 1 implemented (MAR-124) — the three tables exist and are backfilled.
+Everything else is planned; MAR-7 and its sub-issues track the work.
 
 Written for the TOP tým deployment (a Czech youth political organization running its member
 register in Spoleek), but the model is deliberately org-agnostic.
@@ -175,11 +176,30 @@ Notes:
    the org's `createdAt`, `isMaterialChange = true`.
 4. For every member with a non-null `acceptedTermsAt`, insert acknowledgement rows against
    those v1 versions with `method = 'registration'`.
-5. Drop the four text columns and `version` from `organization_policies`.
-6. Update `scripts/seed.ts:25` and the setup/bootstrap paths
+5. Update `scripts/seed.ts:25` and the setup/bootstrap paths
    (`server/actions/setup.ts:76`, `server/actions/bootstrap.ts:468`).
 
 Members with a null `acceptedTermsAt` get **no rows**. See §5.
+
+**The old columns are deliberately not dropped in phase 1.** The join form, the legal pages,
+the settings form and the registration emails still read
+`organization_policies.terms_of_service_text` and friends, and `tenant_members` still carries
+`acceptedTermsAt` / `acceptedPrivacyAt` / `acceptedPolicyVersion`. Dropping them before those
+readers are gone would leave main undeployable between phases, so the drops belong to the
+issues that remove the last reader. **MAR-133 tracks the drop as its own issue**, blocked by
+MAR-126 / MAR-127 / MAR-129, so the two representations coexist for exactly as long as the
+phased rollout requires and no longer. It carries the pre-drop assertion that every non-null
+`acceptedTermsAt` has a matching acknowledgement row — the columns are the only remaining copy
+of that evidence, so the drop is a one-way door.
+
+Implemented as `0045_remarkable_young_avengers.sql` (generated) plus
+`0046_backfill_policy_documents.sql` (hand-written, idempotent — every statement is
+`ON CONFLICT … DO NOTHING` against the natural key, so a partial run repeats safely).
+
+The document title is **not** taken from `terms_of_service_label`: that column holds a consent
+checkbox label ("I agree with the … terms"), which reads as nonsense as a page heading. The
+backfill uses a neutral title keyed off `organizations.locale` (`cs` gets Czech), and admins
+rename it in the Legal tab.
 
 ## 4. The portal gate
 
