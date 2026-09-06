@@ -17,7 +17,16 @@ import {
   getBoardReportView,
   getGroupReportView,
   getReportHistory,
+  type GroupReportTabView,
 } from "@/server/queries/membership-reports";
+
+/** Narrows away the "this group is not in that year" shape of the view. */
+function reported(view: GroupReportTabView | null) {
+  if (!view?.reportGroup) {
+    throw new Error("expected this group to have a row in the report");
+  }
+  return view;
+}
 
 /**
  * The year-over-year comparison, against real rows.
@@ -203,7 +212,7 @@ suite("year-over-year comparison", () => {
 
   it("compares a group with its own roster from the previous report", async () => {
     const view = await getGroupReportView(orgId, northId, thisYearId);
-    const comparison = view!.comparison!;
+    const comparison = reported(view).comparison!;
 
     expect(comparison.previousPeriodLabel).toBe("2025");
     expect(comparison.previousMemberCount).toBe(4);
@@ -214,7 +223,7 @@ suite("year-over-year comparison", () => {
   it("explains each member who is not on this year's list", async () => {
     const view = await getGroupReportView(orgId, northId, thisYearId);
     const byName = new Map(
-      view!.comparison!.missingMembers.map((member) => [
+      reported(view).comparison!.missingMembers.map((member) => [
         member.firstName,
         member,
       ]),
@@ -231,7 +240,19 @@ suite("year-over-year comparison", () => {
 
   it("has nothing to compare in a group's first reported year", async () => {
     const view = await getGroupReportView(orgId, northId, lastYearId);
-    expect(view!.comparison).toBeNull();
+    expect(reported(view).comparison).toBeNull();
+  });
+
+  it("still returns the year for a group that has no row in that report", async () => {
+    // East was created after 2025 was opened. Returning nothing for it used to
+    // take the whole report tab away — including the year picker, which is the
+    // only way back to a year it does appear in.
+    const view = await getGroupReportView(orgId, eastId, lastYearId);
+
+    expect(view).not.toBeNull();
+    expect(view!.reportGroup).toBeNull();
+    expect(view!.report.periodLabel).toBe("2025");
+    expect(view!.periods.map((period) => period.periodLabel)).toContain("2026");
   });
 
   it("gives the board each group's previous count and its own baseline year", async () => {

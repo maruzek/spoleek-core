@@ -3,7 +3,6 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { ReportPeriodOption } from "@/server/queries/membership-reports";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -32,6 +31,9 @@ export function ReportPeriodPicker({
 
   if (periods.length < 2) return null;
 
+  // No status badge, in the list or on the trigger: the picker picks a year.
+  // Whether that year is still open is a property of the report being looked
+  // at, and the page it sits on says so where it matters.
   return (
     <Select
       value={currentReportId}
@@ -41,20 +43,13 @@ export function ReportPeriodPicker({
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
       }}
     >
-      <SelectTrigger className="w-[180px]" aria-label="Membership year">
+      <SelectTrigger className="w-[140px]" aria-label="Membership year">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
         {periods.map((period) => (
           <SelectItem key={period.id} value={period.id}>
-            <span className="flex items-center gap-2">
-              {period.periodLabel}
-              {period.status === "open" ? (
-                <Badge variant="secondary">Open</Badge>
-              ) : period.status === "closed" ? (
-                <Badge variant="outline">Closed</Badge>
-              ) : null}
-            </span>
+            {period.periodLabel}
           </SelectItem>
         ))}
       </SelectContent>

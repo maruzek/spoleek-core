@@ -1,6 +1,6 @@
 import type { MembershipReportGroupStatus } from "@/server/db/schema";
 
-type StatusVariant = "default" | "success" | "error" | "warning" | "info";
+export type StatusVariant = "default" | "success" | "error" | "warning" | "info";
 
 export type ReportGroupStatusPresentation = {
   label: string;
@@ -95,3 +95,21 @@ export function daysUntil(due: Date, now: Date = new Date()): number {
     Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
   return Math.round((utcDay(due) - utcDay(now)) / 86_400_000);
 }
+
+/**
+ * How a status paints outside a `Status` pill — the segments of the progress
+ * bar and the dots in its legend.
+ *
+ * Kept next to the labels so the board and the group pages cannot drift into
+ * two different colour vocabularies for the same five words.
+ */
+export const REPORT_STATUS_TONE: Record<
+  StatusVariant,
+  { bar: string; dot: string }
+> = {
+  default: { bar: "bg-muted-foreground/40", dot: "bg-muted-foreground/40" },
+  success: { bar: "bg-green-600 dark:bg-green-400", dot: "bg-green-600 dark:bg-green-400" },
+  error: { bar: "bg-destructive", dot: "bg-destructive" },
+  warning: { bar: "bg-orange-500 dark:bg-orange-400", dot: "bg-orange-500 dark:bg-orange-400" },
+  info: { bar: "bg-blue-500 dark:bg-blue-400", dot: "bg-blue-500 dark:bg-blue-400" },
+};

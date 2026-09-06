@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { GroupDriftPanel } from "@/components/app/group-drift-panel";
 import { GroupForm } from "@/components/app/group-form";
 import { REPORT_GROUP_STATUS } from "@/lib/membership-report-status";
-import type { GroupReportView } from "@/server/queries/membership-reports";
+import type { GroupReportTabView } from "@/server/queries/membership-reports";
 import { GroupReportCard } from "@/components/app/group-report-card";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
@@ -128,7 +128,7 @@ type GroupDetailProps = {
   workspaceConnected: boolean;
   canManageWorkspaceIntegration: boolean;
   /** Null when the report module is off or this group is not a reporting group. */
-  reportView: GroupReportView | null;
+  reportView: GroupReportTabView | null;
   locale: string;
 };
 
@@ -411,7 +411,8 @@ export function GroupDetail({
             <TabsTrigger value="report">
               <ClipboardCheckIcon data-icon="inline-start" />
               Yearly report
-              {REPORT_GROUP_STATUS[reportView.reportGroup.status]
+              {reportView.reportGroup &&
+              REPORT_GROUP_STATUS[reportView.reportGroup.status]
                 .needsAttention ? (
                 <Badge variant="destructive" className="ml-2">
                   !

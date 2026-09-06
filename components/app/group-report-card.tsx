@@ -6,8 +6,8 @@ import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 import {
   ArrowRightLeftIcon,
+  CalendarOffIcon,
   CheckIcon,
-  ClockIcon,
   PlusIcon,
   UndoIcon,
 } from "lucide-react";
@@ -16,19 +16,33 @@ import { formatFeeAmount } from "@/lib/payments";
 import { PERIOD_DATE_TIMEZONE } from "@/lib/membership-period";
 import {
   REPORT_GROUP_STATUS,
+  REPORT_GROUP_STATUS_ORDER,
+  REPORT_STATUS_TONE,
   daysUntil,
   describeReportGroupStatus,
 } from "@/lib/membership-report-status";
-import type { GroupReportView } from "@/server/queries/membership-reports";
+import { cn } from "@/lib/utils";
+import type {
+  GroupReportAbsentView,
+  GroupReportTabView,
+  GroupReportView,
+} from "@/server/queries/membership-reports";
 import {
   acceptPendingAdditionAction,
   addReportMemberManuallyAction,
   setReportMemberInclusionAction,
   submitGroupReportAction,
 } from "@/server/actions/membership-reports";
+import { ReportNotice } from "@/components/app/report-notice";
 import { ReportPeriodPicker } from "@/components/app/report-period-picker";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -55,6 +69,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Period bounds and the deadline are calendar dates held as midnight UTC, so
 // they must be rendered in UTC. Formatting them locally shifts them a day.
@@ -75,7 +94,129 @@ function memberName(row: { firstName: string | null; lastName: string | null; em
   );
 }
 
+/**
+ * One cell of the strip along the bottom of the status card.
+ *
+ * `caption` names the number and `label` qualifies it — "5 / Members counted /
+ * 4 paid · 1 waived" — so the strip reads the same way in all three columns.
+ */
+function HeroStat({
+  value,
+  caption,
+  label,
+  tone,
+}: {
+  value: string;
+  caption: string;
+  label?: string;
+  tone?: "attention";
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 px-5 py-3">
+      <span className="font-semibold text-lg tabular-nums">{value}</span>
+      <span className="text-muted-foreground text-xs">{caption}</span>
+      {label ? (
+        <span
+          className={cn(
+            "text-xs",
+            tone === "attention"
+              ? "font-medium text-orange-600 dark:text-orange-400"
+              : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The report tab for one group.
+ *
+ * Split in two because a group can be looking at a year it was never part of.
+ * That is a real state with a real page — the year, and the picker to get out
+ * of it — not an absence to render nothing for.
+ */
 export function GroupReportCard({
+  view,
+  groupName,
+  locale,
+}: {
+  view: GroupReportTabView;
+  groupName: string;
+  locale: string;
+}) {
+  if (view.reportGroup === null) {
+    return (
+      <GroupReportAbsent view={view} groupName={groupName} locale={locale} />
+    );
+  }
+
+  return <GroupReportRoster view={view} groupName={groupName} locale={locale} />;
+}
+
+function YearHeader({
+  view,
+  locale,
+}: {
+  view: GroupReportTabView;
+  locale: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h2 className="font-medium text-base">
+          Membership year {view.report.periodLabel}
+        </h2>
+        <span className="text-muted-foreground text-xs">
+          {formatDate(view.report.periodStart, locale)} –{" "}
+          {formatDate(view.report.periodEnd, locale)}
+        </span>
+        {!view.isEditable ? <Badge variant="outline">Closed</Badge> : null}
+      </div>
+      <ReportPeriodPicker
+        periods={view.periods}
+        currentReportId={view.report.id}
+      />
+    </div>
+  );
+}
+
+function GroupReportAbsent({
+  view,
+  groupName,
+  locale,
+}: {
+  view: GroupReportAbsentView;
+  groupName: string;
+  locale: string;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <YearHeader view={view} locale={locale} />
+      <Empty className="rounded-xl border">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <CalendarOffIcon />
+          </EmptyMedia>
+          <EmptyTitle>
+            {groupName} is not in the {view.report.periodLabel} report
+          </EmptyTitle>
+          <EmptyDescription>
+            It had no row when that year was opened — the group was created, or
+            moved into the fee-managing category, later on. Nothing adds a group
+            to a report after the fact, so there is nothing to confirm here.
+            Pick a year this group took part in, or ask the board to refresh{" "}
+            {view.report.periodLabel} from payments.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    </div>
+  );
+}
+
+function GroupReportRoster({
   view,
   groupName,
   locale,
@@ -162,209 +303,189 @@ export function GroupReportCard({
     (peer) => peer.status === "submitted" || peer.status === "approved",
   ).length;
 
+  const canSubmit = !isLocked;
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border p-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-sm">
-              Membership year {report.periodLabel}
-            </p>
-            {!view.isEditable ? (
-              <Badge variant="outline">Closed</Badge>
-            ) : null}
-            <span className="text-muted-foreground text-xs">
-              {formatDate(report.periodStart, locale)} –{" "}
-              {formatDate(report.periodEnd, locale)}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <YearHeader view={view} locale={locale} />
+
+      {/*
+        One card for the whole state of the year: where it stands, why, what it
+        is worth, and the single thing to do about it. It replaces a header that
+        crammed the same facts into one row with the numbers and the button, and
+        three notices stacked underneath repeating half of them.
+      */}
+      <div className="overflow-hidden rounded-xl border">
+        <div className="flex flex-wrap items-start justify-between gap-4 p-5">
+          <div className="flex max-w-prose flex-col gap-2">
             <Status variant={presentation.variant}>
               <StatusLabel>{presentation.label}</StatusLabel>
             </Status>
-            <span className="text-muted-foreground text-sm">
+            <p className="text-base">
               {describeReportGroupStatus(reportGroup.status, groupName)}
-            </span>
-          </div>
-          {report.confirmDueAt ? (
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <ClockIcon className="size-3.5" />
-              Confirm by {formatDate(report.confirmDueAt, locale)}
-              {daysLeft !== null ? (
-                <span
-                  className={
-                    daysLeft < 0
-                      ? "font-medium text-destructive"
-                      : daysLeft <= 7
-                        ? "font-medium text-orange-600 dark:text-orange-400"
-                        : ""
-                  }
-                >
-                  {daysLeft < 0
-                    ? `· ${Math.abs(daysLeft)} days overdue`
-                    : daysLeft === 0
-                      ? "· today"
-                      : `· ${daysLeft} days left`}
-                </span>
-              ) : null}
             </p>
+            {isLocked ? (
+              <p className="text-muted-foreground text-sm">
+                {reportGroup.submittedByName
+                  ? `Submitted by ${reportGroup.submittedByName}`
+                  : "Submitted"}
+                {reportGroup.submittedAt
+                  ? ` on ${formatDate(reportGroup.submittedAt, locale)}.`
+                  : "."}{" "}
+                {view.isEditable
+                  ? "The roster is frozen. Anyone who pays from now on waits at the bottom of the list for you to add, which sends the report back for re-approval."
+                  : "This is how the year was signed off. Nothing here can change any more."}
+                {reportGroup.selfApproved
+                  ? " It was approved by the person who submitted it."
+                  : ""}
+              </p>
+            ) : null}
+            {reportGroup.status === "returned" && reportGroup.returnedReason ? (
+              <ReportNotice
+                className="mt-1 p-3"
+                tone="attention"
+                title="Why it came back"
+                description={reportGroup.returnedReason}
+              />
+            ) : null}
+          </div>
+
+          {canSubmit ? (
+            <div className="flex flex-col items-end gap-1.5">
+              <Button
+                size="lg"
+                onClick={() => setSubmitOpen(true)}
+                disabled={reportGroup.memberCount === 0}
+              >
+                <CheckIcon data-icon="inline-start" />
+                Submit {reportGroup.memberCount} member
+                {reportGroup.memberCount === 1 ? "" : "s"}
+              </Button>
+              <p className="text-muted-foreground text-xs">
+                {reportGroup.memberCount === 0
+                  ? "Nobody to submit yet."
+                  : "Locks the roster and sends it to the board."}
+              </p>
+            </div>
           ) : null}
         </div>
 
-        <div className="flex items-center gap-6">
-          <ReportPeriodPicker
-            periods={view.periods}
-            currentReportId={report.id}
+        <div className="grid grid-cols-2 divide-x border-t bg-muted/30 sm:grid-cols-3">
+          <HeroStat
+            value={String(reportGroup.memberCount)}
+            label={`${reportGroup.paidCount} paid · ${reportGroup.waivedCount} waived`}
+            caption="Members counted"
           />
-          <div className="flex flex-col">
-            <span className="font-semibold text-2xl tabular-nums">
-              {reportGroup.memberCount}
-            </span>
-            <span className="text-muted-foreground text-xs">
-              {reportGroup.paidCount} paid · {reportGroup.waivedCount} waived
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-2xl tabular-nums">
-              {formatFeeAmount(reportGroup.feeTotalCents, currency)}
-            </span>
-            <span className="text-muted-foreground text-xs">collected</span>
-          </div>
+          <HeroStat
+            value={formatFeeAmount(reportGroup.feeTotalCents, currency)}
+            caption="Fees collected"
+          />
+          {report.confirmDueAt ? (
+            <HeroStat
+              value={formatDate(report.confirmDueAt, locale)}
+              caption="Confirm by"
+              label={
+                daysLeft === null
+                  ? undefined
+                  : daysLeft < 0
+                    ? `${Math.abs(daysLeft)} days overdue`
+                    : daysLeft === 0
+                      ? "Due today"
+                      : `${daysLeft} days left`
+              }
+              tone={
+                daysLeft !== null && daysLeft <= 7 ? "attention" : undefined
+              }
+            />
+          ) : null}
         </div>
       </div>
 
-      {reportGroup.status === "returned" && reportGroup.returnedReason ? (
-        <Alert variant="destructive">
-          <AlertTitle>The board sent this back</AlertTitle>
-          <AlertDescription>{reportGroup.returnedReason}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {isLocked ? (
-        <Alert>
-          <AlertTitle>
-            {!view.isEditable
-              ? `The ${report.periodLabel} report is closed`
-              : reportGroup.status === "approved"
-                ? "Approved by the board"
-                : "Submitted and locked"}
-          </AlertTitle>
-          <AlertDescription>
-            {reportGroup.submittedByName
-              ? `Submitted by ${reportGroup.submittedByName}`
-              : "Submitted"}
-            {reportGroup.submittedAt
-              ? ` on ${formatDate(reportGroup.submittedAt, locale)}.`
-              : "."}{" "}
-            {view.isEditable
-              ? "The roster is frozen. Members who pay from now on appear below for you to add, which sends the report back for re-approval."
-              : "This is how the year was signed off. Nothing here can change any more."}
-            {reportGroup.selfApproved
-              ? " This report was approved by the person who submitted it."
-              : ""}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {pendingAdditions.length > 0 && view.isEditable ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 p-4">
-          <p className="font-medium text-sm">
-            {pendingAdditions.length} member
-            {pendingAdditions.length === 1 ? "" : "s"} confirmed after you
-            submitted
-          </p>
-          <p className="text-muted-foreground text-sm">
-            They are not counted yet. Adding one sends the report back to the
-            board so the numbers they approved stay honest.
-          </p>
-          <div className="flex flex-col gap-2 pt-1">
-            {pendingAdditions.map((row) => (
-              <div
-                key={row.id}
-                className="flex flex-wrap items-center justify-between gap-2"
-              >
-                <span className="text-sm">{memberName(row)}</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={acceptAddition.isPending}
-                  onClick={() =>
-                    acceptAddition.execute({ reportMemberId: row.id })
-                  }
-                >
-                  <UndoIcon data-icon="inline-start" />
-                  Add to report
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {comparison ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-sm">
-              Compared with {comparison.previousPeriodLabel} ·{" "}
-              {comparison.previousMemberCount}{" "}
-              {comparison.previousMemberCount === 1 ? "member" : "members"}
-            </p>
-            <p className="text-muted-foreground text-sm">
-              {comparison.returningCount} returning · {comparison.newMembers.length}{" "}
-              new ·{" "}
+        <ReportNotice
+          icon={<ArrowRightLeftIcon />}
+          title={`Compared with ${comparison.previousPeriodLabel} · ${
+            comparison.previousMemberCount
+          } ${comparison.previousMemberCount === 1 ? "member" : "members"}`}
+          description={
+            <>
+              {comparison.returningCount} returning ·{" "}
+              {comparison.newMembers.length} new ·{" "}
               <span
-                className={
-                  unpaidCount > 0 ? "text-destructive font-medium" : undefined
-                }
+                className={cn(
+                  unpaidCount > 0
+                    ? "font-medium text-orange-600 dark:text-orange-400"
+                    : undefined,
+                )}
               >
                 {comparison.missingMembers.length} not on this year&rsquo;s list
               </span>
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={
-              comparison.missingMembers.length === 0 &&
-              comparison.newMembers.length === 0
-            }
-            onClick={() => setComparisonOpen(true)}
-          >
-            <ArrowRightLeftIcon data-icon="inline-start" />
-            See what changed
-          </Button>
-        </div>
-      ) : null}
-
-      {view.isEditable ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-muted-foreground text-sm">
-            Somebody who paid outside the system can be added by hand.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={addableMembers.length === 0}
-            onClick={() => setAddOpen(true)}
-          >
-            <PlusIcon data-icon="inline-start" />
-            Add a member
-          </Button>
-        </div>
+            </>
+          }
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                comparison.missingMembers.length === 0 &&
+                comparison.newMembers.length === 0
+              }
+              onClick={() => setComparisonOpen(true)}
+            >
+              <ArrowRightLeftIcon data-icon="inline-start" />
+              See what changed
+            </Button>
+          }
+        />
       ) : null}
 
       <div className="rounded-xl border">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="flex flex-col gap-0.5">
+            <p className="font-medium text-sm">Roster</p>
+            <p className="text-muted-foreground text-xs">
+              {pendingAdditions.length > 0 && view.isEditable
+                ? `${confirmed.length} counted · ${pendingAdditions.length} waiting at the bottom, not counted until you add them`
+                : `${confirmed.length} member${
+                    confirmed.length === 1 ? "" : "s"
+                  } on the ${report.periodLabel} report`}
+            </p>
+          </div>
+          {view.isEditable ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={addableMembers.length === 0}
+                    onClick={() => setAddOpen(true)}
+                  >
+                    <PlusIcon data-icon="inline-start" />
+                    Add a member
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {addableMembers.length === 0
+                  ? "Everyone in this group is already on the report."
+                  : "For somebody who paid outside the system — cash at a meeting, say."}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+        </div>
+
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Member</TableHead>
-              <TableHead>Confirmed by</TableHead>
+              <TableHead>Basis</TableHead>
               <TableHead className="text-right">Fee</TableHead>
               <TableHead className="w-0" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {confirmed.length === 0 ? (
+            {confirmed.length === 0 && pendingAdditions.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={4}
@@ -409,6 +530,7 @@ export function GroupReportCard({
                       <Button
                         size="sm"
                         variant="ghost"
+                        className="text-muted-foreground"
                         onClick={() => {
                           setExcludeTarget(row.id);
                           setExcludeNote("");
@@ -435,43 +557,85 @@ export function GroupReportCard({
                 </TableRow>
               ))
             )}
+
+            {/*
+              People who paid after the roster was locked belong in the roster,
+              not in a box above it: the group admin is looking at a list of
+              names, and these are names that are missing from it.
+            */}
+            {view.isEditable
+              ? pendingAdditions.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className="bg-orange-500/[0.04] hover:bg-orange-500/[0.08]"
+                  >
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="text-sm">{memberName(row)}</span>
+                        {row.note ? (
+                          <span className="text-muted-foreground text-xs">
+                            {row.note}
+                          </span>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Status variant="warning">
+                        <StatusLabel>Waiting · not counted</StatusLabel>
+                      </Status>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
+                      {formatFeeAmount(
+                        row.feeAmountCents ?? 0,
+                        row.currency ?? currency,
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={acceptAddition.isPending}
+                        onClick={() =>
+                          acceptAddition.execute({ reportMemberId: row.id })
+                        }
+                      >
+                        <UndoIcon data-icon="inline-start" />
+                        Add to report
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              : null}
           </TableBody>
         </Table>
       </div>
 
-      {isLocked ? null : (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-muted-foreground text-sm">
-            Submitting locks the roster and sends it to the board.
-          </p>
-          <Button
-            onClick={() => setSubmitOpen(true)}
-            disabled={reportGroup.memberCount === 0}
-          >
-            <CheckIcon data-icon="inline-start" />
-            Submit {reportGroup.memberCount} member
-            {reportGroup.memberCount === 1 ? "" : "s"}
-          </Button>
-        </div>
-      )}
-
       {peers.length > 1 ? (
-        <div className="flex flex-col gap-2 rounded-xl border p-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border px-4 py-3">
           <p className="font-medium text-sm">
             {peersDone} of {peers.length} groups have submitted
           </p>
-          <div className="flex flex-wrap gap-2">
-            {peers.map((peer) => {
-              const peerStatus = REPORT_GROUP_STATUS[peer.status];
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {REPORT_GROUP_STATUS_ORDER.map((status) => {
+              const count = peers.filter(
+                (peer) => peer.status === status,
+              ).length;
+              if (count === 0) return null;
               return (
-                <Status
-                  key={peer.groupId ?? peer.groupName}
-                  variant={peerStatus.variant}
+                <span
+                  key={status}
+                  className="inline-flex items-center gap-1.5 text-muted-foreground text-xs"
                 >
-                  <StatusLabel>
-                    {peer.groupName} · {peer.memberCount}
-                  </StatusLabel>
-                </Status>
+                  <span
+                    className={cn(
+                      "size-2 rounded-full",
+                      REPORT_STATUS_TONE[REPORT_GROUP_STATUS[status].variant]
+                        .dot,
+                    )}
+                  />
+                  {REPORT_GROUP_STATUS[status].label}
+                  <span className="tabular-nums">{count}</span>
+                </span>
               );
             })}
           </div>

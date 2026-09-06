@@ -158,6 +158,24 @@ export type GroupReportView = {
   addableMembers: AddableMemberRow[];
 };
 
+/**
+ * The same year, seen from a group that has no row in it.
+ *
+ * A group created — or moved into the fee-managing category — after a report
+ * was opened simply is not in that report. Returning null for it used to take
+ * the whole tab away, which also took the year picker away, so the URL still
+ * carried `?report=` and there was no way back short of editing it by hand.
+ */
+export type GroupReportAbsentView = {
+  periods: ReportPeriodOption[];
+  isEditable: boolean;
+  report: GroupReportView["report"];
+  /** The discriminant: no row for this group in this year. */
+  reportGroup: null;
+};
+
+export type GroupReportTabView = GroupReportView | GroupReportAbsentView;
+
 export type AddableMemberRow = {
   id: string;
   firstName: string | null;
@@ -396,7 +414,7 @@ export async function getGroupReportView(
   orgId: string,
   groupId: string,
   requestedReportId?: string,
-): Promise<GroupReportView | null> {
+): Promise<GroupReportTabView | null> {
   const reportId = await resolveReportId(orgId, requestedReportId);
   if (!reportId) return null;
 
@@ -442,7 +460,37 @@ export async function getGroupReportView(
     )
     .limit(1);
 
-  if (!row) return null;
+  // The report exists but this group is not in it. The card still needs the
+  // year and the period list so the picker can take them back to a year they
+  // do appear in.
+  if (!row) {
+    const [reportRow] = await db
+      .select({
+        id: membershipReports.id,
+        periodLabel: membershipReports.periodLabel,
+        periodStart: membershipReports.periodStart,
+        periodEnd: membershipReports.periodEnd,
+        confirmDueAt: membershipReports.confirmDueAt,
+        status: membershipReports.status,
+      })
+      .from(membershipReports)
+      .where(
+        and(
+          eq(membershipReports.orgId, orgId),
+          eq(membershipReports.id, reportId),
+        ),
+      )
+      .limit(1);
+
+    if (!reportRow) return null;
+
+    return {
+      periods: await listReportPeriods(orgId),
+      isEditable: reportRow.status === "open",
+      report: reportRow,
+      reportGroup: null,
+    };
+  }
 
   const [periods, roster, peers] = await Promise.all([
     listReportPeriods(orgId),
