@@ -664,8 +664,15 @@ export const policyVersions = pgTable(
     documentId: uuid("document_id")
       .notNull()
       .references(() => policyDocuments.id, { onDelete: "cascade" }),
-    /** Admin-facing label, e.g. "2.0" or "2026-09". Unique per document. */
-    version: text("version").notNull(),
+    /**
+     * Admin-facing label, e.g. "2.0" or "2026-09". Unique per document.
+     *
+     * Null while the version is a draft: the label is chosen at publish time,
+     * and inventing a placeholder would put a fake version into the public
+     * archived URL space. Postgres allows many NULLs under a unique index, and
+     * only one draft per document exists anyway.
+     */
+    version: text("version"),
     /**
      * Sanitized at publish time and stored as-is. Archived versions render
      * straight from this string and are never passed back through a

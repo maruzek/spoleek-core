@@ -177,4 +177,71 @@
     background-color: var(--public-card);
     border-color: var(--public-hairline);
   }
+
+  /*
+   * Rendering for legal document bodies — the Tiptap editor and the public
+   * /legal pages share it, so what the admin writes is what the member reads.
+   *
+   * Hand-rolled rather than @tailwindcss/typography: the policy schema is
+   * seven tags (lib/policy-html.ts), and the plugin styles dozens we forbid
+   * while needing its own config to reach these design tokens.
+   */
+  .policy-prose {
+    color: var(--foreground);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+  }
+
+  .policy-prose > * + * {
+    margin-top: 1em;
+  }
+
+  .policy-prose h2,
+  .policy-prose h3 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .policy-prose h2 {
+    font-size: 1.25rem;
+    margin-top: 2em;
+  }
+
+  .policy-prose h3 {
+    font-size: 1.0625rem;
+    margin-top: 1.6em;
+  }
+
+  /* No leading gap when a document opens on a heading, which most do. */
+  .policy-prose > :first-child {
+    margin-top: 0;
+  }
+
+  .policy-prose ul,
+  .policy-prose ol {
+    padding-inline-start: 1.5em;
+  }
+
+  .policy-prose ul {
+    list-style: disc;
+  }
+
+  .policy-prose ol {
+    list-style: decimal;
+  }
+
+  .policy-prose li + li {
+    margin-top: 0.35em;
+  }
+
+  .policy-prose a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .policy-prose strong {
+    font-weight: 600;
+  }
 }
