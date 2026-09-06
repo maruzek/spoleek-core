@@ -1,0 +1,1 @@
+ALTER TYPE "public"."email_kind" ADD VALUE 'policy_version_published';

@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { and, count, eq, max } from "drizzle-orm";
 
@@ -21,6 +22,7 @@ import {
   policyVersions,
 } from "@/server/db/schema";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { notifyPolicyVersionPublished } from "@/server/notifications/policies";
 import { isPolicyHtmlEmpty, sanitizePolicyHtml } from "@/server/lib/policy-html";
 import { requireOrgAdminAccess } from "@/server/queries/access";
 import {
@@ -202,6 +204,19 @@ export const publishPolicyVersionAction = orgAdminActionClient
 
     revalidatePath("/admin/settings");
     revalidatePath(`/legal/${document.slug}`);
+
+    // Deliberately after the response: mailing several hundred members must not
+    // hold the publish open, and a mailer outage must not fail a version that
+    // is already in force and already enforced by the portal gate.
+    if (parsedInput.notifyMembers) {
+      after(() =>
+        notifyPolicyVersionPublished({
+          orgId: document.orgId,
+          documentId: document.id,
+          versionId: publishedVersionId,
+        }),
+      );
+    }
 
     return { success: true as const, versionId: publishedVersionId };
   });

@@ -60,6 +60,12 @@ export const publishPolicyVersionSchema = z.object({
    * step the publish flow should require.
    */
   bodyHtml: z.string().max(500_000, "The document is too long.").optional(),
+  /**
+   * Whether to email affected members. Defaults to false and is never set by
+   * anything but an explicit tick on the publish dialog: an accidental blast to
+   * the entire membership of a political organization is not recoverable.
+   */
+  notifyMembers: z.boolean().default(false),
 });
 
 export const discardPolicyDraftSchema = z.object({

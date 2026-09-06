@@ -52,6 +52,7 @@ export function PolicyPublishDialog({
   audience,
   suggestedVersion,
   bodyHtml,
+  reachable,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,8 @@ export function PolicyPublishDialog({
   suggestedVersion: string;
   /** The editor's current content, published without a draft round trip. */
   bodyHtml: string;
+  /** Members with a usable email address, per publish kind. */
+  reachable: { material: number; nonMaterial: number };
 }) {
   const router = useRouter();
   const [version, setVersion] = useState(suggestedVersion);
@@ -69,6 +72,13 @@ export function PolicyPublishDialog({
   const [effectiveFrom, setEffectiveFrom] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  // Off by default, every time. This is the one control in the app that can
+  // reach the whole membership at once.
+  const [notifyMembers, setNotifyMembers] = useState(false);
+
+  const affected = isMaterialChange ? audience.total : audience.neverShown;
+  const recipients = isMaterialChange ? reachable.material : reachable.nonMaterial;
+  const unreachable = Math.max(affected - recipients, 0);
 
   const publish = useAction(publishPolicyVersionAction, {
     onSuccess() {
@@ -164,6 +174,26 @@ export function PolicyPublishDialog({
               </FieldDescription>
             </FieldContent>
           </Field>
+          <Field orientation="horizontal">
+            <Checkbox
+              id="policy-notify"
+              checked={notifyMembers}
+              onCheckedChange={(checked) => setNotifyMembers(checked === true)}
+            />
+            <FieldContent>
+              <FieldLabel htmlFor="policy-notify">
+                Email {recipients} member{recipients === 1 ? "" : "s"} about this
+                version
+              </FieldLabel>
+              <FieldDescription>
+                {recipients === 0
+                  ? "Nobody has a usable email address for this, so nothing would be sent."
+                  : unreachable > 0
+                    ? `${unreachable} affected member${unreachable === 1 ? " has" : "s have"} no usable address and cannot be mailed — they are still stopped at the portal.`
+                    : "Sent once, now. Members are told what changed and given a link to this exact version."}
+              </FieldDescription>
+            </FieldContent>
+          </Field>
         </FieldGroup>
 
         {isMaterialChange ? (
@@ -219,6 +249,7 @@ export function PolicyPublishDialog({
                 isMaterialChange,
                 effectiveFrom: new Date(effectiveFrom),
                 bodyHtml,
+                notifyMembers,
               })
             }
           >

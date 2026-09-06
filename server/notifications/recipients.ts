@@ -25,7 +25,14 @@ export type NotificationRecipient = {
     | "group_address"
     | "workspace_group"
     | "applicant"
-    | "account_owner";
+    | "account_owner"
+    | "member";
+  /**
+   * Set for per-member broadcasts so each `email_activities` row points at the
+   * person, not just the address. Without it a policy notification to 400
+   * members logs 400 rows that cannot be traced back to who was told.
+   */
+  memberId?: string | null;
 };
 
 /**

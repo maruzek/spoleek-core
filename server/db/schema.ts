@@ -87,6 +87,10 @@ export const emailKindEnum = pgEnum("email_kind", [
   // delivered rather than merely sent.
   "report_reminder",
   "report_digest",
+  // A new version of a legal document, sent only when an admin explicitly asks
+  // for it on the publish dialog. Never automatic: an accidental blast to the
+  // whole membership of a political party is not recoverable socially.
+  "policy_version_published",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [

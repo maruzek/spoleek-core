@@ -55,7 +55,8 @@ export async function sendNotificationEmails(params: {
       await recordNotificationEmail({
         orgId: params.orgId,
         kind: params.kind,
-        memberId: params.memberId ?? null,
+        // Per-recipient id wins: a broadcast has a different member per row.
+        memberId: recipient.memberId ?? params.memberId ?? null,
         fromEmail,
         toEmail: recipient.email,
         toName: recipient.name,
@@ -71,7 +72,8 @@ export async function sendNotificationEmails(params: {
       await recordNotificationEmail({
         orgId: params.orgId,
         kind: params.kind,
-        memberId: params.memberId ?? null,
+        // Per-recipient id wins: a broadcast has a different member per row.
+        memberId: recipient.memberId ?? params.memberId ?? null,
         fromEmail,
         toEmail: recipient.email,
         toName: recipient.name,

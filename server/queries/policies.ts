@@ -210,6 +210,25 @@ export async function listOutstandingPolicies(
   });
 }
 
+/**
+ * How many members would actually receive a notification, which is not the same
+ * as how many are affected: a member with no usable address is still stopped by
+ * the portal gate but cannot be mailed. The dialog shows both numbers so the
+ * gap is visible before the send, not discovered in the email log afterwards.
+ */
+export async function countPolicyNotificationRecipients(params: {
+  orgId: string;
+  documentId: string;
+  isMaterialChange: boolean;
+}) {
+  const { resolvePolicyNotificationRecipients } = await import(
+    "@/server/notifications/policies"
+  );
+
+  const recipients = await resolvePolicyNotificationRecipients(params);
+  return recipients.length;
+}
+
 export type PolicyDocumentRow = Awaited<
   ReturnType<typeof listPolicyDocumentsForAdmin>
 >[number];
@@ -230,12 +249,23 @@ export async function listPolicyDocumentsForAdmin(orgId: string) {
 
   return Promise.all(
     documents.map(async (document) => {
-      const [versions, current, draft, audience] = await Promise.all([
-        listPolicyVersions(document.id),
-        getCurrentPolicyVersion(document.id),
-        getPolicyDraft(document.id),
-        countPolicyAudience(orgId, document.id),
-      ]);
+      const [versions, current, draft, audience, reachableAll, reachableNeverShown] =
+        await Promise.all([
+          listPolicyVersions(document.id),
+          getCurrentPolicyVersion(document.id),
+          getPolicyDraft(document.id),
+          countPolicyAudience(orgId, document.id),
+          countPolicyNotificationRecipients({
+            orgId,
+            documentId: document.id,
+            isMaterialChange: true,
+          }),
+          countPolicyNotificationRecipients({
+            orgId,
+            documentId: document.id,
+            isMaterialChange: false,
+          }),
+        ]);
 
       return {
         document,
@@ -244,6 +274,8 @@ export async function listPolicyDocumentsForAdmin(orgId: string) {
         current,
         draft,
         audience,
+        /** Members with a usable address, per publish kind. */
+        reachable: { material: reachableAll, nonMaterial: reachableNeverShown },
       };
     }),
   );

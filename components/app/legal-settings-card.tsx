@@ -259,6 +259,7 @@ function PolicyDocumentCard({ row }: { row: PolicyDocumentRow }) {
         audience={audience}
         suggestedVersion={suggestedVersion}
         bodyHtml={body}
+        reachable={row.reachable}
       />
     </Card>
   );

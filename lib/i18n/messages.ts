@@ -224,6 +224,22 @@ const en = {
       notYou: (organizationName: string) =>
         `If you did not apply to ${organizationName}, you can ignore this email. Nothing further happens without an administrator approving the application.`,
     },
+    policyPublished: {
+      subject: (organizationName: string, documentTitle: string) =>
+        `${organizationName}: ${documentTitle} has been updated`,
+      heading: (documentTitle: string) => `${documentTitle} has been updated`,
+      greeting: (memberName: string) => `Hello ${memberName},`,
+      body: (organizationName: string, documentTitle: string, effectiveFrom: string) =>
+        `${organizationName} published a new version of the ${documentTitle}, in force from ${effectiveFrom}.`,
+      changesTitle: "What changed",
+      actionRequired:
+        "You will be asked to confirm this the next time you open the member portal. Nothing else is needed from you now.",
+      noActionRequired:
+        "This is a minor change, so you do not need to do anything — your earlier response still stands.",
+      readVersion: "Read this version",
+      keepThis:
+        "This link points at the exact version described above and keeps working after the document is updated again.",
+    },
 
     rejected: {
       subject: (organizationName: string) =>
@@ -488,6 +504,22 @@ const cs: Dictionary = {
         "Uschovejte si tento e-mail jako doklad. Odkazy vedou na verze, ke kterým jste se vyjádřili, i po pozdější aktualizaci dokumentů.",
       notYou: (organizationName: string) =>
         `Pokud jste se do organizace ${organizationName} nepřihlašovali, můžete tento e-mail ignorovat. Bez schválení správcem se nic dalšího neděje.`,
+    },
+    policyPublished: {
+      subject: (organizationName: string, documentTitle: string) =>
+        `${organizationName}: dokument ${documentTitle} byl aktualizován`,
+      heading: (documentTitle: string) => `Dokument ${documentTitle} byl aktualizován`,
+      greeting: (memberName: string) => `Dobrý den, ${memberName},`,
+      body: (organizationName: string, documentTitle: string, effectiveFrom: string) =>
+        `Organizace ${organizationName} zveřejnila novou verzi dokumentu ${documentTitle} s účinností od ${effectiveFrom}.`,
+      changesTitle: "Co se změnilo",
+      actionRequired:
+        "Při příštím otevření členského portálu budete požádáni o potvrzení. Nyní od vás nic dalšího nepotřebujeme.",
+      noActionRequired:
+        "Jde o drobnou změnu, takže nemusíte nic dělat — vaše dřívější vyjádření nadále platí.",
+      readVersion: "Zobrazit tuto verzi",
+      keepThis:
+        "Odkaz vede přesně na výše popsanou verzi a funguje i po další aktualizaci dokumentu.",
     },
 
     rejected: {
