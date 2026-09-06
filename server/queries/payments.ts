@@ -4,6 +4,7 @@ import { PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
   groupMemberships,
+  groups,
   memberPayments,
   tenantMembers,
   type MemberPayment,
@@ -27,12 +28,57 @@ export type PaymentStats = {
   }>;
 };
 
+export type PaymentMemberGroup = { id: string; name: string };
+
 export type PaymentRow = MemberPayment & {
   memberFirstName: string | null;
   memberLastName: string | null;
   memberEmail: string | null;
   memberName: string;
+  /** Every group the payer belongs to. Drives the group filter on the
+   *  dashboard; a member can sit in several, so this is a list, not a field. */
+  memberGroups: PaymentMemberGroup[];
 };
+
+/**
+ * Group membership for a set of members, as a lookup keyed by member id.
+ *
+ * Fetched separately from the payments themselves on purpose: joining groups
+ * into the main query would multiply a payment row once per group the payer is
+ * in, which breaks both the row count and the ORDER BY below.
+ */
+async function getGroupsByMember(
+  orgId: string,
+  memberIds: string[],
+): Promise<Map<string, PaymentMemberGroup[]>> {
+  if (memberIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      memberId: groupMemberships.memberId,
+      groupId: groups.id,
+      groupName: groups.name,
+    })
+    .from(groupMemberships)
+    .innerJoin(groups, eq(groupMemberships.groupId, groups.id))
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        inArray(groupMemberships.memberId, memberIds),
+      ),
+    )
+    .orderBy(asc(groups.name));
+
+  const byMember = new Map<string, PaymentMemberGroup[]>();
+
+  for (const row of rows) {
+    const list = byMember.get(row.memberId) ?? [];
+    list.push({ id: row.groupId, name: row.groupName });
+    byMember.set(row.memberId, list);
+  }
+
+  return byMember;
+}
 
 export async function listMemberIdsInGroups(
   orgId: string,
@@ -103,12 +149,18 @@ export async function listPaymentsForOrg(
     // as a tiebreaker so the order is stable across renders.
     .orderBy(asc(statusRank), asc(memberPayments.dueAt), desc(memberPayments.createdAt));
 
+  const groupsByMember = await getGroupsByMember(
+    orgId,
+    [...new Set(rows.map((row) => row.payment.memberId))],
+  );
+
   return rows.map((row) => ({
     ...row.payment,
     memberFirstName: row.firstName,
     memberLastName: row.lastName,
     memberEmail: row.email,
     memberName: [row.firstName, row.lastName].filter(Boolean).join(" ") || row.email || "Unknown",
+    memberGroups: groupsByMember.get(row.payment.memberId) ?? [],
   }));
 }
 

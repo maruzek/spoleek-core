@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CheckIcon, RefreshCwIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
@@ -12,9 +12,16 @@ import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-di
 import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, SortableHeader } from "@/components/ui/data-table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatDateTime } from "@/lib/format";
-import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
+import { comparePaymentStatus, formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
   generatePaymentsAction,
@@ -62,9 +69,31 @@ function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
   );
 }
 
+/** Sentinel for "no group filter" — Radix Select cannot hold an empty value. */
+const ALL_GROUPS = "__all__";
+
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
+  const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
+
+  // Options come from the rows on screen rather than from every group in the
+  // org, so the dropdown can never offer a group that would filter to nothing.
+  const groupOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const payment of payments) {
+      for (const group of payment.memberGroups) byId.set(group.id, group.name);
+    }
+    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [payments]);
+
+  const visiblePayments = useMemo(
+    () =>
+      groupId === ALL_GROUPS
+        ? payments
+        : payments.filter((payment) => payment.memberGroups.some((g) => g.id === groupId)),
+    [payments, groupId],
+  );
 
   const generate = useAction(generatePaymentsAction, {
     onSuccess({ data }) {
@@ -110,24 +139,40 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       enableHiding: false,
     }),
     columnHelper.accessor("memberName", {
-      header: "Member",
+      header: ({ column }) => <SortableHeader column={column}>Member</SortableHeader>,
       meta: { label: "Member" },
     }),
     columnHelper.accessor("periodLabel", {
-      header: "Payment",
+      header: ({ column }) => <SortableHeader column={column}>Payment</SortableHeader>,
       meta: { label: "Payment" },
       cell: ({ row }) => getPaymentTitle(row.original.type, row.original.periodLabel),
     }),
     columnHelper.accessor("amount", {
-      header: "Amount",
+      header: ({ column }) => <SortableHeader column={column}>Amount</SortableHeader>,
       meta: { label: "Amount" },
       cell: ({ row }) =>
         formatFeeAmount(row.original.amount, row.original.currency),
     }),
     columnHelper.accessor("status", {
-      header: "Status",
+      header: ({ column }) => <SortableHeader column={column}>Status</SortableHeader>,
       meta: { label: "Status" },
       cell: ({ row }) => <PaymentStatusBadge status={row.original.status} />,
+      // Without this the column would sort alphabetically (cancelled, overdue,
+      // paid, pending) and contradict the server ordering.
+      sortingFn: (a, b) => comparePaymentStatus(a.original.status, b.original.status),
+    }),
+    columnHelper.display({
+      id: "memberGroups",
+      header: "Groups",
+      meta: { label: "Groups" },
+      cell: ({ row }) =>
+        row.original.memberGroups.length ? (
+          <span className="text-xs text-muted-foreground">
+            {row.original.memberGroups.map((g) => g.name).join(", ")}
+          </span>
+        ) : (
+          "—"
+        ),
     }),
     columnHelper.accessor("variableSymbol", {
       header: "VS",
@@ -140,12 +185,12 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         ),
     }),
     columnHelper.accessor("dueAt", {
-      header: "Due",
+      header: ({ column }) => <SortableHeader column={column}>Due</SortableHeader>,
       meta: { label: "Due" },
       cell: ({ row }) => formatDateTime(row.original.dueAt),
     }),
     columnHelper.accessor("paidAt", {
-      header: "Paid at",
+      header: ({ column }) => <SortableHeader column={column}>Paid at</SortableHeader>,
       meta: { label: "Paid at" },
       cell: ({ row }) =>
         row.original.paidAt ? formatDateTime(row.original.paidAt) : "—",
@@ -164,11 +209,11 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentSummary payments={payments} />
+      <PaymentSummary payments={visiblePayments} />
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
-        data={payments}
+        data={visiblePayments}
         searchKey="memberName"
         searchPlaceholder="Filter by member..."
         emptyStateTitle="No payment records"
@@ -181,6 +226,22 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
           return (
             <>
+              {groupOptions.length > 0 && (
+                <Select value={groupId} onValueChange={setGroupId}>
+                  <SelectTrigger className="w-[200px]" aria-label="Filter by group">
+                    <UsersIcon data-icon="inline-start" />
+                    <SelectValue placeholder="All groups" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_GROUPS}>All groups</SelectItem>
+                    {groupOptions.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {selected.length > 0 && (
                 <Button
                   variant="outline"

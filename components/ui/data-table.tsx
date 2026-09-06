@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   Table as TanStackTable,
+  Column,
   ColumnDef,
   ColumnFiltersState,
   SortingState,
@@ -15,6 +16,9 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronsUpDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsLeftIcon,
@@ -72,6 +76,50 @@ interface DataTableProps<TData, TValue> {
    * per-row actions keep working.
    */
   onRowClick?: (row: TData) => void;
+}
+
+/**
+ * Header that toggles sorting on its column. Use it as a column's `header`
+ * instead of a bare string:
+ *
+ *   header: ({ column }) => <SortableHeader column={column}>Due</SortableHeader>
+ *
+ * The arrow reflects the current direction, and the neutral chevrons mean "you
+ * can sort by this" — without them a clickable header is invisible. Rendered as
+ * a real <button> so it is keyboard-reachable; note that the row-click handler
+ * deliberately ignores clicks on buttons, which keeps sorting from opening a
+ * row.
+ */
+export function SortableHeader<TData, TValue>({
+  column,
+  children,
+  className,
+}: {
+  column: Column<TData, TValue>;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const sorted = column.getIsSorted();
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className={`-ml-2 h-8 px-2 data-[state=sorted]:text-foreground ${className ?? ""}`}
+      data-state={sorted ? "sorted" : undefined}
+      onClick={() => column.toggleSorting(sorted === "asc")}
+      aria-label={`Sort by ${typeof children === "string" ? children : column.id}`}
+    >
+      {children}
+      {sorted === "asc" ? (
+        <ArrowUpIcon className="size-3.5 text-muted-foreground" />
+      ) : sorted === "desc" ? (
+        <ArrowDownIcon className="size-3.5 text-muted-foreground" />
+      ) : (
+        <ChevronsUpDownIcon className="size-3.5 text-muted-foreground/50" />
+      )}
+    </Button>
+  );
 }
 
 const INTERACTIVE_SELECTOR =
