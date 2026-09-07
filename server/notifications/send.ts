@@ -67,7 +67,12 @@ export async function sendNotificationEmails(params: {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown send error.";
 
-      console.error(`[notifications] ${params.kind} → ${recipient.email}: ${message}`);
+      // Member id, never the address: this line lands in the host's log store,
+      // which is retained under their policy rather than ours and sits outside
+      // every retention rule we set. The address is one query away from the id.
+      const subject = recipient.memberId ?? params.memberId ?? "unknown recipient";
+
+      console.error(`[notifications] ${params.kind} → member ${subject}: ${message}`);
 
       await recordNotificationEmail({
         orgId: params.orgId,

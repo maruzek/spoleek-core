@@ -458,7 +458,7 @@ export function MemberAdmin({
 
       if (data.skippedProtectedCount > 0) {
         parts.push(
-          `${data.skippedProtectedCount} protected member${data.skippedProtectedCount === 1 ? "" : "s"} skipped`,
+          `${data.skippedProtectedCount} admin${data.skippedProtectedCount === 1 ? "" : "s"} kept so the organization still has one`,
         );
       }
 

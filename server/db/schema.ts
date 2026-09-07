@@ -68,6 +68,10 @@ export const memberAuthEventTypeEnum = pgEnum("member_auth_event_type", [
   "workspace_provisioned",
   "workspace_provision_failed",
   "workspace_user_linked",
+  // A copy of everything held about this member was produced, under Art. 15
+  // or Art. 20. Recorded because an export is a read of the entire record,
+  // and because "did we answer that request?" needs an answer.
+  "data_exported",
 ]);
 
 export const emailDirectionEnum = pgEnum("email_direction", [
@@ -516,6 +520,16 @@ export const organizations = pgTable(
       .notNull()
       .default(true),
     registrationNotificationEmail: text("registration_notification_email"),
+    /**
+     * Age below which an application is flagged for manual handling.
+     *
+     * Deliberately not a validation rule. A date field's `minAge` constraint
+     * rejects the submission outright, which is the wrong instrument here: a
+     * youth organization wants the young applicant to reach a human with a
+     * guardian countersignature, not to be told no by a form. Null means the
+     * organization has not set one and nothing is flagged.
+     */
+    registrationMinimumAge: integer("registration_minimum_age"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -542,6 +556,10 @@ export const organizations = pgTable(
     check(
       "organizations_report_confirm_month_check",
       sql`${table.membershipReportConfirmMonth} IS NULL OR (${table.membershipReportConfirmMonth} >= 1 AND ${table.membershipReportConfirmMonth} <= 12)`,
+    ),
+    check(
+      "organizations_minimum_age_check",
+      sql`${table.registrationMinimumAge} IS NULL OR (${table.registrationMinimumAge} >= 0 AND ${table.registrationMinimumAge} <= 150)`,
     ),
     check(
       "organizations_report_confirm_day_check",
@@ -935,10 +953,21 @@ export const memberCustomFields = pgTable(
       .default({}),
     sortOrder: integer("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
+    /**
+     * Marks the one `date` field that holds the member's date of birth.
+     *
+     * Age cannot be derived without knowing which field to read, and an org
+     * may well have several date fields (joined on, medical check expiry).
+     * Enforced as at most one per organization below.
+     */
+    isDateOfBirth: boolean("is_date_of_birth").notNull().default(false),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("member_custom_fields_org_key_idx").on(table.orgId, table.key),
+    uniqueIndex("member_custom_fields_org_dob_idx")
+      .on(table.orgId)
+      .where(sql`is_date_of_birth`),
     index("member_custom_fields_org_sort_idx").on(table.orgId, table.sortOrder),
     index("member_custom_fields_org_stage_idx").on(table.orgId, table.stage),
     check(
@@ -1591,6 +1620,35 @@ export const membershipReportMembers = pgTable(
   ],
 );
 
+/**
+ * Fixed-window counters for public, unauthenticated endpoints.
+ *
+ * In the database rather than in memory because the app runs as serverless
+ * functions: an in-process counter is per-instance and resets on every cold
+ * start, which makes it a comment rather than a control.
+ *
+ * `key` is already hashed by the caller and never holds a raw address. The
+ * table exists to bound abuse of `/join`, which accepts a name and email
+ * address *about another person* from anyone who can reach the page — so it
+ * must not itself become a log of who visited. Rows are disposable: anything
+ * past `expiresAt` is deleted rather than kept for analysis.
+ */
+export const rateLimitBuckets = pgTable(
+  "rate_limit_buckets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** `<scope>:<sha256 of the identifier>`. Never the identifier itself. */
+    key: text("key").notNull(),
+    count: integer("count").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("rate_limit_buckets_key_idx").on(table.key),
+    index("rate_limit_buckets_expires_idx").on(table.expiresAt),
+  ],
+);
+
 export const schema = {
   users,
   sessions,
@@ -1621,6 +1679,7 @@ export const schema = {
   membershipReports,
   membershipReportGroups,
   membershipReportMembers,
+  rateLimitBuckets,
 };
 
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
@@ -1694,3 +1753,4 @@ export type WorkspaceDriftStatus = typeof workspaceDriftStatusEnum.enumValues[nu
 export type WorkspaceGroupDrift = typeof workspaceGroupDrift.$inferSelect;
 export type EmailActivity = typeof emailActivities.$inferSelect;
 export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;
+export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;

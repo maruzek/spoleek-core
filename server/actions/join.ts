@@ -29,6 +29,19 @@ import {
 } from "@/server/queries/policies";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { findTenantMemberByEmail } from "@/server/queries/members";
+import {
+  consumeRateLimit,
+  getRequestIdentifier,
+} from "@/server/lib/rate-limit";
+
+/**
+ * Generous enough that a household or a school network sharing one address
+ * can still sign up together, tight enough that scripted bulk submission of
+ * other people's details is not worth the wait.
+ */
+const JOIN_RATE_LIMIT_SCOPE = "join";
+const JOIN_MAX_SUBMISSIONS_PER_WINDOW = 10;
+const JOIN_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
 export const submitJoinApplicationAction = actionClient
   .metadata({ actionName: "submitJoinApplication" })
@@ -39,6 +52,21 @@ export const submitJoinApplicationAction = actionClient
 
     if (!organization) {
       throw new Error(t.errors.notSetUp);
+    }
+
+    // Before any database work: the form takes a name and email address about
+    // another person from anyone who can reach it, and nothing else bounds how
+    // many times. Deliberately not tied to the submitted address — limiting per
+    // address would let one caller submit a thousand different people.
+    const limit = await consumeRateLimit({
+      scope: JOIN_RATE_LIMIT_SCOPE,
+      identifier: await getRequestIdentifier(),
+      limit: JOIN_MAX_SUBMISSIONS_PER_WINDOW,
+      windowMs: JOIN_RATE_LIMIT_WINDOW_MS,
+    });
+
+    if (!limit.allowed) {
+      throw new Error(t.errors.tooManySubmissions);
     }
 
     // Every published document has to be acknowledged to join. The required

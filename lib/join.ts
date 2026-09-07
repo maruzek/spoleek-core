@@ -37,6 +37,19 @@ export const joinPageSettingsSchema = z.object({
     .string()
     .trim()
     .min(20, "Add the invite email instructions members should receive after approval."),
+  /**
+   * Below this age an application is flagged for manual handling. Empty means
+   * the organization has not set one and nothing is flagged.
+   *
+   * A flag, never a rejection: a youth organization wants the young applicant
+   * to reach a human with a guardian countersignature, not to be turned away by
+   * a form. The hard bound, if one is wanted, is a date field's `minAge`
+   * constraint.
+   */
+  registrationMinimumAge: z
+    .union([z.coerce.number().int().min(0).max(150), z.literal("")])
+    .optional()
+    .transform((value) => (value === "" || value === undefined ? null : value)),
   // The legal documents moved to their own versioned tables and the Legal
   // settings tab; see docs/legal-policies.md.
 });

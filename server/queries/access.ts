@@ -517,6 +517,28 @@ export async function requireWorkspaceLinkAccess(groupId: string) {
   return context;
 }
 
+/**
+ * Sends a member to `/portal/legal` while any published document is unanswered.
+ *
+ * Status is deliberately not narrowed to `active`. The gate used to fire only
+ * for active members, which meant an org admin working entirely inside `/admin`
+ * — and anyone suspended or archived who could still reach a signed-in page —
+ * never saw a policy prompt and never produced an acknowledgement row. The
+ * people handling everyone else's data were the only ones with no record of
+ * having been informed. `getCurrentMember` already excludes deleted members, so
+ * every status arriving here is one that reaches a real surface.
+ *
+ * `/portal/legal` calls the member guard with no options, so the page that
+ * clears the block cannot redirect to itself.
+ */
+async function redirectIfPoliciesOutstanding(orgId: string, memberId: string) {
+  const outstanding = await listOutstandingPolicies(orgId, memberId);
+
+  if (outstanding.length > 0) {
+    redirect("/portal/legal");
+  }
+}
+
 export async function requireCurrentMemberAccess(options?: {
   requireProfileComplete?: boolean;
   requirePolicyAcknowledgement?: boolean;
@@ -540,12 +562,8 @@ export async function requireCurrentMemberAccess(options?: {
   // Deliberately ahead of the profile check: nobody should be asked to fill in
   // custom fields before being told how their data is handled. A legal
   // obligation outranks profile hygiene.
-  if (options?.requirePolicyAcknowledgement && member.status === "active") {
-    const outstanding = await listOutstandingPolicies(organization.id, member.id);
-
-    if (outstanding.length > 0) {
-      redirect("/portal/legal");
-    }
+  if (options?.requirePolicyAcknowledgement) {
+    await redirectIfPoliciesOutstanding(organization.id, member.id);
   }
 
   if (options?.requireProfileComplete && member.status === "active") {
@@ -586,6 +604,13 @@ export async function requireAdminAccess(options?: {
 
   if (options?.capability && !appContext.capabilities[options.capability]) {
     forbidden();
+  }
+
+  // Admins are data subjects too, and they are the ones handling everybody
+  // else's record. A system admin with no membership has nothing to answer for
+  // and is left alone.
+  if (member) {
+    await redirectIfPoliciesOutstanding(organization.id, member.id);
   }
 
   return {

@@ -1,9 +1,10 @@
+import { addDays } from "date-fns";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
 import { db } from "@/server/db";
 import { groups, memberPayments } from "@/server/db/schema";
-import { buildPaymentQrUrl } from "@/server/lib/payment-qr";
+import { PAYMENT_QR_GRACE_DAYS, buildPaymentQrUrl } from "@/server/lib/payment-qr";
 import { formatLongDate } from "@/lib/format";
 
 export type ApprovalPaymentDetails = {
@@ -73,6 +74,11 @@ export async function getApprovalPaymentDetails(
     dueDate: formatLongDate(payment.dueAt),
     periodLabel: payment.periodLabel,
     sourceGroupName,
-    qrUrl: payment.bankAccount ? buildPaymentQrUrl(payment.id) : null,
+    // Anchored to this payment's own due date rather than to when the mail
+    // was sent, so a reminder and the original email agree on when the QR
+    // stops working.
+    qrUrl: payment.bankAccount
+      ? buildPaymentQrUrl(payment.id, addDays(payment.dueAt, PAYMENT_QR_GRACE_DAYS))
+      : null,
   };
 }

@@ -186,6 +186,8 @@ const en = {
     confirmPasswordRequired: "Confirm your password.",
     passwordsDoNotMatch: "Passwords do not match.",
     notSetUp: "The application is not set up yet.",
+    tooManySubmissions:
+      "Too many applications from this connection. Please try again in an hour.",
     policyIncomplete: "Organization policy setup is incomplete.",
     unableToResolveApplicant: "Unable to resolve the applicant record.",
     inviteUnavailable: "This invitation is no longer available.",
@@ -467,6 +469,8 @@ const cs: Dictionary = {
     confirmPasswordRequired: "Potvrďte heslo.",
     passwordsDoNotMatch: "Hesla se neshodují.",
     notSetUp: "Aplikace zatím není nastavena.",
+    tooManySubmissions:
+      "Z tohoto připojení přišlo příliš mnoho přihlášek. Zkuste to prosím za hodinu.",
     policyIncomplete: "Nastavení pravidel organizace není dokončeno.",
     unableToResolveApplicant: "Záznam žadatele se nepodařilo načíst.",
     inviteUnavailable: "Tato pozvánka již není k dispozici.",

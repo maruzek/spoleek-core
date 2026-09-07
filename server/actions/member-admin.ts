@@ -41,6 +41,7 @@ import {
   sendMemberActivationInvite,
 } from "@/server/lib/member-invites";
 import { hardDeleteMembers, softDeleteMembers } from "@/server/lib/member-lifecycle";
+import { getMemberAgeSignal } from "@/server/lib/member-age";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import {
@@ -363,6 +364,13 @@ export const approveMemberAction = authActionClient
        * Workspace is perfectly healthy.
        */
       skipWorkspaceAccount: z.boolean().default(false),
+      /**
+       * The admin has seen that this applicant is below the organization's
+       * minimum age and is approving anyway — with a guardian countersignature
+       * on file, or because the age on record is wrong. Approval is refused
+       * without it, so a minor can never be waved through unnoticed.
+       */
+      acknowledgeUnderAge: z.boolean().default(false),
       workspace: z
         .object({
           primaryEmail: z.email(),
@@ -387,6 +395,23 @@ export const approveMemberAction = authActionClient
       parsedInput.role,
       scope.canAssignElevatedRoles,
     );
+
+    // Checked before any provisioning work: an under-age approval is a decision
+    // somebody has to make on purpose, not something discovered afterwards.
+    if (!parsedInput.acknowledgeUnderAge) {
+      const ageSignal = await getMemberAgeSignal({
+        orgId: organization.id,
+        memberId: member.id,
+      });
+
+      if (ageSignal?.isUnderAge) {
+        throw new Error(
+          ageSignal.age == null
+            ? "This applicant has no date of birth on record, so their age cannot be checked against the minimum. Confirm it before approving."
+            : `This applicant is ${ageSignal.age}, below the minimum age of ${ageSignal.minimumAge}. Confirm a guardian has countersigned before approving.`,
+        );
+      }
+    }
     const workspaceReady =
       isWorkspaceModuleReady(organization) && !parsedInput.skipWorkspaceAccount;
 

@@ -26,6 +26,7 @@ import {
   type WorkspaceModuleState,
 } from "@/server/queries/members";
 import { listPaymentsForMember } from "@/server/queries/payments";
+import { getMemberAgeSignal, type MemberAgeSignal } from "@/server/lib/member-age";
 import {
   resolveMemberManagementScope,
   type MemberManagementGroupCategory,
@@ -61,6 +62,7 @@ export type MemberPaymentSummary = {
 export type MemberDetailData = {
   access: MemberAdminAccess;
   editor: MemberEditorData;
+  ageSignal: MemberAgeSignal | null;
   customFields: MemberCustomField[];
   manageableGroupCategories: MemberManagementGroupCategory[];
   workspace: WorkspaceModuleState;
@@ -226,5 +228,9 @@ export async function getMemberDetailData(
       selectedEmail && selectedEmail.memberId === memberId ? selectedEmail : null,
     authEvents,
     workspaceGroupLinks,
+    // Null unless the organization set a minimum age and marked which field
+    // holds the birth date — "we were not asked to check" is not the same
+    // claim as "this applicant is old enough".
+    ageSignal: await getMemberAgeSignal({ orgId: scope.organizationId, memberId }),
   };
 }

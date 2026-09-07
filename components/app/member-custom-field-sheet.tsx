@@ -57,6 +57,7 @@ function toFormValues(
     discoveryMode: field?.discoveryMode ?? "available",
     required: field?.required ?? false,
     isActive: field?.isActive ?? true,
+    isDateOfBirth: field?.isDateOfBirth ?? false,
     sortOrder: field?.sortOrder ?? 0,
     options: field?.options ?? [],
     constraints: field?.constraints ?? {},
@@ -442,6 +443,24 @@ function InnerForm({
                     />
                   )}
                 </form.Field>
+
+                <form.Subscribe selector={(state) => state.values.type}>
+                  {(type) =>
+                    type === "date" ? (
+                      <form.Field name="isDateOfBirth">
+                        {(formField) => (
+                          <SwitchChoiceField
+                            id="field-date-of-birth"
+                            title="This is the date of birth"
+                            description="Lets the app work out a member's age, so applications below the organization's minimum age are flagged for review instead of approved unnoticed. Only one field can hold this."
+                            checked={formField.state.value}
+                            onCheckedChange={formField.handleChange}
+                          />
+                        )}
+                      </form.Field>
+                    ) : null
+                  }
+                </form.Subscribe>
               </div>
 
               <form.Field name="sortOrder">

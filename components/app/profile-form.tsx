@@ -7,6 +7,7 @@ import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
+import { MemberDataExportButton } from "@/components/app/member-data-export-button";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -355,6 +356,25 @@ export function ProfileForm({
             </CardHeader>
           </Card>
         )}
+
+        {/*
+          Self-service is the point: an access request that the member can
+          answer with one click never becomes a ticket, and the organization
+          owes a reply within a month either way.
+        */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Your data</CardTitle>
+            <CardDescription>
+              Download everything this organization holds about you, as a JSON
+              file — your profile, group memberships, payments, the documents you
+              accepted, and the emails sent to you.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="p-4 border-t mt-4 bg-muted/10">
+            <MemberDataExportButton mode="self" className="w-full" />
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );

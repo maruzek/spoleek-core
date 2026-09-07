@@ -21,7 +21,10 @@ import { saveJoinPageSettingsAction } from "@/server/actions/organization-settin
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 
 type JoinPageSettingsFormProps = {
-  organization: Pick<Organization, "joinPageHeadline" | "joinPageBody">;
+  organization: Pick<
+    Organization,
+    "joinPageHeadline" | "joinPageBody" | "registrationMinimumAge"
+  >;
   policy: Pick<
     OrganizationPolicy,
     "memberInviteEmailSubject" | "memberInviteEmailBody"
@@ -70,6 +73,7 @@ export function JoinPageSettingsForm({
   const form = useForm({
     defaultValues: {
       joinPageHeadline: organization.joinPageHeadline,
+      registrationMinimumAge: organization.registrationMinimumAge ?? "",
       joinPageBody: organization.joinPageBody,
       memberInviteEmailSubject: policy.memberInviteEmailSubject,
       memberInviteEmailBody: policy.memberInviteEmailBody,
@@ -115,6 +119,46 @@ export function JoinPageSettingsForm({
                     />
                     <FieldDescription>
                       The first line applicants see on the public <code>/join</code> page.
+                    </FieldDescription>
+                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
+                  </FieldContent>
+                </Field>
+              );
+            }}
+          </form.Field>
+
+          <form.Field name="registrationMinimumAge">
+            {(formField) => {
+              const errors = [
+                ...getFormFieldErrors(formField.state.meta.errors),
+                ...getErrorMessages(validationErrors?.registrationMinimumAge),
+              ];
+
+              return (
+                <Field data-invalid={errors.length > 0}>
+                  <FieldLabel htmlFor="registration-minimum-age">
+                    Minimum age
+                  </FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="registration-minimum-age"
+                      name="registrationMinimumAge"
+                      type="number"
+                      min={0}
+                      max={150}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="No minimum"
+                      value={String(formField.state.value ?? "")}
+                      onBlur={formField.handleBlur}
+                      onChange={(event) => formField.handleChange(event.target.value)}
+                      aria-invalid={errors.length > 0}
+                    />
+                    <FieldDescription>
+                      Applications below this age are flagged for review and cannot be
+                      approved without an explicit confirmation — they are never
+                      rejected automatically. Needs a date field marked as the date of
+                      birth in Custom fields. Leave empty for no minimum.
                     </FieldDescription>
                     {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
                   </FieldContent>

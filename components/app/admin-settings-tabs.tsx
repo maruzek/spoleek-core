@@ -37,7 +37,10 @@ import type { PolicyDocumentRow } from "@/server/queries/policies";
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 
 type AdminSettingsTabsProps = {
-  organization: Pick<Organization, "joinPageHeadline" | "joinPageBody">;
+  organization: Pick<
+    Organization,
+    "joinPageHeadline" | "joinPageBody" | "registrationMinimumAge"
+  >;
   policy: Pick<
     OrganizationPolicy,
     "memberInviteEmailSubject" | "memberInviteEmailBody"

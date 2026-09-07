@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
 import { pickConstraintsForType } from "@/lib/member-custom-field-constraints";
@@ -18,6 +18,36 @@ import {
   isCompatibleFieldTypeChange,
 } from "@/server/queries/member-custom-fields";
 import { requireOrgAdminAccess } from "@/server/queries/access";
+
+/**
+ * At most one field per organization holds the date of birth, enforced by a
+ * partial unique index. Marking a new one moves the flag rather than failing on
+ * that constraint — the admin's intent is "this field is the birth date now",
+ * and a raw index violation would say nothing useful about how to fix it.
+ */
+async function clearOtherDateOfBirthFields(
+  tx: Pick<typeof db, "update">,
+  {
+    orgId,
+    isDateOfBirth,
+    exceptFieldId,
+  }: { orgId: string; isDateOfBirth: boolean; exceptFieldId?: string },
+) {
+  if (!isDateOfBirth) {
+    return;
+  }
+
+  await tx
+    .update(memberCustomFields)
+    .set({ isDateOfBirth: false, updatedAt: new Date() })
+    .where(
+      and(
+        eq(memberCustomFields.orgId, orgId),
+        eq(memberCustomFields.isDateOfBirth, true),
+        exceptFieldId ? ne(memberCustomFields.id, exceptFieldId) : undefined,
+      ),
+    );
+}
 
 export const saveMemberCustomFieldAction = orgAdminActionClient
   .metadata({ actionName: "saveMemberCustomField" })
@@ -45,6 +75,7 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       discoveryMode: parsedInput.discoveryMode,
       required: parsedInput.required,
       isActive: parsedInput.isActive,
+      isDateOfBirth: parsedInput.isDateOfBirth,
       sortOrder: parsedInput.sortOrder,
       options: parsedInput.options,
       // Drop constraints that belong to a previously selected type.
@@ -76,15 +107,23 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
         }
       }
 
-      await db
-        .update(memberCustomFields)
-        .set(payload)
-        .where(
-          and(
-            eq(memberCustomFields.orgId, organization.id),
-            eq(memberCustomFields.id, parsedInput.id),
-          ),
-        );
+      await db.transaction(async (tx) => {
+        await clearOtherDateOfBirthFields(tx, {
+          orgId: organization.id,
+          isDateOfBirth: payload.isDateOfBirth,
+          exceptFieldId: parsedInput.id!,
+        });
+
+        await tx
+          .update(memberCustomFields)
+          .set(payload)
+          .where(
+            and(
+              eq(memberCustomFields.orgId, organization.id),
+              eq(memberCustomFields.id, parsedInput.id!),
+            ),
+          );
+      });
 
       return {
         success: true,
@@ -92,8 +131,17 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       };
     }
 
-    const [inserted] = await db.insert(memberCustomFields).values(payload)
-      .returning({ id: memberCustomFields.id });
+    const [inserted] = await db.transaction(async (tx) => {
+      await clearOtherDateOfBirthFields(tx, {
+        orgId: organization.id,
+        isDateOfBirth: payload.isDateOfBirth,
+      });
+
+      return tx
+        .insert(memberCustomFields)
+        .values(payload)
+        .returning({ id: memberCustomFields.id });
+    });
 
     return {
       success: true,

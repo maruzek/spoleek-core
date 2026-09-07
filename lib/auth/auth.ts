@@ -20,7 +20,22 @@ export const auth = betterAuth({
     schema,
     usePlural: true,
   }),
+  session: {
+    // Stated rather than inherited. Seven days with a daily refresh is what the
+    // library defaults to; the point is that the number is now a decision the
+    // privacy notice can quote, not an implementation detail of a dependency.
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+  },
   advanced: {
+    ipAddress: {
+      // Nothing in the application ever reads `sessions.ip_address` — a
+      // repo-wide search finds only the schema line — so collecting it has no
+      // purpose to justify it. Better Auth still writes the column, now always
+      // empty. `user_agent` has no equivalent switch and is written
+      // unconditionally; both rows go away on the session retention rule.
+      disableIpTracking: true,
+    },
     backgroundTasks: {
       handler: (promise) => {
         after(async () => {

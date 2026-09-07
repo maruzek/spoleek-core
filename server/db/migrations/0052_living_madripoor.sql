@@ -1,0 +1,4 @@
+ALTER TABLE "member_custom_fields" ADD COLUMN "is_date_of_birth" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN "registration_minimum_age" integer;--> statement-breakpoint
+CREATE UNIQUE INDEX "member_custom_fields_org_dob_idx" ON "member_custom_fields" USING btree ("org_id") WHERE is_date_of_birth;--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_minimum_age_check" CHECK ("organizations"."registration_minimum_age" IS NULL OR ("organizations"."registration_minimum_age" >= 0 AND "organizations"."registration_minimum_age" <= 150));

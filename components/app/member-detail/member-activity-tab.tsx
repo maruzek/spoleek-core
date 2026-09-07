@@ -51,6 +51,7 @@ const AUTH_EVENT_LABELS: Record<MemberAuthEventType, string> = {
   workspace_provisioned: "Workspace account provisioned",
   workspace_provision_failed: "Workspace provisioning failed",
   workspace_user_linked: "Workspace user linked",
+  data_exported: "Data export produced",
 };
 
 const FAILURE_EVENTS = new Set<MemberAuthEventType>([

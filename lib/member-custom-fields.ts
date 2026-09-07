@@ -79,11 +79,20 @@ export const memberCustomFieldSchema = z
     discoveryMode: z.enum(["visible", "available", "hidden"]),
     required: z.boolean(),
     isActive: z.boolean(),
+    isDateOfBirth: z.boolean().default(false),
     sortOrder: z.number().int().min(0).default(0),
     options: z.array(z.string().trim().min(1)).default([]),
     constraints: memberCustomFieldConstraintsSchema.default({}),
   })
   .superRefine((value, ctx) => {
+    if (value.isDateOfBirth && value.type !== "date") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["isDateOfBirth"],
+        message: "Only a date field can hold the date of birth.",
+      });
+    }
+
     const needsOptions =
       value.type === "select" || value.type === "multi_select";
 

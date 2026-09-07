@@ -26,6 +26,7 @@ import {
   type EnabledProvisionField,
   type WorkspaceApprovalMember,
 } from "@/components/app/member-approve-workspace-dialog";
+import { MemberDataExportButton } from "@/components/app/member-data-export-button";
 import { MemberActivityTab } from "@/components/app/member-detail/member-activity-tab";
 import { MemberDetailHeader } from "@/components/app/member-detail/member-detail-header";
 import { MemberEmailsTab } from "@/components/app/member-detail/member-emails-tab";
@@ -146,6 +147,10 @@ export function MemberDetailView({
     string | null
   >(null);
   const [unconnectedWarningOpen, setUnconnectedWarningOpen] = useState(false);
+  const [underAgeWarningOpen, setUnderAgeWarningOpen] = useState(false);
+  // Sticky for the rest of the visit: once the admin has confirmed, the
+  // Workspace dialogs must not ask again on their way through.
+  const [underAgeConfirmed, setUnderAgeConfirmed] = useState(false);
   const [workspaceApproveError, setWorkspaceApproveError] = useState<
     string | null
   >(null);
@@ -322,7 +327,9 @@ export function MemberDetailView({
       }
 
       if (result.skippedProtectedCount > 0) {
-        toast.error("Org admins cannot be deleted.");
+        toast.error(
+          "This is the last org admin. Promote another admin first, then delete this one.",
+        );
         return;
       }
 
@@ -362,27 +369,50 @@ export function MemberDetailView({
    * Approval always routes through here so the Workspace provisioning dialog
    * can never be bypassed, exactly as it works from the members table.
    */
+  /**
+   * The approval itself, once the age question is settled. `acknowledgeUnderAge`
+   * is threaded through every branch because the server refuses without it —
+   * the flag has to survive the Workspace dialogs, not just the direct path.
+   */
+  const proceedWithApproval = useCallback(
+    (acknowledgeUnderAge: boolean) => {
+      setWorkspaceApproveError(null);
+
+      if (workspaceReady) {
+        setWorkspaceApproveOpen(true);
+        return;
+      }
+
+      if (workspaceMisconfigured) {
+        setUnconnectedWarningOpen(true);
+        return;
+      }
+
+      approveAction.execute({
+        memberId: member.id,
+        role: member.role,
+        acknowledgeUnderAge,
+      });
+    },
+    [
+      approveAction,
+      member.id,
+      member.role,
+      workspaceMisconfigured,
+      workspaceReady,
+    ],
+  );
+
   const startApproval = useCallback(() => {
-    setWorkspaceApproveError(null);
-
-    if (workspaceReady) {
-      setWorkspaceApproveOpen(true);
+    // Asked first, ahead of any Workspace question: whether this person may be
+    // a member at all outranks which account they get.
+    if (data.ageSignal?.isUnderAge && !underAgeConfirmed) {
+      setUnderAgeWarningOpen(true);
       return;
     }
 
-    if (workspaceMisconfigured) {
-      setUnconnectedWarningOpen(true);
-      return;
-    }
-
-    approveAction.execute({ memberId: member.id, role: member.role });
-  }, [
-    approveAction,
-    member.id,
-    member.role,
-    workspaceMisconfigured,
-    workspaceReady,
-  ]);
+    proceedWithApproval(underAgeConfirmed);
+  }, [data.ageSignal, proceedWithApproval, underAgeConfirmed]);
 
   const canResendInvite =
     member.status === "invited" &&
@@ -440,6 +470,13 @@ export function MemberDetailView({
               </Button>
             ) : null}
 
+            {/*
+              For the access request that arrives by email anyway, and for a
+              member with no login to click it themselves.
+            */}
+            <MemberDataExportButton mode="admin" memberId={member.id} />
+
+
             {isEditing ? null : (
               <Button
                 variant="outline"
@@ -466,6 +503,29 @@ export function MemberDetailView({
           </>
         }
       />
+
+      {/*
+        Above the approval banner on purpose: an admin who reads one line
+        before clicking Approve should read this one. The server refuses the
+        approval regardless until `acknowledgeUnderAge` is sent, so this is the
+        explanation for the refusal rather than the control itself.
+      */}
+      {data.ageSignal?.isUnderAge ? (
+        <MemberStatusBanner
+          tone="danger"
+          icon={AlertTriangleIcon}
+          title={
+            data.ageSignal.age == null
+              ? "No date of birth on record"
+              : `Under the minimum age (${data.ageSignal.age}, minimum ${data.ageSignal.minimumAge})`
+          }
+          description={
+            data.ageSignal.age == null
+              ? "Their age cannot be checked against the organization's minimum. Confirm the date of birth before approving."
+              : "Approving requires confirming that a guardian has countersigned, or that the date of birth on record is wrong."
+          }
+        />
+      ) : null}
 
       {member.status === "pending" ? (
         <MemberStatusBanner
@@ -758,12 +818,65 @@ export function MemberDetailView({
                   memberId: member.id,
                   role: member.role,
                   acknowledgeWorkspaceUnavailable: true,
+                  acknowledgeUnderAge: underAgeConfirmed,
                 });
                 setUnconnectedWarningOpen(false);
               }}
             >
               <UserRoundCheckIcon data-icon="inline-start" />
               Approve without account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={underAgeWarningOpen}
+        onOpenChange={setUnderAgeWarningOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia>
+              <AlertTriangleIcon />
+            </AlertDialogMedia>
+            <AlertDialogTitle>
+              {data.ageSignal?.age == null
+                ? "No date of birth on record"
+                : `${displayName} is under the minimum age`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {data.ageSignal?.age == null ? (
+                <>
+                  Their age cannot be checked against the organization&apos;s
+                  minimum of {data.ageSignal?.minimumAge}. Confirm the date of
+                  birth on their profile, or approve only if you have verified it
+                  another way.
+                </>
+              ) : (
+                <>
+                  They are {data.ageSignal.age}, and the organization&apos;s
+                  minimum is {data.ageSignal.minimumAge}. Approve only with a
+                  guardian&apos;s countersignature on file, or if the date of
+                  birth on record is wrong. Record the countersignature against
+                  the membership rules so the decision stays traceable.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                setUnderAgeConfirmed(true);
+                setUnderAgeWarningOpen(false);
+                // Passed explicitly rather than read back from state, which has
+                // not re-rendered yet at this point.
+                proceedWithApproval(true);
+              }}
+            >
+              <UserRoundCheckIcon data-icon="inline-start" />
+              Approve anyway
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -789,6 +902,7 @@ export function MemberDetailView({
             memberId: member.id,
             role: member.role,
             skipWorkspaceAccount: true,
+            acknowledgeUnderAge: underAgeConfirmed,
           });
         }}
         onConfirm={async ({ primaryEmail, extraFields }) => {
@@ -797,6 +911,7 @@ export function MemberDetailView({
             memberId: member.id,
             role: member.role,
             workspace: { primaryEmail, extraFields },
+            acknowledgeUnderAge: underAgeConfirmed,
           });
         }}
       />

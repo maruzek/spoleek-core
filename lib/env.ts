@@ -36,6 +36,9 @@ const serverEnvSchema = z.object({
   GOOGLE_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   APP_ENCRYPTION_KEY: z.string().min(32),
+  // Set only while a key rotation is in flight, so payloads sealed with the
+  // outgoing key stay readable until they have been re-encrypted.
+  APP_ENCRYPTION_KEY_PREVIOUS: optionalString,
   DEFAULT_LOCALE: z.enum(["en", "cs"]),
   SMTP_FROM: optionalEmail,
   RESEND_API_KEY: optionalString,
@@ -161,6 +164,7 @@ export function getRawServerEnv() {
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY,
+    APP_ENCRYPTION_KEY_PREVIOUS: process.env.APP_ENCRYPTION_KEY_PREVIOUS,
     DEFAULT_LOCALE: process.env.DEFAULT_LOCALE,
     SMTP_FROM: process.env.SMTP_FROM,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
