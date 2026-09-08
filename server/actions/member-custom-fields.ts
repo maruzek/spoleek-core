@@ -76,6 +76,19 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
       required: parsedInput.required,
       isActive: parsedInput.isActive,
       isDateOfBirth: parsedInput.isDateOfBirth,
+      valueVisibility: parsedInput.valueVisibility,
+      sensitivity: parsedInput.sensitivity,
+      // Cleared rather than carried when a field is demoted to normal, so a
+      // stale condition cannot outlive the sensitivity that justified it.
+      art9Condition:
+        parsedInput.sensitivity === "special_category"
+          ? (parsedInput.art9Condition ?? null)
+          : null,
+      processingPurpose:
+        parsedInput.sensitivity === "special_category"
+          ? (parsedInput.processingPurpose?.trim() || null)
+          : null,
+      retentionMonths: parsedInput.retentionMonths ?? null,
       sortOrder: parsedInput.sortOrder,
       options: parsedInput.options,
       // Drop constraints that belong to a previously selected type.

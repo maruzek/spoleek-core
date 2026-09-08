@@ -1,6 +1,12 @@
 import { and, asc, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import {
+  type FieldViewerAccess,
+  type RedactedField,
+  partitionFieldsByVisibility,
+  redactAnswerMap,
+} from "@/server/lib/member-field-visibility";
+import {
   buildMemberCustomFieldDisplayItems,
   extractAnswerValue,
 } from "@/lib/member-custom-fields";
@@ -79,6 +85,12 @@ export type MemberEditorMetadata = {
   primaryGroup: MemberGroupAssignment | null;
   groupAssignments: MemberGroupAssignment[];
   customFieldDetails: MemberCustomFieldDisplay[];
+  /**
+   * Fields this viewer may not read, reported so the record can say the
+   * answer exists without showing it. Never empty-by-omission: a hidden
+   * field and an unanswered one must be distinguishable.
+   */
+  withheldCustomFields: RedactedField[];
   inviteState: MemberInviteState;
   memberTimeline: MemberTimelineEvent[];
   /** Empty means never shown a document, which is not the same as refused. */
@@ -311,7 +323,13 @@ async function listMemberGroupAssignments(
   }, new Map());
 }
 
-async function listMemberCustomFieldDisplayMap(orgId: string, memberIds?: string[]) {
+async function listMemberCustomFieldDisplayMap(
+  orgId: string,
+  memberIds?: string[],
+  // The members table is the widest read of custom field values in the app,
+  // so the viewer's reach is applied here rather than left to each column.
+  viewer: FieldViewerAccess = "full",
+) {
   const valueFilters = [eq(memberCustomFieldValues.orgId, orgId)];
 
   if (memberIds && memberIds.length > 0) {
@@ -325,6 +343,7 @@ async function listMemberCustomFieldDisplayMap(orgId: string, memberIds?: string
         key: memberCustomFields.key,
         label: memberCustomFields.label,
         type: memberCustomFields.type,
+        valueVisibility: memberCustomFields.valueVisibility,
       })
       .from(memberCustomFields)
       .where(eq(memberCustomFields.orgId, orgId))
@@ -353,12 +372,19 @@ async function listMemberCustomFieldDisplayMap(orgId: string, memberIds?: string
     new Map(),
   );
 
+  // Columns the viewer may not read are dropped outright here: a table cell is
+  // not a place to explain a withholding, and the member detail view is where
+  // the "an answer exists" signal belongs.
+  const { readable } = partitionFieldsByVisibility(fields, viewer);
+
   return new Map(
     Array.from(answersByMember.entries()).map(([memberId, answersByFieldId]) => [
       memberId,
       buildMemberCustomFieldDisplayItems(
-        fields,
-        Object.fromEntries(fields.map((field) => [field.key, answersByFieldId[field.id] ?? null])),
+        readable,
+        Object.fromEntries(
+          readable.map((field) => [field.key, answersByFieldId[field.id] ?? null]),
+        ),
       ),
     ]),
   );
@@ -554,7 +580,12 @@ export async function listTenantMembers(
         memberIds: visibleMemberIds ?? undefined,
         visibleGroupIds,
       }),
-      listMemberCustomFieldDisplayMap(orgId, visibleMemberIds ?? undefined),
+      listMemberCustomFieldDisplayMap(
+        orgId,
+        visibleMemberIds ?? undefined,
+        // A null group filter is what "full access" means at this layer.
+        visibleGroupIds == null ? "full" : "scoped",
+      ),
       getOverdueFeesByMember(orgId, visibleMemberIds ?? undefined),
     ]);
 
@@ -651,14 +682,17 @@ export async function getMemberEditorData(
     }
   }
 
-  const [customFieldAnswers, groupAssignmentsByMember, customFieldDisplayByMember, invite, linkedUser] =
+  const viewer: FieldViewerAccess =
+    options?.visibleGroupIds == null ? "full" : "scoped";
+
+  const [rawCustomFieldAnswers, groupAssignmentsByMember, customFieldDisplayByMember, invite, linkedUser] =
     await Promise.all([
       getMemberCustomFieldAnswerMap(orgId, member.id),
       listMemberGroupAssignments(orgId, {
         memberIds: [member.id],
         visibleGroupIds: options?.visibleGroupIds,
       }),
-      listMemberCustomFieldDisplayMap(orgId, [member.id]),
+      listMemberCustomFieldDisplayMap(orgId, [member.id], viewer),
       getMemberInviteRow(member.id),
       member.userId ? findUserById(member.userId) : Promise.resolve(null),
     ]);
@@ -671,6 +705,13 @@ export async function getMemberEditorData(
   const inviteState = toInviteState(invite);
   const policyAcknowledgements = await listMemberAcknowledgements(orgId, member.id);
 
+  // Answers this viewer may not read are dropped from the edit form, but the
+  // fields are still reported as withheld — an empty field and a hidden one
+  // must not look the same to whoever is reading the record.
+  const allFields = await listMemberCustomFields(orgId);
+  const { answers: customFieldAnswers, withheld: withheldCustomFields } =
+    redactAnswerMap(allFields, rawCustomFieldAnswers, viewer);
+
   return {
     member,
     customFieldAnswers,
@@ -679,6 +720,7 @@ export async function getMemberEditorData(
       primaryGroup,
       groupAssignments,
       customFieldDetails,
+      withheldCustomFields,
       inviteState,
       memberTimeline: buildMemberTimeline({
         member,

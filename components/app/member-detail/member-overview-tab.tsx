@@ -5,6 +5,7 @@ import { useFormatters } from "@/components/locale-provider";
 import {
   EllipsisVerticalIcon,
   ExternalLinkIcon,
+  LockIcon,
   RefreshCwIcon,
   UserRoundPlusIcon,
 } from "lucide-react";
@@ -75,6 +76,8 @@ export function MemberOverviewTab({
       (detail) => discoveryByKey.get(detail.key) !== "hidden",
     );
   }, [customFields, metadata.customFieldDetails]);
+
+  const withheldCustomFields = metadata.withheldCustomFields;
 
   const syncAction = useAction(syncWorkspaceMemberAction, {
     onExecute: () => {
@@ -205,7 +208,7 @@ export function MemberOverviewTab({
         </DefinitionList>
       </DetailSection>
 
-      {visibleCustomFields.length > 0 ? (
+      {visibleCustomFields.length > 0 || withheldCustomFields.length > 0 ? (
         <>
           <Separator />
           <DetailSection
@@ -218,6 +221,24 @@ export function MemberOverviewTab({
                   key={field.key}
                   label={field.label}
                   value={field.displayValue || "—"}
+                />
+              ))}
+              {/*
+                Listed rather than dropped. A field you cannot read and a field
+                nobody answered must not look the same — that is how somebody
+                concludes no allergy was declared.
+              */}
+              {withheldCustomFields.map((field) => (
+                <DefinitionRow
+                  key={field.key}
+                  label={field.label}
+                  value={
+                    <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                      <LockIcon className="size-3.5" aria-hidden />
+                      {field.hasWithheldAnswer ? "Answer recorded" : "No answer"}
+                    </span>
+                  }
+                  description="Visible to org admins only. Ask an org admin if you need it."
                 />
               ))}
             </DefinitionList>

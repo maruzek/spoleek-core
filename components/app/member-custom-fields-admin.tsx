@@ -168,6 +168,31 @@ export function MemberCustomFieldsAdmin({
         header: "Required",
         cell: (info) => (info.getValue() ? "Required" : "Optional"),
       }),
+      // Two different questions, so two columns rather than one merged badge:
+      // who may read it, and whether the organization may hold it at all.
+      columnHelper.accessor("valueVisibility", {
+        header: "Visible to",
+        cell: (info) => (
+          <span className="text-muted-foreground">
+            {info.getValue() === "org_admins" ? "Org admins" : "Admins + leaders"}
+          </span>
+        ),
+      }),
+      columnHelper.accessor("sensitivity", {
+        header: "Sensitivity",
+        cell: (info) =>
+          info.getValue() === "special_category" ? (
+            <Badge
+              variant="secondary"
+              className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-500"
+              title={info.row.original.processingPurpose ?? undefined}
+            >
+              Article 9
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground">Ordinary</span>
+          ),
+      }),
       columnHelper.accessor("isActive", {
         header: "Status",
         cell: (info) => (

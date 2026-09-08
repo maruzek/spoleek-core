@@ -136,6 +136,71 @@ export const memberCustomFieldStageEnum = pgEnum("member_custom_field_stage", [
   "admin_only",
 ]);
 
+/**
+ * Who may read a field's stored values.
+ *
+ * Ordered from most open to least. Deliberately about the *value*, not the
+ * field: a leader who cannot read an answer is still told the field exists and
+ * whether it was answered, because an empty field and a withheld one must never
+ * look the same — that is how somebody concludes no allergy was declared.
+ *
+ * The member is not on this ladder. They always reach their own answers through
+ * the portal (subject to `stage`) and always through their Art. 15 export, and
+ * there is no lawful setting that changes either. `stage: admin_only` governs
+ * whether they are *asked* for a value, not whether they may see it.
+ *
+ * Future rungs — visible to every member (a directory), or public — belong
+ * above `member_managers` and are deliberately absent: both are disclosure
+ * beyond the staff who administer the register, and they are blocked on the
+ * separate opt-in consent model (MAR-151, MAR-35).
+ */
+/**
+ * Whether a field holds Art. 9 special-category data.
+ *
+ * Orthogonal to `valueVisibility`, and the distinction is the whole point:
+ * visibility is an access control answering *who inside the organization may
+ * read this*, while sensitivity is an accountability record answering *whether
+ * the organization may hold it at all*. Locking a field to org admins does not
+ * make holding it lawful. Art. 9(1) is a prohibition; only a condition in
+ * Art. 9(2) lifts it.
+ */
+export const memberCustomFieldSensitivityEnum = pgEnum(
+  "member_custom_field_sensitivity",
+  ["normal", "special_category"],
+);
+
+/**
+ * The Art. 9(2) condition an organization relies on to hold a special-category
+ * field. Not the full list — these are the ones a membership organization
+ * plausibly uses. Anything else is a conversation with a practitioner, not a
+ * dropdown.
+ */
+export const memberCustomFieldArt9ConditionEnum = pgEnum(
+  "member_custom_field_art9_condition",
+  [
+    /** 9(2)(a) — explicit consent for a specified purpose. */
+    "explicit_consent",
+    /** 9(2)(c) — vital interests, where the member cannot give consent. */
+    "vital_interests",
+    /** 9(2)(d) — the not-for-profit body exemption the register itself uses. */
+    "not_for_profit_body",
+    /** 9(2)(f) — establishment, exercise or defence of legal claims. */
+    "legal_claims",
+    /** 9(2)(h) — preventive medicine, medical diagnosis, health care. */
+    "health_care",
+  ],
+);
+
+export const memberCustomFieldVisibilityEnum = pgEnum(
+  "member_custom_field_visibility",
+  [
+    // Org admins, plus any leader whose delegated scope covers the member.
+    "member_managers",
+    // Org admins only. For data a leader has no purpose to read.
+    "org_admins",
+  ],
+);
+
 export const memberCustomFieldDiscoveryModeEnum = pgEnum(
   "member_custom_field_discovery_mode",
   ["visible", "available", "hidden"]
@@ -961,6 +1026,30 @@ export const memberCustomFields = pgTable(
      * Enforced as at most one per organization below.
      */
     isDateOfBirth: boolean("is_date_of_birth").notNull().default(false),
+    /**
+     * Who may read the answers. Defaults to the wider of the two, so adding
+     * the column changes nothing about who sees what until an admin narrows
+     * a field deliberately.
+     */
+    valueVisibility: memberCustomFieldVisibilityEnum("value_visibility")
+      .notNull()
+      .default("member_managers"),
+    sensitivity: memberCustomFieldSensitivityEnum("sensitivity")
+      .notNull()
+      .default("normal"),
+    /** Required once `sensitivity` is `special_category`; meaningless before. */
+    art9Condition: memberCustomFieldArt9ConditionEnum("art9_condition"),
+    /**
+     * Why this field is collected, in the words of whoever created it.
+     *
+     * Required for special-category fields. This is the sentence that makes the
+     * record of processing (MAR-138) writable and the one a member is owed an
+     * answer with — a purpose reconstructed six months later by someone who did
+     * not set the field up is a guess.
+     */
+    processingPurpose: text("processing_purpose"),
+    /** How long answers are kept. Null means the organization's default. */
+    retentionMonths: integer("retention_months"),
     ...timestamps,
   },
   (table) => [
@@ -968,6 +1057,17 @@ export const memberCustomFields = pgTable(
     uniqueIndex("member_custom_fields_org_dob_idx")
       .on(table.orgId)
       .where(sql`is_date_of_birth`),
+    // A special-category field without a condition and a purpose is a field
+    // nobody can justify holding. Enforced here as well as in the form,
+    // because an import or a script is not going through the form.
+    check(
+      "member_custom_fields_special_category_check",
+      sql`${table.sensitivity} = 'normal' OR (${table.art9Condition} IS NOT NULL AND ${table.processingPurpose} IS NOT NULL)`,
+    ),
+    check(
+      "member_custom_fields_retention_check",
+      sql`${table.retentionMonths} IS NULL OR ${table.retentionMonths} > 0`,
+    ),
     index("member_custom_fields_org_sort_idx").on(table.orgId, table.sortOrder),
     index("member_custom_fields_org_stage_idx").on(table.orgId, table.stage),
     check(
@@ -1697,6 +1797,12 @@ export type EmailActivityEventType =
 export type MemberCustomFieldType = typeof memberCustomFieldTypeEnum.enumValues[number];
 export type MemberCustomFieldStage = typeof memberCustomFieldStageEnum.enumValues[number];
 export type MemberCustomFieldDiscoveryMode = typeof memberCustomFieldDiscoveryModeEnum.enumValues[number];
+export type MemberCustomFieldVisibility =
+  typeof memberCustomFieldVisibilityEnum.enumValues[number];
+export type MemberCustomFieldSensitivity =
+  typeof memberCustomFieldSensitivityEnum.enumValues[number];
+export type MemberCustomFieldArt9Condition =
+  typeof memberCustomFieldArt9ConditionEnum.enumValues[number];
 export type GroupCategorySelectionMode =
   typeof groupCategorySelectionModeEnum.enumValues[number];
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];

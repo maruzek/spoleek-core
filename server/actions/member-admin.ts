@@ -42,6 +42,7 @@ import {
 } from "@/server/lib/member-invites";
 import { hardDeleteMembers, softDeleteMembers } from "@/server/lib/member-lifecycle";
 import { getMemberAgeSignal } from "@/server/lib/member-age";
+import { partitionFieldsByVisibility } from "@/server/lib/member-field-visibility";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import {
@@ -822,7 +823,14 @@ export const updateMemberAction = authActionClient
       }
     }
 
-    const customFields = await listMemberCustomFields(organization.id);
+    // Only the fields this actor may read are writable. Passing all of them
+    // would clear every value the form did not carry back — an absent key
+    // normalizes to null — so a scoped leader saving a member would silently
+    // wipe the answers that were withheld from them.
+    const { readable: customFields } = partitionFieldsByVisibility(
+      await listMemberCustomFields(organization.id),
+      scope.accessLevel,
+    );
 
     const result = await db.transaction(async (tx) => {
       await tx

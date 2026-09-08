@@ -15,6 +15,8 @@ import type {
   MemberCustomFieldStage,
   MemberCustomFieldType,
   MemberCustomFieldDiscoveryMode,
+  MemberCustomFieldVisibility,
+  MemberCustomFieldArt9Condition,
 } from "@/server/db/schema";
 
 export const memberCustomFieldTypeOptions: Array<{
@@ -40,6 +42,66 @@ export const memberCustomFieldStageOptions: Array<{
   { value: "post_approval", label: "After approval" },
   { value: "optional", label: "Optional only" },
   { value: "admin_only", label: "Admin only" },
+];
+
+/**
+ * Who may read a field's answers. The member always reaches their own, through
+ * the portal and through their data export, so they are not an option here.
+ */
+export const memberCustomFieldVisibilityOptions: Array<{
+  value: MemberCustomFieldVisibility;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "member_managers",
+    label: "Admins and group leaders",
+    description:
+      "Org admins, plus leaders whose groups cover the member. The right choice for anything a leader needs in order to run an activity.",
+  },
+  {
+    value: "org_admins",
+    label: "Org admins only",
+    description:
+      "Leaders see that the field exists and whether it was answered, but not the answer. For data a leader has no reason to read.",
+  },
+];
+
+export const memberCustomFieldArt9ConditionOptions: Array<{
+  value: MemberCustomFieldArt9Condition;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "not_for_profit_body",
+    label: "Art. 9(2)(d) — not-for-profit body",
+    description:
+      "The organization's own members, on condition the data is not disclosed outside it without consent. The same exemption the member register itself relies on.",
+  },
+  {
+    value: "explicit_consent",
+    label: "Art. 9(2)(a) — explicit consent",
+    description:
+      "A separate, deliberate consent to a stated purpose. Not the registration checkbox. Admin-only fields for now: Spoleek cannot yet capture per-field consent.",
+  },
+  {
+    value: "vital_interests",
+    label: "Art. 9(2)(c) — vital interests",
+    description:
+      "Protecting someone's life where they cannot give consent. Narrow: it covers the emergency, not routine record-keeping about it.",
+  },
+  {
+    value: "health_care",
+    label: "Art. 9(2)(h) — health or social care",
+    description:
+      "Preventive medicine, diagnosis, or care provided by or under the responsibility of a health professional bound by professional secrecy.",
+  },
+  {
+    value: "legal_claims",
+    label: "Art. 9(2)(f) — legal claims",
+    description:
+      "Establishing, exercising or defending legal claims. For data you hold because of a dispute, not data you collect routinely.",
+  },
 ];
 
 export const memberCustomFieldDiscoveryModeOptions: Array<{
@@ -76,6 +138,19 @@ export const memberCustomFieldSchema = z
       "multi_select",
     ]),
     stage: z.enum(["registration", "post_approval", "optional", "admin_only"]),
+    valueVisibility: z.enum(["member_managers", "org_admins"]).default("member_managers"),
+    sensitivity: z.enum(["normal", "special_category"]).default("normal"),
+    art9Condition: z
+      .enum([
+        "explicit_consent",
+        "vital_interests",
+        "not_for_profit_body",
+        "legal_claims",
+        "health_care",
+      ])
+      .nullish(),
+    processingPurpose: z.string().trim().max(500).nullish(),
+    retentionMonths: z.number().int().min(1).max(1200).nullable().default(null),
     discoveryMode: z.enum(["visible", "available", "hidden"]),
     required: z.boolean(),
     isActive: z.boolean(),
@@ -85,6 +160,58 @@ export const memberCustomFieldSchema = z
     constraints: memberCustomFieldConstraintsSchema.default({}),
   })
   .superRefine((value, ctx) => {
+    if (value.sensitivity === "special_category") {
+      if (!value.art9Condition) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["art9Condition"],
+          message:
+            "Choose the Article 9(2) condition that lets the organization hold this.",
+        });
+      }
+
+      if (!value.processingPurpose || value.processingPurpose.length < 10) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["processingPurpose"],
+          message:
+            "Say what this field is for. It is what the record of processing and any member asking will be answered with.",
+        });
+      }
+
+      /**
+       * The guard. Art. 9(2)(a) requires explicit consent to a *specified
+       * purpose* — a separate, deliberate act, not the general registration
+       * checkbox. Spoleek has no per-field consent mechanism yet, so a field
+       * relying on consent cannot be put in front of a member: doing so would
+       * collect special-category data with no valid condition behind it.
+       *
+       * Admin-only is allowed, because an admin recording an answer has
+       * presumably taken consent on paper and can record it as such.
+       *
+       * Lift this once per-field explicit consent exists.
+       */
+      if (
+        value.art9Condition === "explicit_consent" &&
+        value.stage !== "admin_only"
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["stage"],
+          message:
+            "A field relying on explicit consent cannot be shown to members yet — Spoleek cannot capture per-field consent, and the registration checkbox does not count. Set it to Admin only, or choose a different Article 9(2) condition.",
+        });
+      }
+    }
+
+    if (value.sensitivity === "normal" && value.art9Condition) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["art9Condition"],
+        message: "Only a special-category field needs an Article 9 condition.",
+      });
+    }
+
     if (value.isDateOfBirth && value.type !== "date") {
       ctx.addIssue({
         code: "custom",

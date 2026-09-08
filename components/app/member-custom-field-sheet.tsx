@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import {
   getFieldOptionList,
   memberCustomFieldSchema,
+  memberCustomFieldArt9ConditionOptions,
   memberCustomFieldStageOptions,
+  memberCustomFieldVisibilityOptions,
   memberCustomFieldDiscoveryModeOptions,
   memberCustomFieldTypeOptions,
   stringifyFieldOptions,
@@ -17,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -58,6 +61,11 @@ function toFormValues(
     required: field?.required ?? false,
     isActive: field?.isActive ?? true,
     isDateOfBirth: field?.isDateOfBirth ?? false,
+    valueVisibility: field?.valueVisibility ?? "member_managers",
+    sensitivity: field?.sensitivity ?? "normal",
+    art9Condition: field?.art9Condition ?? null,
+    processingPurpose: field?.processingPurpose ?? "",
+    retentionMonths: field?.retentionMonths ?? null,
     sortOrder: field?.sortOrder ?? 0,
     options: field?.options ?? [],
     constraints: field?.constraints ?? {},
@@ -414,6 +422,207 @@ function InnerForm({
                           </SelectGroup>
                         </SelectContent>
                       </Select>
+                    </FieldContent>
+                  </Field>
+                )}
+              </form.Field>
+
+              {/*
+                Sensitivity sits above visibility on purpose: "may we hold this
+                at all" is the prior question to "who may read it", and marking
+                a field special-category narrows the visibility default.
+              */}
+              <form.Field name="sensitivity">
+                {(formField) => (
+                  <SwitchChoiceField
+                    id="field-sensitivity"
+                    title="Special-category data"
+                    description="Health, ethnicity, religion, political opinion, sex life, biometrics or trade union membership. Article 9 prohibits holding these unless a specific condition applies."
+                    checked={formField.state.value === "special_category"}
+                    onCheckedChange={(checked) => {
+                      formField.handleChange(checked ? "special_category" : "normal");
+
+                      if (checked) {
+                        // A safer default the admin can widen deliberately,
+                        // rather than one they have to remember to narrow.
+                        form.setFieldValue("valueVisibility", "org_admins");
+                      } else {
+                        form.setFieldValue("art9Condition", null);
+                        form.setFieldValue("processingPurpose", "");
+                      }
+                    }}
+                  />
+                )}
+              </form.Field>
+
+              <form.Subscribe selector={(state) => state.values.sensitivity}>
+                {(sensitivity) =>
+                  sensitivity === "special_category" ? (
+                    <div className="flex flex-col gap-5 rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
+                      <form.Field name="art9Condition">
+                        {(formField) => {
+                          const errors = getValidationFieldMessages(
+                            validationErrors,
+                            "art9Condition",
+                          );
+                          const selected =
+                            memberCustomFieldArt9ConditionOptions.find(
+                              (option) => option.value === formField.state.value,
+                            );
+
+                          return (
+                            <Field data-invalid={errors.length > 0}>
+                              <FieldLabel htmlFor="field-art9">
+                                Why may the organization hold this?
+                              </FieldLabel>
+                              <FieldContent>
+                                <Select
+                                  value={formField.state.value ?? undefined}
+                                  onValueChange={(value) =>
+                                    formField.handleChange(
+                                      value as MemberCustomField["art9Condition"],
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger id="field-art9">
+                                    <SelectValue placeholder="Choose a condition" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {memberCustomFieldArt9ConditionOptions.map(
+                                      (option) => (
+                                        <SelectItem
+                                          key={option.value}
+                                          value={option.value}
+                                        >
+                                          {option.label}
+                                        </SelectItem>
+                                      ),
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                                <FieldDescription>
+                                  {selected?.description ??
+                                    "Article 9(1) prohibits processing this data. One of these conditions has to lift that prohibition."}
+                                </FieldDescription>
+                                {errors[0] ? (
+                                  <FieldError>{errors[0]}</FieldError>
+                                ) : null}
+                              </FieldContent>
+                            </Field>
+                          );
+                        }}
+                      </form.Field>
+
+                      <form.Field name="processingPurpose">
+                        {(formField) => {
+                          const errors = getValidationFieldMessages(
+                            validationErrors,
+                            "processingPurpose",
+                          );
+
+                          return (
+                            <Field data-invalid={errors.length > 0}>
+                              <FieldLabel htmlFor="field-purpose">
+                                What is it for?
+                              </FieldLabel>
+                              <FieldContent>
+                                <Textarea
+                                  id="field-purpose"
+                                  rows={2}
+                                  value={formField.state.value ?? ""}
+                                  onBlur={formField.handleBlur}
+                                  onChange={(event) =>
+                                    formField.handleChange(event.target.value)
+                                  }
+                                  placeholder="Catering and medical safety at events run by the organization."
+                                  aria-invalid={errors.length > 0}
+                                />
+                                <FieldDescription>
+                                  Written once, by you, now. This is what the
+                                  record of processing says and what a member
+                                  asking why you hold it is answered with.
+                                </FieldDescription>
+                                {errors[0] ? (
+                                  <FieldError>{errors[0]}</FieldError>
+                                ) : null}
+                              </FieldContent>
+                            </Field>
+                          );
+                        }}
+                      </form.Field>
+
+                      <form.Field name="retentionMonths">
+                        {(formField) => (
+                          <Field>
+                            <FieldLabel htmlFor="field-retention">
+                              Keep answers for (months)
+                            </FieldLabel>
+                            <FieldContent>
+                              <Input
+                                id="field-retention"
+                                type="number"
+                                min={1}
+                                max={1200}
+                                inputMode="numeric"
+                                placeholder="Organization default"
+                                value={String(formField.state.value ?? "")}
+                                onBlur={formField.handleBlur}
+                                onChange={(event) =>
+                                  formField.handleChange(
+                                    event.target.value === ""
+                                      ? null
+                                      : Number(event.target.value),
+                                  )
+                                }
+                              />
+                              <FieldDescription>
+                                Optional. Dietary needs for one summer camp do
+                                not need keeping for a decade.
+                              </FieldDescription>
+                            </FieldContent>
+                          </Field>
+                        )}
+                      </form.Field>
+                    </div>
+                  ) : null
+                }
+              </form.Subscribe>
+
+              <form.Field name="valueVisibility">
+                {(formField) => (
+                  <Field>
+                    <FieldLabel htmlFor="field-visibility">
+                      Who can see the answers
+                    </FieldLabel>
+                    <FieldContent>
+                      <Select
+                        value={formField.state.value}
+                        onValueChange={(value) =>
+                          formField.handleChange(
+                            value as MemberCustomField["valueVisibility"],
+                          )
+                        }
+                      >
+                        <SelectTrigger id="field-visibility">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {memberCustomFieldVisibilityOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription>
+                        {
+                          memberCustomFieldVisibilityOptions.find(
+                            (option) => option.value === formField.state.value,
+                          )?.description
+                        }{" "}
+                        The member always sees their own answer in the portal and
+                        in their data export.
+                      </FieldDescription>
                     </FieldContent>
                   </Field>
                 )}
