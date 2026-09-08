@@ -26,7 +26,12 @@ import {
   type WorkspaceModuleState,
 } from "@/server/queries/members";
 import { listPaymentsForMember } from "@/server/queries/payments";
-import { getMemberAgeSignal, type MemberAgeSignal } from "@/server/lib/member-age";
+import {
+  getMemberAgeSignal,
+  getMemberEligibility,
+  type MemberAgeSignal,
+  type MemberEligibility,
+} from "@/server/lib/member-age";
 import {
   resolveMemberManagementScope,
   type MemberManagementGroupCategory,
@@ -63,6 +68,7 @@ export type MemberDetailData = {
   access: MemberAdminAccess;
   editor: MemberEditorData;
   ageSignal: MemberAgeSignal | null;
+  eligibility: MemberEligibility | null;
   customFields: MemberCustomField[];
   manageableGroupCategories: MemberManagementGroupCategory[];
   workspace: WorkspaceModuleState;
@@ -232,5 +238,11 @@ export async function getMemberDetailData(
     // holds the birth date — "we were not asked to check" is not the same
     // claim as "this applicant is old enough".
     ageSignal: await getMemberAgeSignal({ orgId: scope.organizationId, memberId }),
+    // Null unless the organization set a maximum age and marked a birth date
+    // field. Aging out is a fact about the membership, not a flag for review.
+    eligibility: await getMemberEligibility({
+      orgId: scope.organizationId,
+      memberId,
+    }),
   };
 }

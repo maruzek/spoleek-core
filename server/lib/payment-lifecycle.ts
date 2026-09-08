@@ -5,6 +5,7 @@ import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-ema
 import { resolveMembershipPeriod } from "@/lib/membership-period";
 import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
+import { listAgedOutMemberIds } from "@/server/lib/member-age";
 import {
   groupCategories,
   groupMemberships,
@@ -258,8 +259,11 @@ async function sendRenewalHeadsupEmails(
       );
 
     const alreadyHasPayment = new Set(membersWithPayment.map((r) => r.memberId));
+    // Same rule as fee generation: no point telling somebody their membership
+    // renews when it is about to end.
+    const agedOut = await listAgedOutMemberIds(org.id, new Date());
 
-    const activeMembers = await db
+    const activeMembersRaw = await db
       .select({
         id: tenantMembers.id,
         email: tenantMembers.email,
@@ -275,6 +279,10 @@ async function sendRenewalHeadsupEmails(
           eq(tenantMembers.status, "active"),
         ),
       );
+
+    const activeMembers = activeMembersRaw.filter(
+      (member) => !agedOut.has(member.id),
+    );
 
     const renewalDate = formatLongDate(
       new Date(
@@ -507,7 +515,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
 
     try {
       // Load active members (suspended members are excluded — they must pay first)
-      const activeMembers = await db
+      const allActiveMembers = await db
         .select({ id: tenantMembers.id })
         .from(tenantMembers)
         .where(
@@ -516,6 +524,16 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
             eq(tenantMembers.status, "active"),
           ),
         );
+
+      // Somebody past the organization's maximum age is no longer a member
+      // under its own rules, so billing them for the coming period invents a
+      // fee for a membership that has ended. Their status has not caught up
+      // yet — that is MAR-153's review flow — but the money must not go out
+      // in the meantime.
+      const agedOut = await listAgedOutMemberIds(org.id, today);
+      const activeMembers = allActiveMembers.filter(
+        (member) => !agedOut.has(member.id),
+      );
 
       if (activeMembers.length === 0) continue;
 

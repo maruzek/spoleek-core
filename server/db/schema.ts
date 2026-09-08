@@ -222,6 +222,20 @@ export const groupMembershipRoleEnum = pgEnum("group_membership_role", [
   "group_admin",
 ]);
 
+/**
+ * When a maximum age takes effect.
+ *
+ * Stanovy almost never say "membership ends on your 26th birthday" — they say
+ * something closer to "at the end of the year in which the member turns 26",
+ * because expiring somebody mid-camp is unworkable. `period_end` is therefore
+ * the default, and it reuses the organization's own membership period so it
+ * stays correct if that ever stops being the calendar year.
+ */
+export const maximumAgeEffectEnum = pgEnum("maximum_age_effect", [
+  "period_end",
+  "birthday",
+]);
+
 export const membershipManagementModeEnum = pgEnum("membership_management_mode", [
   "none",
   "periodic_renewal",
@@ -595,6 +609,18 @@ export const organizations = pgTable(
      * organization has not set one and nothing is flagged.
      */
     registrationMinimumAge: integer("registration_minimum_age"),
+    /**
+     * Age at which membership ends, for organizations whose stanovy cap it.
+     *
+     * Unlike the minimum, this one is not a flag for review — someone past
+     * it is no longer a member, and the membership contract that is the
+     * lawful basis for processing them as one has ended. Null means the
+     * organization has no maximum and nothing here activates.
+     */
+    registrationMaximumAge: integer("registration_maximum_age"),
+    maximumAgeEffect: maximumAgeEffectEnum("maximum_age_effect")
+      .notNull()
+      .default("period_end"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -621,6 +647,15 @@ export const organizations = pgTable(
     check(
       "organizations_report_confirm_month_check",
       sql`${table.membershipReportConfirmMonth} IS NULL OR (${table.membershipReportConfirmMonth} >= 1 AND ${table.membershipReportConfirmMonth} <= 12)`,
+    ),
+    check(
+      "organizations_maximum_age_check",
+      sql`${table.registrationMaximumAge} IS NULL OR (${table.registrationMaximumAge} >= 0 AND ${table.registrationMaximumAge} <= 150)`,
+    ),
+    // A window that excludes everybody is a configuration mistake, not a rule.
+    check(
+      "organizations_age_window_check",
+      sql`${table.registrationMinimumAge} IS NULL OR ${table.registrationMaximumAge} IS NULL OR ${table.registrationMinimumAge} <= ${table.registrationMaximumAge}`,
     ),
     check(
       "organizations_minimum_age_check",
@@ -1808,6 +1843,7 @@ export type GroupCategorySelectionMode =
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
 export type MembershipManagementMode = typeof membershipManagementModeEnum.enumValues[number];
+export type MaximumAgeEffect = typeof maximumAgeEffectEnum.enumValues[number];
 export type MemberPreferredEmail = typeof memberPreferredEmailEnum.enumValues[number];
 export type MemberPaymentType = typeof memberPaymentTypeEnum.enumValues[number];
 export type MemberPaymentStatus = typeof memberPaymentStatusEnum.enumValues[number];

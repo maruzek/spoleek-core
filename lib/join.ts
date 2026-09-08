@@ -50,8 +50,32 @@ export const joinPageSettingsSchema = z.object({
     .union([z.coerce.number().int().min(0).max(150), z.literal("")])
     .optional()
     .transform((value) => (value === "" || value === undefined ? null : value)),
+  /**
+   * Age at which membership ends. Unlike the minimum this is not a flag for
+   * review — past it, the membership relationship the stanovy define has ended.
+   */
+  registrationMaximumAge: z
+    .union([z.coerce.number().int().min(0).max(150), z.literal("")])
+    .optional()
+    .transform((value) => (value === "" || value === undefined ? null : value)),
+  maximumAgeEffect: z.enum(["period_end", "birthday"]).default("period_end"),
   // The legal documents moved to their own versioned tables and the Legal
   // settings tab; see docs/legal-policies.md.
+}).superRefine((value, ctx) => {
+  // Mirrors the database constraint. A window that excludes everybody is a
+  // configuration mistake, and finding out through a check violation is a
+  // worse way to learn it than a field error.
+  if (
+    value.registrationMinimumAge != null &&
+    value.registrationMaximumAge != null &&
+    value.registrationMinimumAge > value.registrationMaximumAge
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["registrationMaximumAge"],
+      message: "The maximum age cannot be below the minimum age.",
+    });
+  }
 });
 
 export type JoinApplicationInput = z.infer<typeof joinApplicationSchema>;

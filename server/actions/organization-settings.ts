@@ -37,6 +37,8 @@ export const saveJoinPageSettingsAction = orgAdminActionClient
           joinPageHeadline: parsedInput.joinPageHeadline.trim(),
           joinPageBody: parsedInput.joinPageBody.trim(),
           registrationMinimumAge: parsedInput.registrationMinimumAge,
+          registrationMaximumAge: parsedInput.registrationMaximumAge,
+          maximumAgeEffect: parsedInput.maximumAgeEffect,
           updatedAt: new Date(),
         })
         .where(eq(organizations.id, organization.id));

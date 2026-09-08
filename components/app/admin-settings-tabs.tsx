@@ -39,7 +39,11 @@ import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 type AdminSettingsTabsProps = {
   organization: Pick<
     Organization,
-    "joinPageHeadline" | "joinPageBody" | "registrationMinimumAge"
+    | "joinPageHeadline"
+    | "joinPageBody"
+    | "registrationMinimumAge"
+    | "registrationMaximumAge"
+    | "maximumAgeEffect"
   >;
   policy: Pick<
     OrganizationPolicy,

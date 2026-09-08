@@ -504,6 +504,15 @@ export function MemberDetailView({
         }
       />
 
+      {data.eligibility?.hasAgedOut ? (
+        <MemberStatusBanner
+          tone="warning"
+          icon={AlertTriangleIcon}
+          title={`Past the maximum age (${data.eligibility.age}, maximum ${data.eligibility.maximumAge})`}
+          description="Under the organization's own rules this membership has ended. They are no longer billed for new periods. Their record is kept — decide whether to archive them, or record an exemption if the statutes allow one."
+        />
+      ) : null}
+
       {/*
         Above the approval banner on purpose: an admin who reads one line
         before clicking Approve should read this one. The server refuses the

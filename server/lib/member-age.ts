@@ -7,6 +7,7 @@ import {
   memberCustomFields,
   organizations,
 } from "@/server/db/schema";
+import type { MaximumAgeEffect } from "@/server/db/schema";
 
 /**
  * Whether an applicant is below the organization's minimum age.
@@ -117,4 +118,198 @@ export async function getMemberAgeSignal({
     // gap rather than a silent pass.
     isUnderAge: age == null || age < minimumAge,
   };
+}
+
+/**
+ * Whether a member has passed the organization's maximum age.
+ *
+ * Distinct from the under-age signal above in kind, not just in direction.
+ * Being under the minimum is a *flag for review* — a human decides, and a
+ * guardian may countersign. Being over the maximum is a *fact*: the membership
+ * relationship the stanovy define has ended, and with it the Art. 6(1)(b) basis
+ * for processing that person as an active member. What survives is the narrower
+ * obligation to keep a register of former members, which Art. 9(2)(d) covers
+ * explicitly.
+ *
+ * Returns null when the organization set no maximum — "we were not asked to
+ * check", which is not the same claim as "this member is still eligible".
+ */
+export type MemberEligibility = {
+  age: number | null;
+  maximumAge: number;
+  /** True once they are past the limit, per the organization's chosen effect. */
+  hasAgedOut: boolean;
+  /**
+   * When they age out, for a member who has not yet. Null once they have, or
+   * when there is no birth date to compute from.
+   */
+  agesOutOn: Date | null;
+};
+
+export async function getMemberEligibility({
+  orgId,
+  memberId,
+  now = new Date(),
+}: {
+  orgId: string;
+  memberId: string;
+  now?: Date;
+}): Promise<MemberEligibility | null> {
+  const [organization] = await db
+    .select({
+      maximumAge: organizations.registrationMaximumAge,
+      effect: organizations.maximumAgeEffect,
+    })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  const maximumAge = organization?.maximumAge;
+
+  if (maximumAge == null) {
+    return null;
+  }
+
+  const fieldId = await getDateOfBirthFieldId(orgId);
+
+  if (!fieldId) {
+    return null;
+  }
+
+  const [row] = await db
+    .select({ value: memberCustomFieldValues.value })
+    .from(memberCustomFieldValues)
+    .where(
+      and(
+        eq(memberCustomFieldValues.memberId, memberId),
+        eq(memberCustomFieldValues.fieldId, fieldId),
+      ),
+    )
+    .limit(1);
+
+  return resolveEligibility({
+    dateOfBirth: row?.value,
+    maximumAge,
+    effect: organization.effect,
+    now,
+  });
+}
+
+/**
+ * The rule itself, separated from the fetching so it can be reasoned about and
+ * tested without a database — and reused by the fee generator, which already
+ * holds every member's birth date in memory.
+ *
+ * A **missing birth date is not an ageing-out**. Unlike the minimum-age check,
+ * where an unknown age is treated as under-age so somebody looks at it, here
+ * the cautious answer is the opposite: ending a membership, cancelling a fee
+ * and dropping someone off the roster on the strength of data you do not have
+ * is a worse error than keeping them a member.
+ */
+export function resolveEligibility({
+  dateOfBirth,
+  maximumAge,
+  effect,
+  now = new Date(),
+}: {
+  dateOfBirth: unknown;
+  maximumAge: number;
+  effect: MaximumAgeEffect;
+  now?: Date;
+}): MemberEligibility {
+  const age = getAgeFromDateOfBirth(dateOfBirth, now);
+
+  if (age == null) {
+    return { age: null, maximumAge, hasAgedOut: false, agesOutOn: null };
+  }
+
+  const birthDate = parseISO(String(dateOfBirth));
+  const birthdayAtLimit = new Date(
+    Date.UTC(
+      birthDate.getUTCFullYear() + maximumAge,
+      birthDate.getUTCMonth(),
+      birthDate.getUTCDate(),
+    ),
+  );
+
+  // `period_end` keeps a member for the whole period in which they reach the
+  // limit, which is what stanovy normally say and what makes the yearly report
+  // fall out correctly: they count in that period and not in the next.
+  const agesOutOn =
+    effect === "birthday"
+      ? birthdayAtLimit
+      : new Date(Date.UTC(birthdayAtLimit.getUTCFullYear(), 11, 31));
+
+  return {
+    age,
+    maximumAge,
+    hasAgedOut: now.getTime() > agesOutOn.getTime(),
+    agesOutOn,
+  };
+}
+
+/**
+ * Members of an organization who have passed its maximum age.
+ *
+ * A set rather than a per-member call, because the callers that need it — fee
+ * generation, renewal reminders — are batch jobs iterating the whole roster,
+ * and asking one member at a time would turn one query into several hundred.
+ *
+ * Empty when the organization set no maximum, or marked no date-of-birth
+ * field. Both mean the same thing operationally: nobody is excluded.
+ */
+export async function listAgedOutMemberIds(
+  orgId: string,
+  now = new Date(),
+): Promise<Set<string>> {
+  const [organization] = await db
+    .select({
+      maximumAge: organizations.registrationMaximumAge,
+      effect: organizations.maximumAgeEffect,
+    })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
+  const maximumAge = organization?.maximumAge;
+
+  if (maximumAge == null) {
+    return new Set();
+  }
+
+  const fieldId = await getDateOfBirthFieldId(orgId);
+
+  if (!fieldId) {
+    return new Set();
+  }
+
+  const rows = await db
+    .select({
+      memberId: memberCustomFieldValues.memberId,
+      value: memberCustomFieldValues.value,
+    })
+    .from(memberCustomFieldValues)
+    .where(
+      and(
+        eq(memberCustomFieldValues.orgId, orgId),
+        eq(memberCustomFieldValues.fieldId, fieldId),
+      ),
+    );
+
+  const agedOut = new Set<string>();
+
+  for (const row of rows) {
+    const eligibility = resolveEligibility({
+      dateOfBirth: row.value,
+      maximumAge,
+      effect: organization.effect,
+      now,
+    });
+
+    if (eligibility.hasAgedOut) {
+      agedOut.add(row.memberId);
+    }
+  }
+
+  return agedOut;
 }

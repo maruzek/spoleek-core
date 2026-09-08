@@ -16,6 +16,13 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { saveJoinPageSettingsAction } from "@/server/actions/organization-settings";
 import type { Organization, OrganizationPolicy } from "@/server/db/schema";
@@ -23,7 +30,11 @@ import type { Organization, OrganizationPolicy } from "@/server/db/schema";
 type JoinPageSettingsFormProps = {
   organization: Pick<
     Organization,
-    "joinPageHeadline" | "joinPageBody" | "registrationMinimumAge"
+    | "joinPageHeadline"
+    | "joinPageBody"
+    | "registrationMinimumAge"
+    | "registrationMaximumAge"
+    | "maximumAgeEffect"
   >;
   policy: Pick<
     OrganizationPolicy,
@@ -74,6 +85,8 @@ export function JoinPageSettingsForm({
     defaultValues: {
       joinPageHeadline: organization.joinPageHeadline,
       registrationMinimumAge: organization.registrationMinimumAge ?? "",
+      registrationMaximumAge: organization.registrationMaximumAge ?? "",
+      maximumAgeEffect: organization.maximumAgeEffect,
       joinPageBody: organization.joinPageBody,
       memberInviteEmailSubject: policy.memberInviteEmailSubject,
       memberInviteEmailBody: policy.memberInviteEmailBody,
@@ -166,6 +179,91 @@ export function JoinPageSettingsForm({
               );
             }}
           </form.Field>
+
+          <form.Field name="registrationMaximumAge">
+            {(formField) => {
+              const errors = [
+                ...getFormFieldErrors(formField.state.meta.errors),
+                ...getErrorMessages(validationErrors?.registrationMaximumAge),
+              ];
+
+              return (
+                <Field data-invalid={errors.length > 0}>
+                  <FieldLabel htmlFor="registration-maximum-age">
+                    Maximum age
+                  </FieldLabel>
+                  <FieldContent>
+                    <Input
+                      id="registration-maximum-age"
+                      name="registrationMaximumAge"
+                      type="number"
+                      min={0}
+                      max={150}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      placeholder="No maximum"
+                      value={String(formField.state.value ?? "")}
+                      onBlur={formField.handleBlur}
+                      onChange={(event) => formField.handleChange(event.target.value)}
+                      aria-invalid={errors.length > 0}
+                    />
+                    <FieldDescription>
+                      For organizations whose rules end membership at an age.
+                      Members past it stop being billed and are flagged for the
+                      board to review — nothing is deleted. Leave empty for no
+                      maximum.
+                    </FieldDescription>
+                    {errors[0] ? <FieldError>{errors[0]}</FieldError> : null}
+                  </FieldContent>
+                </Field>
+              );
+            }}
+          </form.Field>
+
+          <form.Subscribe
+            selector={(state) => state.values.registrationMaximumAge}
+          >
+            {(maximumAge) =>
+              maximumAge === "" || maximumAge == null ? null : (
+                <form.Field name="maximumAgeEffect">
+                  {(formField) => (
+                    <Field>
+                      <FieldLabel htmlFor="maximum-age-effect">
+                        Membership ends
+                      </FieldLabel>
+                      <FieldContent>
+                        <Select
+                          value={formField.state.value}
+                          onValueChange={(value) =>
+                            formField.handleChange(
+                              value as "period_end" | "birthday",
+                            )
+                          }
+                        >
+                          <SelectTrigger id="maximum-age-effect">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="period_end">
+                              At the end of the membership period
+                            </SelectItem>
+                            <SelectItem value="birthday">
+                              On their birthday
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FieldDescription>
+                          Most rules say membership ends at the end of the year
+                          in which the member reaches the age — expiring
+                          somebody mid-season is rarely what the statutes mean.
+                        </FieldDescription>
+                      </FieldContent>
+                    </Field>
+                  )}
+                </form.Field>
+              )
+            }
+          </form.Subscribe>
 
           <form.Field name="joinPageBody">
             {(formField) => {

@@ -8,7 +8,11 @@ import {
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
-import { getAgeFromDateOfBirth, getMemberAgeSignal } from "@/server/lib/member-age";
+import {
+  getAgeFromDateOfBirth,
+  getMemberAgeSignal,
+  resolveEligibility,
+} from "@/server/lib/member-age";
 
 /**
  * The organization's minimum age flags an application for a human; it never
@@ -161,5 +165,80 @@ suite("the under-age signal", () => {
       .update(memberCustomFields)
       .set({ isDateOfBirth: true })
       .where(eq(memberCustomFields.id, fieldId));
+  });
+});
+
+/**
+ * Aging out differs from the under-age check in kind, not just direction.
+ * Under the minimum is a flag for a human; past the maximum is a fact about
+ * the membership, and it stops money going out.
+ */
+describe("the maximum age rule", () => {
+  const dob = "2000-06-15";
+
+  it("keeps a member for the whole period in which they reach the limit", () => {
+    // Turns 26 on 2026-06-15. With `period_end` they stay a member to 31 Dec.
+    const onBirthday = resolveEligibility({
+      dateOfBirth: dob,
+      maximumAge: 26,
+      effect: "period_end",
+      now: new Date("2026-06-16T00:00:00Z"),
+    });
+
+    expect(onBirthday.hasAgedOut).toBe(false);
+    expect(onBirthday.agesOutOn?.toISOString().slice(0, 10)).toBe("2026-12-31");
+
+    const nextYear = resolveEligibility({
+      dateOfBirth: dob,
+      maximumAge: 26,
+      effect: "period_end",
+      now: new Date("2027-01-01T12:00:00Z"),
+    });
+
+    expect(nextYear.hasAgedOut).toBe(true);
+  });
+
+  it("ends it on the birthday when the organization chose that", () => {
+    const before = resolveEligibility({
+      dateOfBirth: dob,
+      maximumAge: 26,
+      effect: "birthday",
+      now: new Date("2026-06-14T00:00:00Z"),
+    });
+    const after = resolveEligibility({
+      dateOfBirth: dob,
+      maximumAge: 26,
+      effect: "birthday",
+      now: new Date("2026-06-16T00:00:00Z"),
+    });
+
+    expect(before.hasAgedOut).toBe(false);
+    expect(after.hasAgedOut).toBe(true);
+  });
+
+  it("never ages somebody out on a birth date it does not have", () => {
+    // The opposite of the minimum-age rule, and deliberately so: ending a
+    // membership, stopping a fee and dropping somebody off the roster on the
+    // strength of missing data is worse than keeping them a member.
+    const result = resolveEligibility({
+      dateOfBirth: null,
+      maximumAge: 26,
+      effect: "period_end",
+    });
+
+    expect(result.hasAgedOut).toBe(false);
+    expect(result.age).toBeNull();
+  });
+
+  it("leaves a member well inside the window alone", () => {
+    const result = resolveEligibility({
+      dateOfBirth: "2004-01-01",
+      maximumAge: 26,
+      effect: "period_end",
+      now: new Date("2026-09-08T00:00:00Z"),
+    });
+
+    expect(result.hasAgedOut).toBe(false);
+    expect(result.age).toBe(22);
   });
 });

@@ -1,0 +1,5 @@
+CREATE TYPE "public"."maximum_age_effect" AS ENUM('period_end', 'birthday');--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN "registration_maximum_age" integer;--> statement-breakpoint
+ALTER TABLE "organizations" ADD COLUMN "maximum_age_effect" "maximum_age_effect" DEFAULT 'period_end' NOT NULL;--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_maximum_age_check" CHECK ("organizations"."registration_maximum_age" IS NULL OR ("organizations"."registration_maximum_age" >= 0 AND "organizations"."registration_maximum_age" <= 150));--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_age_window_check" CHECK ("organizations"."registration_minimum_age" IS NULL OR "organizations"."registration_maximum_age" IS NULL OR "organizations"."registration_minimum_age" <= "organizations"."registration_maximum_age");
