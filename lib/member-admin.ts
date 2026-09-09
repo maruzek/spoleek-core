@@ -54,6 +54,10 @@ export const deleteMemberSchema = z.object({
   memberId: z.uuid(),
 });
 
+export const restoreMemberSchema = z.object({
+  memberId: z.uuid(),
+});
+
 export const rejectMemberSchema = z.object({
   memberId: z.uuid(),
   /**

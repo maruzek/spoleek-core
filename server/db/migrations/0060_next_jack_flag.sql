@@ -1,0 +1,1 @@
+ALTER TYPE "public"."email_kind" ADD VALUE 'membership_deleted' BEFORE 'report_reminder';

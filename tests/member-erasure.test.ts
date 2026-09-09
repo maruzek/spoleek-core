@@ -13,6 +13,7 @@ import {
   MEMBER_SOFT_DELETE_RETENTION_DAYS,
   hardDeleteMembers,
   purgeDeletedMembers,
+  restoreMembers,
   softDeleteMembers,
 } from "@/server/lib/member-lifecycle";
 
@@ -94,14 +95,23 @@ suite("member erasure", () => {
     return member.id;
   }
 
-  /** Backdates the soft deletion so the purge's cutoff sees it as expired. */
+  /**
+   * Ages a soft-deleted member past their grace period.
+   *
+   * `purgeAfter` is what the purge reads — the anchor stamped at delete time,
+   * not `deletedAt` plus the current constant. Both are moved so the row still
+   * describes a coherent deletion rather than one that expired before it
+   * happened.
+   */
   async function expireDeletion(memberId: string) {
     const past = new Date();
     past.setDate(past.getDate() - MEMBER_SOFT_DELETE_RETENTION_DAYS - 1);
+    const expired = new Date();
+    expired.setDate(expired.getDate() - 1);
 
     await db
       .update(tenantMembers)
-      .set({ deletedAt: past })
+      .set({ deletedAt: past, purgeAfter: expired })
       .where(eq(tenantMembers.id, memberId));
   }
 
@@ -151,6 +161,104 @@ suite("member erasure", () => {
       .where(eq(tenantMembers.id, memberId));
 
     expect(member.userId).toBe(userId);
+    expect(member.status).toBe("deleted");
+  });
+
+  it("keeps a member whose grace period has not expired", async () => {
+    const userId = await makeUser("notdue");
+    const memberId = await makeMember({ userId });
+
+    await softDeleteMembers({ actorUserId: userId, memberIds: [memberId], orgId });
+
+    // No expireDeletion: purgeAfter is 30 days out.
+    await purgeDeletedMembers();
+
+    expect(await userExists(userId)).toBe(true);
+  });
+
+  it("never purges a deleted member with no retention anchor", async () => {
+    const userId = await makeUser("noanchor");
+    const memberId = await makeMember({ userId });
+
+    await softDeleteMembers({ actorUserId: userId, memberIds: [memberId], orgId });
+
+    // A row deleted before migration 0058 that the backfill somehow missed.
+    // Erasing it on a guess is the one thing the purge must not do.
+    const past = new Date();
+    past.setDate(past.getDate() - MEMBER_SOFT_DELETE_RETENTION_DAYS - 1);
+
+    await db
+      .update(tenantMembers)
+      .set({ deletedAt: past, purgeAfter: null })
+      .where(eq(tenantMembers.id, memberId));
+
+    await purgeDeletedMembers();
+
+    expect(await userExists(userId)).toBe(true);
+  });
+
+  it("restores a member to the status they held, not to active", async () => {
+    const userId = await makeUser("restore");
+    const memberId = await makeMember({ userId });
+
+    await db
+      .update(tenantMembers)
+      .set({ status: "archived" })
+      .where(eq(tenantMembers.id, memberId));
+
+    await softDeleteMembers({ actorUserId: userId, memberIds: [memberId], orgId });
+
+    const result = await restoreMembers({ memberIds: [memberId], orgId });
+
+    expect(result.restoredCount).toBe(1);
+
+    const [member] = await db
+      .select({
+        status: tenantMembers.status,
+        deletedAt: tenantMembers.deletedAt,
+        purgeAfter: tenantMembers.purgeAfter,
+        previousStatus: tenantMembers.previousStatus,
+      })
+      .from(tenantMembers)
+      .where(eq(tenantMembers.id, memberId));
+
+    // The whole point of previousStatus: restoring to "active" would put an
+    // archived member back on the billing roster.
+    expect(member.status).toBe("archived");
+    expect(member.deletedAt).toBeNull();
+    expect(member.purgeAfter).toBeNull();
+    expect(member.previousStatus).toBeNull();
+  });
+
+  it("refuses to restore when a live member has taken the email", async () => {
+    const userId = await makeUser("conflict");
+    const memberId = await makeMember({ userId });
+    const email = `conflict-${Date.now()}@example.test`;
+
+    await db
+      .update(tenantMembers)
+      .set({ email })
+      .where(eq(tenantMembers.id, memberId));
+
+    await softDeleteMembers({ actorUserId: userId, memberIds: [memberId], orgId });
+
+    // The person re-registered during the grace window.
+    const replacementId = await makeMember({ userId: null });
+    await db
+      .update(tenantMembers)
+      .set({ email })
+      .where(eq(tenantMembers.id, replacementId));
+
+    const result = await restoreMembers({ memberIds: [memberId], orgId });
+
+    expect(result.restoredCount).toBe(0);
+    expect(result.conflictedEmails).toContain(email);
+
+    const [member] = await db
+      .select({ status: tenantMembers.status })
+      .from(tenantMembers)
+      .where(eq(tenantMembers.id, memberId));
+
     expect(member.status).toBe("deleted");
   });
 

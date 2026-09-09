@@ -14,6 +14,7 @@ import {
   createMemberSchema,
   createWorkspaceAccountSchema,
   deleteMemberSchema,
+  restoreMemberSchema,
   importMembersSchema,
   provisionMemberWorkspaceAccountSchema,
   resendMemberInviteSchema,
@@ -40,7 +41,12 @@ import {
   logMemberAuthEvent,
   sendMemberActivationInvite,
 } from "@/server/lib/member-invites";
-import { hardDeleteMembers, softDeleteMembers } from "@/server/lib/member-lifecycle";
+import {
+  hardDeleteMembers,
+  restoreMembers,
+  softDeleteMembers,
+} from "@/server/lib/member-lifecycle";
+import { notifyMembershipDeleted } from "@/server/notifications/membership";
 import { getMemberAgeSignal } from "@/server/lib/member-age";
 import { partitionFieldsByVisibility } from "@/server/lib/member-field-visibility";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
@@ -145,8 +151,12 @@ async function assertMemberInScopeOrThrow(args: {
   memberId: string;
   orgId: string;
   scope: Awaited<ReturnType<typeof resolveMemberManagementScope>>;
+  /** Restore is the only caller that acts on a member who is already deleted. */
+  includeDeleted?: boolean;
 }) {
-  const member = await getMemberById(args.orgId, args.memberId);
+  const member = await getMemberById(args.orgId, args.memberId, {
+    includeDeleted: args.includeDeleted,
+  });
 
   if (!member) {
     throw new Error("The selected member could not be found.");
@@ -891,6 +901,54 @@ export const updateMemberAction = authActionClient
     return result;
   });
 
+/**
+ * Sends the deletion notice to everyone a soft delete actually removed.
+ *
+ * Reads the members after the write rather than before: soft delete keeps the
+ * row, and `deletedMemberIds` says exactly who was affected, so there is no
+ * need to guess which of a bulk selection went through.
+ */
+async function notifyDeletedMembers(args: {
+  orgId: string;
+  memberIds: string[];
+  purgeAfter: Date | null;
+}) {
+  if (args.memberIds.length === 0) {
+    return;
+  }
+
+  const rows = await db
+    .select({
+      id: tenantMembers.id,
+      firstName: tenantMembers.firstName,
+      lastName: tenantMembers.lastName,
+      email: tenantMembers.email,
+      workspaceUserEmail: tenantMembers.workspaceUserEmail,
+      deletedAt: tenantMembers.deletedAt,
+      purgeAfter: tenantMembers.purgeAfter,
+    })
+    .from(tenantMembers)
+    .where(
+      and(
+        eq(tenantMembers.orgId, args.orgId),
+        inArray(tenantMembers.id, args.memberIds),
+      ),
+    );
+
+  for (const row of rows) {
+    await notifyMembershipDeleted({
+      orgId: args.orgId,
+      memberId: row.id,
+      memberName:
+        `${row.firstName} ${row.lastName}`.trim() || row.email || "Member",
+      toEmail: row.email,
+      workspaceEmail: row.workspaceUserEmail,
+      deletedAt: row.deletedAt ?? new Date(),
+      purgeAfter: row.purgeAfter ?? args.purgeAfter,
+    });
+  }
+}
+
 export const deleteMemberAction = authActionClient
   .metadata({ actionName: "deleteMember" })
   .inputSchema(deleteMemberSchema)
@@ -906,8 +964,50 @@ export const deleteMemberAction = authActionClient
       scope,
     });
 
-    return softDeleteMembers({
+    const result = await softDeleteMembers({
       actorUserId: ctx.auth.user.id,
+      memberIds: [parsedInput.memberId],
+      orgId: organization.id,
+    });
+
+    // After the response, not before it: the admin should not wait on Resend,
+    // and a mail failure must not undo a deletion that already happened.
+    after(() =>
+      notifyDeletedMembers({
+        orgId: organization.id,
+        memberIds: result.deletedMemberIds,
+        purgeAfter: result.purgeAfter,
+      }),
+    );
+
+    return result;
+  });
+
+/**
+ * Puts a soft-deleted member back.
+ *
+ * Scoped exactly like deletion: a group admin who could delete the member can
+ * bring them back. `canAccessMemberInScope` reads `group_memberships`, and soft
+ * delete leaves those rows alone, so a deleted member stays inside the same
+ * admin's scope for the whole grace window.
+ */
+export const restoreMemberAction = authActionClient
+  .metadata({ actionName: "restoreMember" })
+  .inputSchema(restoreMemberSchema)
+  .action(async ({ parsedInput }) => {
+    const [organization, scope] = await Promise.all([
+      requireOrganization(),
+      resolveMemberManagementScope(),
+    ]);
+
+    await assertMemberInScopeOrThrow({
+      orgId: organization.id,
+      memberId: parsedInput.memberId,
+      scope,
+      includeDeleted: true,
+    });
+
+    return restoreMembers({
       memberIds: [parsedInput.memberId],
       orgId: organization.id,
     });
@@ -985,11 +1085,21 @@ export const bulkDeleteMembersAction = authActionClient
       });
     }
 
-    return softDeleteMembers({
+    const result = await softDeleteMembers({
       actorUserId: ctx.auth.user.id,
       memberIds: parsedInput.memberIds,
       orgId: organization.id,
     });
+
+    after(() =>
+      notifyDeletedMembers({
+        orgId: organization.id,
+        memberIds: result.deletedMemberIds,
+        purgeAfter: result.purgeAfter,
+      }),
+    );
+
+    return result;
   });
 
 export const searchWorkspaceUsersAction = authActionClient

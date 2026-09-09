@@ -7,7 +7,10 @@ import type { MembershipStatus } from "@/server/db/schema";
  *
  * Pending members come first so admins see the approval queue without
  * filtering; invited members follow (they still need chasing), then the live
- * roster, with suspended and archived sinking to the bottom.
+ * roster, with suspended, archived and deleted sinking to the bottom.
+ *
+ * `deleted` is last and is only ever present when the viewer explicitly asked
+ * for it — see the status filter in `components/app/member-status-filter.tsx`.
  *
  * This is deliberately independent of the `membership_status` enum's
  * declaration order — Postgres sorts enum columns by declaration order, so
@@ -20,6 +23,7 @@ export const MEMBER_STATUS_DISPLAY_ORDER = [
   "active",
   "suspended",
   "archived",
+  "deleted",
 ] as const satisfies readonly MembershipStatus[];
 
 const UNRANKED_STATUS_RANK = MEMBER_STATUS_DISPLAY_ORDER.length;

@@ -524,10 +524,19 @@ async function getMembersSortCollation(orgId: string) {
   return collateFor(organization?.membersSortLocale);
 }
 
+/**
+ * The admin roster.
+ *
+ * `includeDeleted` is off by default and deliberately opt-in per call rather
+ * than a filter the caller remembers to add: soft-deleted members are invisible
+ * everywhere unless a human has explicitly asked to see them, and a new caller
+ * that forgets the option gets the safe answer.
+ */
 export async function listTenantMembers(
   orgId: string,
   options?: {
     visibleGroupIds?: string[] | null;
+    includeDeleted?: boolean;
   },
 ) {
   const visibleGroupIds = options?.visibleGroupIds;
@@ -555,6 +564,11 @@ export async function listTenantMembers(
           workspaceUserId: tenantMembers.workspaceUserId,
           preferredEmail: tenantMembers.preferredEmail,
           createdAt: tenantMembers.createdAt,
+          // Only meaningful on a deleted row, but selected unconditionally:
+          // branching the projection on `includeDeleted` would give the two
+          // cases different row types for no gain.
+          deletedAt: tenantMembers.deletedAt,
+          purgeAfter: tenantMembers.purgeAfter,
           linkedUserName: users.name,
           inviteStatus: memberInvites.status,
           inviteDeliveryStatus: memberInvites.deliveryStatus,
@@ -566,7 +580,7 @@ export async function listTenantMembers(
         .where(
           and(
             eq(tenantMembers.orgId, orgId),
-            ne(tenantMembers.status, "deleted"),
+            options?.includeDeleted ? undefined : ne(tenantMembers.status, "deleted"),
             visibleMemberIds ? inArray(tenantMembers.id, visibleMemberIds) : undefined,
           ),
         )
@@ -622,7 +636,21 @@ export async function listTenantMembers(
   });
 }
 
-export async function getMemberById(orgId: string, memberId: string) {
+/**
+ * One member by id, for the admin detail route.
+ *
+ * The sibling lookups below (`getMemberByUserId`, `getTenantMemberByUserId`,
+ * `findShadowMemberForUser`, `findTenantMemberByEmail`, `getMembersByIds`)
+ * deliberately keep their unconditional `!= 'deleted'` filter and gain no such
+ * option. They answer "who is this person, right now" for the auth,
+ * registration and linking paths, and a deleted member must never be that
+ * answer. This one renders a record an admin navigated to on purpose.
+ */
+export async function getMemberById(
+  orgId: string,
+  memberId: string,
+  options?: { includeDeleted?: boolean },
+) {
   const [member] = await db
     .select()
     .from(tenantMembers)
@@ -630,7 +658,7 @@ export async function getMemberById(orgId: string, memberId: string) {
       and(
         eq(tenantMembers.orgId, orgId),
         eq(tenantMembers.id, memberId),
-        ne(tenantMembers.status, "deleted"),
+        options?.includeDeleted ? undefined : ne(tenantMembers.status, "deleted"),
       ),
     )
     .limit(1);
@@ -659,9 +687,12 @@ export async function getMemberEditorData(
   memberId: string,
   options?: {
     visibleGroupIds?: string[] | null;
+    includeDeleted?: boolean;
   },
 ) {
-  const member = await getMemberById(orgId, memberId);
+  const member = await getMemberById(orgId, memberId, {
+    includeDeleted: options?.includeDeleted,
+  });
 
   if (!member) {
     return null;
@@ -820,13 +851,17 @@ export async function getWorkspaceModuleState(
   };
 }
 
-export async function getMembersAdminPageData(editMemberId: string | null) {
+export async function getMembersAdminPageData(
+  editMemberId: string | null,
+  options?: { includeDeleted?: boolean },
+) {
   const scope = await resolveMemberManagementScope();
 
   const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, workspace] =
     await Promise.all([
       listTenantMembers(scope.organizationId, {
         visibleGroupIds: scope.managedGroupIds,
+        includeDeleted: options?.includeDeleted,
       }),
       listMemberCustomFields(scope.organizationId),
       listMembersTableCategories(scope.organizationId, {
@@ -836,6 +871,7 @@ export async function getMembersAdminPageData(editMemberId: string | null) {
       editMemberId
         ? getMemberEditorData(scope.organizationId, editMemberId, {
             visibleGroupIds: scope.managedGroupIds,
+            includeDeleted: options?.includeDeleted,
           })
         : Promise.resolve(null),
       getWorkspaceModuleState(scope.organizationId),

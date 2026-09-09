@@ -257,6 +257,27 @@ const en = {
         `If you have questions about this decision, write to ${contactEmail}.`,
     },
 
+    membershipDeleted: {
+      subject: (organizationName: string) =>
+        `Your membership in ${organizationName} has ended`,
+      heading: "Your membership has ended",
+      greeting: (memberName: string) => `Hello ${memberName},`,
+      body: (organizationName: string, deletedAt: string) =>
+        `Your membership in ${organizationName} was ended on ${deletedAt}. You have been signed out and no longer have access to the member portal.`,
+      recordTitle: "What happens to your record",
+      record: (purgeAfter: string) =>
+        `Your membership record is kept until ${purgeAfter} in case this was a mistake, and is permanently deleted after that date. Ask an administrator before then if it should be restored.`,
+      workspaceTitle: "Your organization email account",
+      workspace: (workspaceEmail: string, purgeAfter: string) =>
+        `Your ${workspaceEmail} account still works and will keep working until ${purgeAfter}. Use that time to save anything you want to keep — mail, files and photos are all included.`,
+      workspaceHowTo:
+        "Google Takeout (takeout.google.com) exports everything from that account in one archive. Sign in with the address above rather than a personal account.",
+      workspaceEnds: (purgeAfter: string) =>
+        `After ${purgeAfter} the account and everything left in it are deleted and cannot be recovered.`,
+      contact: (contactEmail: string) =>
+        `If you think this was a mistake, write to ${contactEmail} before that date.`,
+    },
+
     existingAccount: {
       subject: (organizationName: string) =>
         `You are already a member of ${organizationName}`,
@@ -538,6 +559,27 @@ const cs: Dictionary = {
         "Vaše přihláška i všechny údaje, které jste s ní odeslali, byly smazány. Uchováváme pouze záznam o této zprávě. Pokud se vaše situace změní, můžete se přihlásit znovu.",
       contact: (contactEmail: string) =>
         `Máte-li k tomuto rozhodnutí dotazy, napište na ${contactEmail}.`,
+    },
+
+    membershipDeleted: {
+      subject: (organizationName: string) =>
+        `Vaše členství v organizaci ${organizationName} skončilo`,
+      heading: "Vaše členství skončilo",
+      greeting: (memberName: string) => `Dobrý den, ${memberName},`,
+      body: (organizationName: string, deletedAt: string) =>
+        `Vaše členství v organizaci ${organizationName} bylo ${deletedAt} ukončeno. Byli jste odhlášeni a do členského portálu už nemáte přístup.`,
+      recordTitle: "Co bude s vaším záznamem",
+      record: (purgeAfter: string) =>
+        `Váš členský záznam uchováváme do ${purgeAfter} pro případ, že šlo o omyl, a po tomto datu ho trvale smažeme. Pokud má být obnoven, ozvěte se správci ještě před tímto datem.`,
+      workspaceTitle: "Váš organizační e-mailový účet",
+      workspace: (workspaceEmail: string, purgeAfter: string) =>
+        `Účet ${workspaceEmail} stále funguje a bude fungovat do ${purgeAfter}. Využijte tento čas k uložení všeho, co si chcete ponechat — pošty, souborů i fotek.`,
+      workspaceHowTo:
+        "Google Takeout (takeout.google.com) vyexportuje celý obsah účtu v jednom archivu. Přihlaste se výše uvedenou adresou, ne osobním účtem.",
+      workspaceEnds: (purgeAfter: string) =>
+        `Po ${purgeAfter} bude účet i vše, co v něm zbylo, smazáno bez možnosti obnovy.`,
+      contact: (contactEmail: string) =>
+        `Pokud si myslíte, že jde o omyl, napište před tímto datem na ${contactEmail}.`,
     },
 
     existingAccount: {

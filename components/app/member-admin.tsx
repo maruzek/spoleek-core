@@ -16,6 +16,7 @@ import {
   PencilIcon,
   PlusIcon,
   Trash2Icon,
+  UndoIcon,
   UploadIcon,
   UserRoundCheckIcon,
   UserRoundXIcon,
@@ -42,6 +43,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DataTable } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
+import { MemberStatusFilter } from "@/components/app/member-status-filter";
+import {
+  DEFAULT_MEMBER_STATUS_FILTER,
+  getMemberStatusVariant,
+} from "@/lib/member-status-display";
+import type { MembershipStatus } from "@/server/db/schema";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { formatFeeAmount } from "@/lib/payments";
 import { copyToClipboard } from "@/utils/copy";
@@ -52,6 +59,7 @@ import {
   createShadowMemberAction,
   provisionMemberWorkspaceAccountAction,
   rejectMemberAction,
+  restoreMemberAction,
   resendMemberInviteAction,
 } from "@/server/actions/member-admin";
 import type { MemberCustomField, TenantMember } from "@/server/db/schema";
@@ -80,8 +88,6 @@ type WorkspaceModuleProp = {
   countryCode?: string;
 };
 
-type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
-
 type MemberRow = {
   id: string;
   firstName: string;
@@ -90,9 +96,12 @@ type MemberRow = {
   workspaceUserEmail: string | null;
   preferredEmail: "personal" | "workspace" | null;
   role: "member" | "leader" | "org_admin";
-  status: VisibleMemberStatus;
+  status: TenantMember["status"];
   userId: string | null;
   createdAt: Date;
+  /** Both null unless the row is deleted. */
+  deletedAt: Date | null;
+  purgeAfter: Date | null;
   primaryGroup: MemberGroupAssignment | null;
   customFieldValues: Record<string, string>;
   groupAssignmentsByCategory: Record<string, MemberGroupAssignment[]>;
@@ -115,24 +124,28 @@ function resolvePreferredEmailForRow(
 
 const columnHelper = createColumnHelper<MemberRow>();
 
-function getStatusVariant(status: VisibleMemberStatus) {
-  if (status === "active") {
-    return "success";
+/**
+ * "Purges in 12 days" under a deleted member's status.
+ *
+ * Days rather than a date because the question an admin is actually asking is
+ * "have I still got time to undo this", and a date makes them do the
+ * subtraction. Rounded up, so the last day never reads as zero while the record
+ * is still restorable.
+ */
+function formatPurgeCountdown(purgeAfter: Date | null) {
+  if (!purgeAfter) {
+    return "Awaiting purge";
   }
 
-  if (status === "suspended") {
-    return "error";
+  const days = Math.ceil(
+    (new Date(purgeAfter).getTime() - Date.now()) / 86_400_000,
+  );
+
+  if (days <= 0) {
+    return "Purges on the next run";
   }
 
-  if (status === "pending") {
-    return "warning";
-  }
-
-  if (status === "invited") {
-    return "info";
-  }
-
-  return "default";
+  return `Purges in ${days} day${days === 1 ? "" : "s"}`;
 }
 
 function getInviteIssue(member: MemberRow) {
@@ -201,6 +214,7 @@ function CategoryCell({
 export function MemberAdmin({
   access,
   members,
+  initialStatusFilter = DEFAULT_MEMBER_STATUS_FILTER,
   customFields,
   memberCategories,
   manageableGroupCategories,
@@ -211,6 +225,9 @@ export function MemberAdmin({
 }: {
   access: MemberAdminAccess;
   members: MemberRow[];
+  /** Read from `?status=` on the server, so a bookmarked filter renders
+   *  correctly on the first paint instead of flashing the default. */
+  initialStatusFilter?: MembershipStatus[];
   customFields: MemberCustomField[];
   memberCategories: MembersTableCategory[];
   manageableGroupCategories: MemberManagementGroupCategory[];
@@ -222,6 +239,33 @@ export function MemberAdmin({
   const { formatDateTime } = useFormatters();
 
   const router = useRouter();
+  const restoreAction = useAction(restoreMemberAction, {
+    onSuccess: ({ data }) => {
+      if (!data) {
+        return;
+      }
+
+      if (data.restoredCount > 0) {
+        toast.success("Member restored.");
+      } else if (data.conflictedEmails.length > 0) {
+        // The one case restore refuses: somebody re-registered with this
+        // address during the grace window, so bringing the old record back
+        // would leave two live members for one person.
+        toast.error(
+          `A live member already uses ${data.conflictedEmails.join(", ")}. Resolve that record first.`,
+        );
+      } else {
+        toast.error("That member could not be restored.");
+      }
+
+      router.refresh();
+    },
+    onError: () => {
+      toast.error("That member could not be restored.");
+    },
+  });
+  const [statusFilter, setStatusFilter] =
+    useState<MembershipStatus[]>(initialStatusFilter);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -545,18 +589,29 @@ export function MemberAdmin({
       columnHelper.accessor("status", {
         meta: { label: "Status" },
         header: "Status",
+        // Driven by the toolbar's multi-select. An empty selection filters
+        // everything out, which is what the admin asked for.
+        filterFn: (row, _columnId, filterValue) =>
+          Array.isArray(filterValue)
+            ? filterValue.includes(row.original.status)
+            : true,
         cell: ({ row }) => {
           const member = row.original;
           const inviteIssue = getInviteIssue(member);
 
           return (
             <div className="flex min-w-0 flex-col gap-1.5">
-              <Status variant={getStatusVariant(member.status)}>
+              <Status variant={getMemberStatusVariant(member.status)}>
                 <StatusIndicator />
                 <StatusLabel className="capitalize">
                   {member.status.replace("_", " ")}
                 </StatusLabel>
               </Status>
+              {member.status === "deleted" ? (
+                <span className="text-muted-foreground text-xs">
+                  {formatPurgeCountdown(member.purgeAfter)}
+                </span>
+              ) : null}
               {inviteIssue ? (
                 <Badge variant={inviteIssue.variant} className="w-fit">
                   {inviteIssue.label}
@@ -759,6 +814,20 @@ export function MemberAdmin({
 
           return (
             <div className="flex justify-end gap-2">
+              {member.status === "deleted" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    restoreAction.execute({ memberId: member.id })
+                  }
+                  disabled={restoreAction.isPending}
+                >
+                  <UndoIcon data-icon="inline-start" />
+                  Restore
+                </Button>
+              ) : null}
               {member.status === "pending" ? (
                 <Button
                   type="button"
@@ -855,6 +924,7 @@ export function MemberAdmin({
     memberCategories,
     membersWithOverdueFees,
     resendInviteAction,
+    restoreAction,
     workspaceReady,
   ]);
 
@@ -879,6 +949,13 @@ export function MemberAdmin({
 
     return (
       <div className="flex items-center gap-2">
+        <MemberStatusFilter
+          value={statusFilter}
+          onChange={(next) => {
+            setStatusFilter(next);
+            table.getColumn("status")?.setFilterValue(next);
+          }}
+        />
         {overdueColumn ? (
           <Button
             type="button"
@@ -981,6 +1058,10 @@ export function MemberAdmin({
             : "Create members directly into the groups you administer."
         }
         initialColumnVisibility={initialColumnVisibility}
+        initialColumnFilters={[{ id: "status", value: initialStatusFilter }]}
+        // A deleted member cannot be edited, mailed or deleted again, so the
+        // checkbox is withheld rather than offered and then ignored.
+        enableRowSelection={(row) => row.original.status !== "deleted"}
         toolbarActions={renderToolbarActions}
         onRowClick={(member) => openMember(member.id)}
       />

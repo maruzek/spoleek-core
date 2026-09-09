@@ -407,6 +407,27 @@
       "when": 1788949176293,
       "tag": "0057_nappy_mole_man",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1788962701254,
+      "tag": "0058_lush_butterfly",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788962721623,
+      "tag": "0059_backfill_member_purge_anchor",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1788965150179,
+      "tag": "0060_next_jack_flag",
+      "breakpoints": true
     }
   ]
 }

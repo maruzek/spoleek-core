@@ -86,6 +86,11 @@ export const emailKindEnum = pgEnum("email_kind", [
   "registration_acknowledgement",
   "registration_duplicate_notice",
   "registration_rejected",
+  // Sent when a membership is deleted. Carries the date the record is erased
+  // and, for a member with a Workspace account, the deadline for exporting
+  // their own data — the one piece of information they cannot get anywhere
+  // else once they are signed out.
+  "membership_deleted",
   // Reminders for the yearly member report. Routed through
   // `sendNotificationEmails` so a deadline the board enforces is provably
   // delivered rather than merely sent.
@@ -244,6 +249,25 @@ export const membershipManagementModeEnum = pgEnum("membership_management_mode",
 export const memberPreferredEmailEnum = pgEnum("member_preferred_email", [
   "personal",
   "workspace",
+]);
+
+/**
+ * Why a membership was deleted.
+ *
+ * Not decoration: an Art. 17 erasure request and an admin tidying the roster
+ * are different events. The first is a data subject exercising a right, which
+ * the organization may have to evidence and which arguably deserves a shorter
+ * grace period than a deletion the member never asked for. The second is an
+ * administrative act that most wants to be undoable.
+ *
+ * `system` covers deletions no human initiated, so a future automated rule
+ * cannot be mistaken for an admin's decision after the fact.
+ */
+export const memberDeletionReasonEnum = pgEnum("member_deletion_reason", [
+  "admin_request",
+  "member_request",
+  "aged_out",
+  "system",
 ]);
 
 export const memberPaymentTypeEnum = pgEnum("member_payment_type", [
@@ -731,6 +755,38 @@ export const tenantMembers = pgTable(
     deletedByUserId: text("deleted_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /**
+     * The status this member held before deletion, so restoring puts them back
+     * where they were.
+     *
+     * Without it, restore has to guess, and the only defensible guess is
+     * `active` — which silently un-suspends a member somebody suspended on
+     * purpose. Null on every row that was never deleted.
+     */
+    previousStatus: membershipStatusEnum("previous_status"),
+    /**
+     * When the record becomes eligible for permanent erasure.
+     *
+     * The retention anchor as stored data rather than `deletedAt` plus a
+     * constant recomputed at every read. Two reasons it has to be a column: a
+     * single member can be held longer (a dispute, an audit) without changing a
+     * global setting, and shortening `MEMBER_SOFT_DELETE_RETENTION_DAYS` must
+     * not retroactively purge people whose grace period was promised in an
+     * email that already went out.
+     */
+    purgeAfter: timestamp("purge_after", { withTimezone: true }),
+    deletionReason: memberDeletionReasonEnum("deletion_reason"),
+    /**
+     * Failed attempts to delete this member's Google Workspace account during
+     * the purge.
+     *
+     * The purge deletes the Workspace account before the member row, because
+     * the row is the only record that an account still needs deleting — see
+     * `purgeDeletedMembers`. A failure therefore has to leave the row in place
+     * and be visible, rather than retry forever in silence.
+     */
+    workspacePurgeAttempts: integer("workspace_purge_attempts").notNull().default(0),
+    workspacePurgeLastError: text("workspace_purge_last_error"),
     ...timestamps,
   },
   (table) => [
@@ -741,6 +797,10 @@ export const tenantMembers = pgTable(
     index("tenant_members_active_idx")
       .on(table.orgId, table.status)
       .where(sql`status != 'deleted'`),
+    // The purge job's only query: deleted members whose grace period is up.
+    index("tenant_members_purge_idx")
+      .on(table.purgeAfter)
+      .where(sql`status = 'deleted'`),
   ],
 );
 
@@ -1831,6 +1891,8 @@ export const schema = {
 export type SystemRole = typeof systemRoleEnum.enumValues[number];
 export type TenantRole = typeof tenantRoleEnum.enumValues[number];
 export type MembershipStatus = typeof membershipStatusEnum.enumValues[number];
+export type MemberDeletionReason =
+  typeof memberDeletionReasonEnum.enumValues[number];
 export type MemberInviteStatus = typeof memberInviteStatusEnum.enumValues[number];
 export type MemberInviteDeliveryStatus =
   typeof memberInviteDeliveryStatusEnum.enumValues[number];

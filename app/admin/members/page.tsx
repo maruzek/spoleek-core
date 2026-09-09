@@ -8,11 +8,9 @@ import type { ImportGroupInfo } from "@/components/app/member-import/types";
 import { db } from "@/server/db";
 import { groups } from "@/server/db/schema";
 import { getMembersAdminPageData } from "@/server/queries/members";
+import { parseMemberStatusFilter } from "@/lib/member-status-display";
 import { getAppOrganization } from "@/server/queries/app";
 import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
-import type { TenantMember } from "@/server/db/schema";
-
-type VisibleMemberStatus = Exclude<TenantMember["status"], "deleted">;
 
 export default async function AdminMembersPage({
   searchParams,
@@ -27,9 +25,14 @@ export default async function AdminMembersPage({
     redirect(`/admin/members/${params.edit}`);
   }
 
+  // Deleted members are fetched only when the status filter explicitly asks
+  // for them, so the default page load is unchanged for everyone else.
+  const statusFilter = parseMemberStatusFilter(params.status);
+  const includeDeleted = statusFilter.includes("deleted");
+
   const organization = await getAppOrganization();
   const [data, orgGroups] = await Promise.all([
-    getMembersAdminPageData(null),
+    getMembersAdminPageData(null, { includeDeleted }),
     organization
       ? db
           .select({
@@ -74,11 +77,8 @@ export default async function AdminMembersPage({
     >
       <MemberAdmin
         access={data.access}
-        members={
-          data.members as Array<
-            (typeof data.members)[number] & { status: VisibleMemberStatus }
-          >
-        }
+        members={data.members}
+        initialStatusFilter={statusFilter}
         customFields={data.customFields}
         memberCategories={data.memberCategories}
         manageableGroupCategories={data.manageableGroupCategories}

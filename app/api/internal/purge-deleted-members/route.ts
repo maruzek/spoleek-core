@@ -48,6 +48,17 @@ async function handlePurge(request: Request) {
 
   console.info("Purged deleted members", result);
 
+  // Stalled members are the one outcome that needs a human: their Workspace
+  // account could not be deleted after repeated tries, so the record is being
+  // held past its retention period until somebody looks. Logged separately so
+  // it is not buried in an info line that reads as success.
+  if (result.stalledMemberIds.length > 0) {
+    console.error(
+      `${result.stalledMemberIds.length} member(s) could not be purged: Workspace account deletion keeps failing.`,
+      { memberIds: result.stalledMemberIds },
+    );
+  }
+
   return NextResponse.json(result);
 }
 

@@ -261,6 +261,40 @@ export async function createWorkspaceUser(
   return { id: body.id, primaryEmail: body.primaryEmail };
 }
 
+/**
+ * Permanently deletes a Google Workspace account.
+ *
+ * Called only by the purge, once a soft-deleted member's grace period has run
+ * out. Google's own recovery window (20 days for a deleted user) is the last
+ * safety net after ours; nothing here can be undone from Spoleek.
+ *
+ * A 404 is reported as success rather than an error. The account may have been
+ * deleted in the Admin console, or by an earlier run that crashed after Google
+ * had already acted — and in both cases the state the caller wants is the state
+ * that exists. Making the caller special-case it invites the opposite mistake:
+ * a purge that stalls forever on an account that is already gone.
+ */
+export async function deleteWorkspaceUser(
+  orgId: string,
+  userKey: string,
+): Promise<{ deleted: boolean; alreadyGone: boolean }> {
+  const response = await directoryFetch(
+    orgId,
+    `/users/${encodeURIComponent(userKey)}`,
+    { method: "DELETE" },
+  );
+
+  if (response.status === 404) {
+    return { deleted: false, alreadyGone: true };
+  }
+
+  if (!response.ok) {
+    throw await parseError(response);
+  }
+
+  return { deleted: true, alreadyGone: false };
+}
+
 export async function searchWorkspaceUsers(
   orgId: string,
   query: string,

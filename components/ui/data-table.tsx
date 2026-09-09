@@ -6,6 +6,7 @@ import {
   Column,
   ColumnDef,
   ColumnFiltersState,
+  Row,
   SortingState,
   VisibilityState,
   flexRender,
@@ -69,6 +70,14 @@ interface DataTableProps<TData, TValue> {
   emptyStateTitle?: string;
   emptyStateDescription?: string;
   initialColumnVisibility?: VisibilityState;
+  /** Applied on mount, for filters restored from the URL on the server. */
+  initialColumnFilters?: ColumnFiltersState;
+  /**
+   * Which rows may be selected. Use it to keep bulk actions off rows they
+   * cannot act on — a deleted member, say — rather than filtering the
+   * selection afterwards and leaving the checkbox lying about what it does.
+   */
+  enableRowSelection?: boolean | ((row: Row<TData>) => boolean);
   toolbarActions?: (table: TanStackTable<TData>) => React.ReactNode;
   /**
    * Opt-in row navigation. Clicks that land on an interactive element inside
@@ -153,11 +162,14 @@ export function DataTable<TData, TValue>({
   emptyStateTitle = "No results found",
   emptyStateDescription = "Try adjusting your filters.",
   initialColumnVisibility = {},
+  initialColumnFilters = [],
+  enableRowSelection,
   toolbarActions,
   onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] =
+    useState<ColumnFiltersState>(initialColumnFilters);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = useState({});
 
@@ -172,6 +184,7 @@ export function DataTable<TData, TValue>({
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
+    enableRowSelection,
     state: {
       sorting,
       columnFilters,
