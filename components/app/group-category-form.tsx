@@ -23,6 +23,7 @@ import {
   FieldSet,
   FieldTitle,
 } from "@/components/ui/field";
+import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
@@ -172,7 +173,12 @@ export function GroupCategoryForm({
                     getFieldError("slug").length > 0)
                 }
               >
-                <FieldLabel htmlFor="group-category-slug">Slug *</FieldLabel>
+                <FieldLabel htmlFor="group-category-slug">
+                  Slug *
+                  <FieldHint>
+                    Used in URLs and must stay unique inside the organization.
+                  </FieldHint>
+                </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-category-slug"
@@ -188,9 +194,6 @@ export function GroupCategoryForm({
                         getFieldError("slug").length > 0)
                     }
                   />
-                  <FieldDescription>
-                    Used in URLs and must stay unique inside the organization.
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -234,11 +237,13 @@ export function GroupCategoryForm({
         <form.Field name="selectionMode">
           {(formField) => (
             <FieldSet>
-              <FieldLegend>Selection mode</FieldLegend>
-              <FieldDescription>
-                Decide whether members can choose one or several groups from
-                this category.
-              </FieldDescription>
+              <FieldLegend className="flex items-center gap-2">
+                Selection mode
+                <FieldHint>
+                  Decide whether members can choose one or several groups from
+                  this category.
+                </FieldHint>
+              </FieldLegend>
               <RadioGroup
                 value={formField.state.value}
                 onValueChange={(value) =>
@@ -273,11 +278,13 @@ export function GroupCategoryForm({
         <form.Field name="defaultJoinPolicy">
           {(formField) => (
             <FieldSet>
-              <FieldLegend>Default join policy</FieldLegend>
-              <FieldDescription>
-                Set the default membership behavior for new groups in this
-                category.
-              </FieldDescription>
+              <FieldLegend className="flex items-center gap-2">
+                Default join policy
+                <FieldHint>
+                  Set the default membership behavior for new groups in this
+                  category.
+                </FieldHint>
+              </FieldLegend>
               <RadioGroup
                 value={formField.state.value}
                 onValueChange={(value) =>
@@ -313,6 +320,9 @@ export function GroupCategoryForm({
               <Field>
                 <FieldLabel htmlFor="group-category-max-selections">
                   Max selections
+                  <FieldHint>
+                    Leave empty to allow any number within the selected mode.
+                  </FieldHint>
                 </FieldLabel>
                 <FieldContent>
                   <Input
@@ -329,9 +339,6 @@ export function GroupCategoryForm({
                       )
                     }
                   />
-                  <FieldDescription>
-                    Leave empty to allow any number within the selected mode.
-                  </FieldDescription>
                   <FieldError
                     errors={getFieldError("maxSelections").map((message) => ({
                       message,
@@ -380,6 +387,10 @@ export function GroupCategoryForm({
                   >
                     <FieldLabel htmlFor="group-category-registration-field-label">
                       Registration field label *
+                      <FieldHint>
+                        Use the singular label applicants should see, for
+                        example &quot;Region&quot; instead of &quot;Regions&quot;.
+                      </FieldHint>
                     </FieldLabel>
                     <FieldContent>
                       <Input
@@ -400,10 +411,6 @@ export function GroupCategoryForm({
                             getFieldError("registrationFieldLabel").length > 0)
                         }
                       />
-                      <FieldDescription>
-                        Use the singular label applicants should see, for
-                        example &quot;Region&quot; instead of &quot;Regions&quot;.
-                      </FieldDescription>
                       <FieldError
                         errors={[
                           ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -434,11 +441,14 @@ export function GroupCategoryForm({
           {(showInRegistration) =>
             showInRegistration ? (
               <FieldSet>
-                <FieldLegend>Application notifications</FieldLegend>
-                <FieldDescription>
-                  Organization admins are always told about a new application.
-                  This adds the people responsible for this category.
-                </FieldDescription>
+                <FieldLegend className="flex items-center gap-2">
+                  Application notifications
+                  <FieldHint>
+                    Organization admins are always told about a new
+                    application. This adds the people responsible for this
+                    category.
+                  </FieldHint>
+                </FieldLegend>
 
                 <div className="flex flex-col gap-5">
                   <form.Field name="notifyOnRegistration">
@@ -467,6 +477,11 @@ export function GroupCategoryForm({
                             >
                               <FieldLabel htmlFor="group-category-notification-email">
                                 Shared address
+                                <FieldHint>
+                                  Optional. A mailing list or shared mailbox
+                                  that is emailed in addition to the admins
+                                  above.
+                                </FieldHint>
                               </FieldLabel>
                               <FieldContent>
                                 <Input
@@ -488,10 +503,6 @@ export function GroupCategoryForm({
                                     getFieldError("notificationEmail").length > 0
                                   }
                                 />
-                                <FieldDescription>
-                                  Optional. A mailing list or shared mailbox that
-                                  is emailed in addition to the admins above.
-                                </FieldDescription>
                                 <FieldError
                                   errors={[
                                     ...getClientFieldErrors(
