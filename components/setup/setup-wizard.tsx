@@ -150,6 +150,12 @@ type SetupWizardProps = {
   } | null;
   googleAvailable: boolean;
   databaseIssue: string | null;
+  /**
+   * Set when DEPLOYMENT_MODE pins the track in the environment. The choice is
+   * then shown as already made rather than hidden, so the operator can see
+   * which track the rest of the wizard is tailoring itself to.
+   */
+  lockedDeploymentTrack: SetupDeploymentTrack | null;
   workspaceConnectState: {
     connected: boolean;
     domain: string | null;
@@ -311,6 +317,7 @@ export function SetupWizard({
   googleAvailable,
   databaseIssue,
   workspaceConnectState,
+  lockedDeploymentTrack,
 }: SetupWizardProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -396,6 +403,15 @@ export function SetupWizard({
       router.refresh();
     },
   });
+
+  // Locking greys out the alternatives instead of removing them: the operator
+  // sees the full set of tracks and which one the env file already committed to.
+  const resolvedDeploymentOptions = lockedDeploymentTrack
+    ? deploymentOptions.map((option) => ({
+        ...option,
+        disabled: option.value !== lockedDeploymentTrack,
+      }))
+    : deploymentOptions;
 
   const intentForm = useForm({
     defaultValues: {
@@ -819,8 +835,9 @@ export function SetupWizard({
                             <FieldSet>
                               <FieldLegend>Deployment track</FieldLegend>
                               <FieldDescription>
-                                Pick the infrastructure path you are setting up
-                                right now.
+                                {lockedDeploymentTrack
+                                  ? `Set by DEPLOYMENT_MODE in the environment, so it cannot be changed here. Edit that variable and reload to switch tracks.`
+                                  : "Pick the infrastructure path you are setting up right now."}
                               </FieldDescription>
                               <Field
                                 data-invalid={showErrors && errors.length > 0}
@@ -833,7 +850,7 @@ export function SetupWizard({
                                     setIntentError(null);
                                     field.handleChange(value);
                                   }}
-                                  options={deploymentOptions}
+                                  options={resolvedDeploymentOptions}
                                   invalid={showErrors && errors.length > 0}
                                 />
                                 {showErrors ? (
@@ -904,8 +921,9 @@ export function SetupWizard({
                 </CardContent>
                 <CardFooter className="justify-between gap-4">
                   <p className="text-sm text-muted-foreground">
-                    You can restart this step later if you choose the wrong
-                    track.
+                    {lockedDeploymentTrack
+                      ? "The deployment track comes from DEPLOYMENT_MODE; you can still revisit the authentication choice later."
+                      : "You can restart this step later if you choose the wrong track."}
                   </p>
                   <Button
                     onClick={() => void intentForm.handleSubmit()}

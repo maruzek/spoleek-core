@@ -5,6 +5,7 @@ import { getServerEnvStatus } from "@/lib/env";
 import {
   deriveSetupStep,
   getBootstrapState,
+  getEnvDeploymentMode,
   getSetupEnvReadiness,
   getSetupInstructions,
   getSetupViewerSessionSafe,
@@ -59,6 +60,7 @@ export default async function SetupPage() {
       viewer={viewer ? { email: viewer.user.email, name: viewer.user.name } : null}
       googleAvailable={envStatus.isGoogleAuthEnabled}
       databaseIssue={bootstrapState.databaseIssue}
+      lockedDeploymentTrack={getEnvDeploymentMode()}
       workspaceConnectState={workspaceConnectState}
     />
   );

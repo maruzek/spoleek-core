@@ -77,18 +77,41 @@ export async function getBootstrapState() {
   }
 }
 
+/**
+ * The deployment track pinned by `DEPLOYMENT_MODE`, or null when the env file
+ * leaves the choice open.
+ *
+ * Read from the raw env rather than `getServerEnv()` on purpose: the wizard's
+ * whole job is to run while the environment is still incomplete, and
+ * `getServerEnv()` throws in exactly that case.
+ */
+export function getEnvDeploymentMode(): SetupDeploymentTrack | null {
+  const value = getRawServerEnv().DEPLOYMENT_MODE?.trim();
+
+  return value && (setupDeploymentTracks as readonly string[]).includes(value)
+    ? (value as SetupDeploymentTrack)
+    : null;
+}
+
 export async function getSetupWizardState(): Promise<SetupWizardCookieState> {
+  const envDeploymentMode = getEnvDeploymentMode();
   const cookieStore = await cookies();
   const raw = cookieStore.get(setupCookieName)?.value;
 
   if (!raw) {
-    return {};
+    return envDeploymentMode ? { deploymentTrack: envDeploymentMode } : {};
   }
 
   try {
-    return setupCookieSchema.parse(JSON.parse(raw));
+    const parsed = setupCookieSchema.parse(JSON.parse(raw));
+
+    // Env wins over the cookie, always. A stale cookie from before the variable
+    // was set must not be able to run the rest of setup against the wrong track.
+    return envDeploymentMode
+      ? { ...parsed, deploymentTrack: envDeploymentMode }
+      : parsed;
   } catch {
-    return {};
+    return envDeploymentMode ? { deploymentTrack: envDeploymentMode } : {};
   }
 }
 

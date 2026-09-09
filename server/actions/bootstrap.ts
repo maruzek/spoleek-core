@@ -28,6 +28,7 @@ import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 import {
   clearSetupWizardState,
   getBootstrapState,
+  getEnvDeploymentMode,
   getSetupEnvReadiness,
   getSetupViewerSessionSafe,
   getSetupWizardState,
@@ -53,8 +54,11 @@ export const saveSetupIntentAction = actionClient
     const resolvedAuthStrategy: SetupAuthStrategy = isWorkspace
       ? "google-first"
       : (parsedInput.authStrategy as SetupAuthStrategy);
+    // The wizard disables the other options when DEPLOYMENT_MODE is set, but the
+    // action is the actual boundary — a hand-rolled request must not be able to
+    // pick a track the deployment has already committed to.
     const nextState: SetupWizardCookieState = {
-      deploymentTrack: parsedInput.deploymentTrack,
+      deploymentTrack: getEnvDeploymentMode() ?? parsedInput.deploymentTrack,
       authStrategy: resolvedAuthStrategy,
       workspaceModuleEnabled: isWorkspace,
       envGuidanceAccepted: false,

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { setupDeploymentTracks } from "@/lib/bootstrap";
+
 // const DEFAULTS = {
 //   APP_NAME: "Spoleek",
 //   APP_URL: "http://localhost:3000",
@@ -40,6 +42,15 @@ const serverEnvSchema = z.object({
   // outgoing key stay readable until they have been re-encrypted.
   APP_ENCRYPTION_KEY_PREVIOUS: optionalString,
   DEFAULT_LOCALE: z.enum(["en", "cs"]),
+  // The infrastructure this instance runs on. Optional: when it is set the
+  // first-run wizard stops offering the choice and the value here wins, because
+  // whoever wrote the env file has already made the decision. It also picks the
+  // database pool size, which is the one setting that cannot be shared between
+  // a long-lived container and a fleet of serverless instances.
+  DEPLOYMENT_MODE: z.preprocess(
+    (value) => normalizeOptionalEnv(value),
+    z.enum(setupDeploymentTracks).optional(),
+  ),
   SMTP_FROM: optionalEmail,
   RESEND_API_KEY: optionalString,
   RESEND_FROM_EMAIL: optionalEmail,
@@ -166,6 +177,7 @@ export function getRawServerEnv() {
     APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY,
     APP_ENCRYPTION_KEY_PREVIOUS: process.env.APP_ENCRYPTION_KEY_PREVIOUS,
     DEFAULT_LOCALE: process.env.DEFAULT_LOCALE,
+    DEPLOYMENT_MODE: process.env.DEPLOYMENT_MODE,
     SMTP_FROM: process.env.SMTP_FROM,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
