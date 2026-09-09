@@ -172,48 +172,68 @@ suite("the under-age signal", () => {
  * Aging out differs from the under-age check in kind, not just direction.
  * Under the minimum is a flag for a human; past the maximum is a fact about
  * the membership, and it stops money going out.
+ *
+ * `endsAtAge` is the age at which membership ends, not the last age somebody
+ * may be. TOP tym's rule — "membership ends on the 36th birthday, so 35 is the
+ * last year you are a member" — is `endsAtAge: 36`. Naming it "maximum age"
+ * cost a whole year of membership in the first version of this.
  */
-describe("the maximum age rule", () => {
-  const dob = "2000-06-15";
+describe("the age at which membership ends", () => {
+  const dob = "1991-06-15";
 
-  it("keeps a member for the whole period in which they reach the limit", () => {
-    // Turns 26 on 2026-06-15. With `period_end` they stay a member to 31 Dec.
-    const onBirthday = resolveEligibility({
+  it("ends membership on that birthday itself, not the day after", () => {
+    const dayBefore = resolveEligibility({
       dateOfBirth: dob,
-      maximumAge: 26,
-      effect: "period_end",
-      now: new Date("2026-06-16T00:00:00Z"),
+      endsAtAge: 36,
+      effect: "birthday",
+      now: new Date("2027-06-14T12:00:00Z"),
+    });
+    const onTheDay = resolveEligibility({
+      dateOfBirth: dob,
+      endsAtAge: 36,
+      effect: "birthday",
+      now: new Date("2027-06-15T00:00:00Z"),
     });
 
-    expect(onBirthday.hasAgedOut).toBe(false);
-    expect(onBirthday.agesOutOn?.toISOString().slice(0, 10)).toBe("2026-12-31");
+    expect(dayBefore.hasAgedOut).toBe(false);
+    expect(onTheDay.hasAgedOut).toBe(true);
+    // Last day in is the day before the birthday.
+    expect(dayBefore.membershipEndsOn?.toISOString().slice(0, 10)).toBe(
+      "2027-06-14",
+    );
+  });
 
-    const nextYear = resolveEligibility({
+  it("keeps a 35-year-old, which is the point of the rule", () => {
+    const result = resolveEligibility({
       dateOfBirth: dob,
-      maximumAge: 26,
-      effect: "period_end",
+      endsAtAge: 36,
+      effect: "birthday",
       now: new Date("2027-01-01T12:00:00Z"),
     });
 
-    expect(nextYear.hasAgedOut).toBe(true);
+    expect(result.age).toBe(35);
+    expect(result.hasAgedOut).toBe(false);
   });
 
-  it("ends it on the birthday when the organization chose that", () => {
-    const before = resolveEligibility({
+  it("carries them through the whole final day under period_end", () => {
+    const lastDay = resolveEligibility({
       dateOfBirth: dob,
-      maximumAge: 26,
-      effect: "birthday",
-      now: new Date("2026-06-14T00:00:00Z"),
+      endsAtAge: 36,
+      effect: "period_end",
+      now: new Date("2027-12-31T23:00:00Z"),
     });
-    const after = resolveEligibility({
+    const nextDay = resolveEligibility({
       dateOfBirth: dob,
-      maximumAge: 26,
-      effect: "birthday",
-      now: new Date("2026-06-16T00:00:00Z"),
+      endsAtAge: 36,
+      effect: "period_end",
+      now: new Date("2028-01-01T00:00:00Z"),
     });
 
-    expect(before.hasAgedOut).toBe(false);
-    expect(after.hasAgedOut).toBe(true);
+    expect(lastDay.hasAgedOut).toBe(false);
+    expect(lastDay.membershipEndsOn?.toISOString().slice(0, 10)).toBe(
+      "2027-12-31",
+    );
+    expect(nextDay.hasAgedOut).toBe(true);
   });
 
   it("never ages somebody out on a birth date it does not have", () => {
@@ -222,7 +242,7 @@ describe("the maximum age rule", () => {
     // strength of missing data is worse than keeping them a member.
     const result = resolveEligibility({
       dateOfBirth: null,
-      maximumAge: 26,
+      endsAtAge: 36,
       effect: "period_end",
     });
 
@@ -233,9 +253,9 @@ describe("the maximum age rule", () => {
   it("leaves a member well inside the window alone", () => {
     const result = resolveEligibility({
       dateOfBirth: "2004-01-01",
-      maximumAge: 26,
+      endsAtAge: 36,
       effect: "period_end",
-      now: new Date("2026-09-08T00:00:00Z"),
+      now: new Date("2026-09-09T00:00:00Z"),
     });
 
     expect(result.hasAgedOut).toBe(false);

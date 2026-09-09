@@ -508,7 +508,7 @@ export function MemberDetailView({
         <MemberStatusBanner
           tone="warning"
           icon={AlertTriangleIcon}
-          title={`Past the maximum age (${data.eligibility.age}, maximum ${data.eligibility.maximumAge})`}
+          title={`Membership has ended by age (${data.eligibility.age}, ends at ${data.eligibility.endsAtAge})`}
           description="Under the organization's own rules this membership has ended. They are no longer billed for new periods. Their record is kept — decide whether to archive them, or record an exemption if the statutes allow one."
         />
       ) : null}

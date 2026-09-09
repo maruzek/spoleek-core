@@ -134,16 +134,19 @@ export async function getMemberAgeSignal({
  * Returns null when the organization set no maximum — "we were not asked to
  * check", which is not the same claim as "this member is still eligible".
  */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export type MemberEligibility = {
   age: number | null;
-  maximumAge: number;
+  endsAtAge: number;
   /** True once they are past the limit, per the organization's chosen effect. */
   hasAgedOut: boolean;
   /**
-   * When they age out, for a member who has not yet. Null once they have, or
-   * when there is no birth date to compute from.
+   * The last day they are a member. Null when there is no birth date to
+   * compute from. Kept as "last day in" rather than "first day out" because it
+   * is what an admin and a member are told.
    */
-  agesOutOn: Date | null;
+  membershipEndsOn: Date | null;
 };
 
 export async function getMemberEligibility({
@@ -157,16 +160,16 @@ export async function getMemberEligibility({
 }): Promise<MemberEligibility | null> {
   const [organization] = await db
     .select({
-      maximumAge: organizations.registrationMaximumAge,
+      endsAtAge: organizations.membershipEndsAtAge,
       effect: organizations.maximumAgeEffect,
     })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  const maximumAge = organization?.maximumAge;
+  const endsAtAge = organization?.endsAtAge;
 
-  if (maximumAge == null) {
+  if (endsAtAge == null) {
     return null;
   }
 
@@ -189,7 +192,7 @@ export async function getMemberEligibility({
 
   return resolveEligibility({
     dateOfBirth: row?.value,
-    maximumAge,
+    endsAtAge,
     effect: organization.effect,
     now,
   });
@@ -208,43 +211,57 @@ export async function getMemberEligibility({
  */
 export function resolveEligibility({
   dateOfBirth,
-  maximumAge,
+  endsAtAge,
   effect,
   now = new Date(),
 }: {
   dateOfBirth: unknown;
-  maximumAge: number;
+  endsAtAge: number;
   effect: MaximumAgeEffect;
   now?: Date;
 }): MemberEligibility {
   const age = getAgeFromDateOfBirth(dateOfBirth, now);
 
   if (age == null) {
-    return { age: null, maximumAge, hasAgedOut: false, agesOutOn: null };
+    return { age: null, endsAtAge, hasAgedOut: false, membershipEndsOn: null };
   }
 
-  const birthDate = parseISO(String(dateOfBirth));
-  const birthdayAtLimit = new Date(
-    Date.UTC(
-      birthDate.getUTCFullYear() + maximumAge,
-      birthDate.getUTCMonth(),
-      birthDate.getUTCDate(),
-    ),
-  );
+  // Read straight off the stored "YYYY-MM-DD" rather than through `parseISO`,
+  // which gives *local* midnight for a date-only string — in Prague that is
+  // 22:00Z the previous day, so the UTC getters would shift every birthday one
+  // day earlier and end memberships a day early. Same UTC discipline as
+  // `lib/membership-period.ts`.
+  const [year, month, day] = String(dateOfBirth).split("-").map(Number);
 
-  // `period_end` keeps a member for the whole period in which they reach the
-  // limit, which is what stanovy normally say and what makes the yearly report
-  // fall out correctly: they count in that period and not in the next.
-  const agesOutOn =
-    effect === "birthday"
-      ? birthdayAtLimit
-      : new Date(Date.UTC(birthdayAtLimit.getUTCFullYear(), 11, 31));
+  if (!year || !month || !day) {
+    return { age, endsAtAge, hasAgedOut: false, membershipEndsOn: null };
+  }
+
+  // The birthday on which the limit is reached. "Ends at age 36" means this
+  // day is the first day they are not a member — hence `>=` below, not `>`.
+  const limitBirthday = Date.UTC(year + endsAtAge, month - 1, day);
+
+  if (effect === "birthday") {
+    return {
+      age,
+      endsAtAge,
+      hasAgedOut: now.getTime() >= limitBirthday,
+      // Last day in: the day before that birthday.
+      membershipEndsOn: new Date(limitBirthday - DAY_MS),
+    };
+  }
+
+  // `period_end` carries them to the end of the period in which the limit is
+  // reached, which is what statutes normally say and what makes the yearly
+  // report fall out correctly: they count in that period and not in the next.
+  const lastDay = Date.UTC(year + endsAtAge, 11, 31);
 
   return {
     age,
-    maximumAge,
-    hasAgedOut: now.getTime() > agesOutOn.getTime(),
-    agesOutOn,
+    endsAtAge,
+    // Still a member for the whole of 31 December.
+    hasAgedOut: now.getTime() >= lastDay + DAY_MS,
+    membershipEndsOn: new Date(lastDay),
   };
 }
 
@@ -264,16 +281,16 @@ export async function listAgedOutMemberIds(
 ): Promise<Set<string>> {
   const [organization] = await db
     .select({
-      maximumAge: organizations.registrationMaximumAge,
+      endsAtAge: organizations.membershipEndsAtAge,
       effect: organizations.maximumAgeEffect,
     })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  const maximumAge = organization?.maximumAge;
+  const endsAtAge = organization?.endsAtAge;
 
-  if (maximumAge == null) {
+  if (endsAtAge == null) {
     return new Set();
   }
 
@@ -301,7 +318,7 @@ export async function listAgedOutMemberIds(
   for (const row of rows) {
     const eligibility = resolveEligibility({
       dateOfBirth: row.value,
-      maximumAge,
+      endsAtAge,
       effect: organization.effect,
       now,
     });

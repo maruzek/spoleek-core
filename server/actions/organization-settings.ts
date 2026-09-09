@@ -37,7 +37,7 @@ export const saveJoinPageSettingsAction = orgAdminActionClient
           joinPageHeadline: parsedInput.joinPageHeadline.trim(),
           joinPageBody: parsedInput.joinPageBody.trim(),
           registrationMinimumAge: parsedInput.registrationMinimumAge,
-          registrationMaximumAge: parsedInput.registrationMaximumAge,
+          membershipEndsAtAge: parsedInput.membershipEndsAtAge,
           maximumAgeEffect: parsedInput.maximumAgeEffect,
           updatedAt: new Date(),
         })

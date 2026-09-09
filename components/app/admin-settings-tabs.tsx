@@ -42,7 +42,7 @@ type AdminSettingsTabsProps = {
     | "joinPageHeadline"
     | "joinPageBody"
     | "registrationMinimumAge"
-    | "registrationMaximumAge"
+    | "membershipEndsAtAge"
     | "maximumAgeEffect"
   >;
   policy: Pick<

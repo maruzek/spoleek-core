@@ -1,0 +1,2 @@
+ALTER TABLE "organizations" DROP CONSTRAINT "organizations_age_window_check";--> statement-breakpoint
+ALTER TABLE "organizations" ADD CONSTRAINT "organizations_age_window_check" CHECK ("organizations"."registration_minimum_age" IS NULL OR "organizations"."registration_maximum_age" IS NULL OR "organizations"."registration_minimum_age" < "organizations"."registration_maximum_age");

@@ -610,14 +610,25 @@ export const organizations = pgTable(
      */
     registrationMinimumAge: integer("registration_minimum_age"),
     /**
-     * Age at which membership ends, for organizations whose stanovy cap it.
+     * The age at which membership ends — not the last age at which somebody
+     * may be a member.
      *
-     * Unlike the minimum, this one is not a flag for review — someone past
-     * it is no longer a member, and the membership contract that is the
-     * lawful basis for processing them as one has ended. Null means the
-     * organization has no maximum and nothing here activates.
+     * Named for the ending, because "maximum age" is ambiguous the moment the
+     * two effects below are involved: statutes say either "ends on the 36th
+     * birthday" or "ends at the end of the year in which the member turns 36",
+     * and both are the same number under this name. Read as a maximum it would
+     * be 35 in the first case and unclear in the second.
+     *
+     * Unlike the minimum, this is not a flag for review — past it somebody is
+     * no longer a member, and the membership contract that is the lawful basis
+     * for processing them as one has ended. Null means no age limit.
      */
-    registrationMaximumAge: integer("registration_maximum_age"),
+    // TODO(column-rename): the column is still `registration_maximum_age`
+    // from migration 0056. The property name is the one that matters for
+    // reading the code; renaming the column needs an interactive
+    // drizzle-kit generate and is pure tidy-up, so it is deliberately not
+    // bundled with the semantics fix.
+    membershipEndsAtAge: integer("registration_maximum_age"),
     maximumAgeEffect: maximumAgeEffectEnum("maximum_age_effect")
       .notNull()
       .default("period_end"),
@@ -650,12 +661,12 @@ export const organizations = pgTable(
     ),
     check(
       "organizations_maximum_age_check",
-      sql`${table.registrationMaximumAge} IS NULL OR (${table.registrationMaximumAge} >= 0 AND ${table.registrationMaximumAge} <= 150)`,
+      sql`${table.membershipEndsAtAge} IS NULL OR (${table.membershipEndsAtAge} >= 0 AND ${table.membershipEndsAtAge} <= 150)`,
     ),
     // A window that excludes everybody is a configuration mistake, not a rule.
     check(
       "organizations_age_window_check",
-      sql`${table.registrationMinimumAge} IS NULL OR ${table.registrationMaximumAge} IS NULL OR ${table.registrationMinimumAge} <= ${table.registrationMaximumAge}`,
+      sql`${table.registrationMinimumAge} IS NULL OR ${table.membershipEndsAtAge} IS NULL OR ${table.registrationMinimumAge} < ${table.membershipEndsAtAge}`,
     ),
     check(
       "organizations_minimum_age_check",

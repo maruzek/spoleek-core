@@ -51,10 +51,10 @@ export const joinPageSettingsSchema = z.object({
     .optional()
     .transform((value) => (value === "" || value === undefined ? null : value)),
   /**
-   * Age at which membership ends. Unlike the minimum this is not a flag for
-   * review — past it, the membership relationship the stanovy define has ended.
+   * The age at which membership ends — the ending age, not the last age at
+   * which somebody may be a member. "Ends on the 36th birthday" is 36 here.
    */
-  registrationMaximumAge: z
+  membershipEndsAtAge: z
     .union([z.coerce.number().int().min(0).max(150), z.literal("")])
     .optional()
     .transform((value) => (value === "" || value === undefined ? null : value)),
@@ -67,13 +67,13 @@ export const joinPageSettingsSchema = z.object({
   // worse way to learn it than a field error.
   if (
     value.registrationMinimumAge != null &&
-    value.registrationMaximumAge != null &&
-    value.registrationMinimumAge > value.registrationMaximumAge
+    value.membershipEndsAtAge != null &&
+    value.registrationMinimumAge >= value.membershipEndsAtAge
   ) {
     ctx.addIssue({
       code: "custom",
-      path: ["registrationMaximumAge"],
-      message: "The maximum age cannot be below the minimum age.",
+      path: ["membershipEndsAtAge"],
+      message: "Membership cannot end at or below the minimum age.",
     });
   }
 });
