@@ -3,8 +3,17 @@ import { NextResponse } from "next/server";
 import { authorizeCronRequest } from "@/server/lib/cron-auth";
 import { reconcileWorkspaceLinks } from "@/server/lib/workspace/reconcile-links";
 
-/** Paced Directory API calls across many links add up; give the run room. */
-export const maxDuration = 300;
+/**
+ * Paced Directory API calls across many links add up, and 300s is what a real
+ * reconcile pass wants. Capped at 60 because that is the Vercel Hobby ceiling
+ * and the deploy is rejected outright above it.
+ *
+ * Dormant today: WORKSPACE_SYNC_ENABLED is false and `vercel.json` no longer
+ * schedules this route. Before enabling Workspace sync, either move to a plan
+ * that allows the longer duration or make the pass resumable across runs — 60s
+ * will not finish a full reconcile over a large directory.
+ */
+export const maxDuration = 60;
 
 /**
  * Nightly reconcile. Membership mutations only ever enqueue what they already

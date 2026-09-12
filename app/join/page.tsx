@@ -12,6 +12,12 @@ import { getAppOrganization, getOrganizationJoinPage } from "@/server/queries/ap
 import { listPoliciesForRegistration } from "@/server/queries/policies";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
 
+// The page reads live organization data — groups, policies, custom fields — so
+// prerendering it would freeze all of that at build time. It also runs before
+// the org row exists, when the redirect below would be baked into a static page
+// and keep sending people to /setup long after setup was finished.
+export const dynamic = "force-dynamic";
+
 export default async function JoinPage() {
   const t = getDictionary();
   const organization = await getAppOrganization();
