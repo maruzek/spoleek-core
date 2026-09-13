@@ -60,9 +60,14 @@ To prevent "split-brain" data synchronization and ensure strict GDPR compliance,
 
 ### 5.5. Events Engine
 
-- Creation of events (dates, times, locations, rich-text descriptions).
-- **Visibility Scoping:** Events can be Public, Private (Org-wide), or Targeted (restricted to specific groups - triggering automated invites, or individual users).
-- Direct integration with Forms (RSVPs/logistics) and Payments (ticketing).
+Implemented as _Events core_ — see
+`docs/superpowers/specs/2026-09-13-events-core-design.md` for the data model,
+access rules and RSVP semantics. In short: events are owned by the
+organization, a category or a group; targeted at an audience of groups,
+categories, members and external emails; carry a built-in yes / no / maybe
+RSVP with optional capacity and reserve list; and never email anyone unless a
+manager explicitly sends an invite. Forms (§5.6) and ticketing (§5.7) plug in
+as later projects.
 
 ### 5.6. Custom Forms Module (EAV Pattern)
 

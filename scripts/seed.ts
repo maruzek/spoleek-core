@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "@/server/db";
 import { organizationPolicies, organizations } from "@/server/db/schema";
+import { seedDemoEvents } from "@/server/lib/events/seed";
 import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 
 async function main() {
@@ -30,6 +31,8 @@ async function main() {
     organizationName: "Demo Organization",
     locale: "en",
   });
+
+  await seedDemoEvents(orgId);
 
   console.log("Seeded demo organization.");
 }
