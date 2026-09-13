@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
-import { EventDetail } from "@/components/app/events/event-detail";
 import { GuestRsvpForm } from "@/components/app/events/guest-rsvp-form";
+import { PublicEventCard } from "@/components/app/events/public-event-card";
 import { PublicShell } from "@/components/public/public-shell";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { isRsvpOpen } from "@/lib/events/rsvp";
@@ -27,24 +27,22 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
 
   return (
     <PublicShell brand={organization.name}>
-      <div className="mx-auto w-full max-w-3xl rounded-2xl border bg-background p-6 shadow-sm md:p-8">
-        <EventDetail
-          event={row.event}
-          ownerName={row.ownerName ?? organization.name}
-          locale={orgFormatLocale(organization.locale)}
-          timeZone={organization.timezone}
-          counts={counts}
-          rsvp={
-            <GuestRsvpForm
-              eventSlug={row.event.slug}
-              open={isRsvpOpen(row.event, new Date())}
-              maxGuests={row.event.maxGuestsPerResponse}
-              rsvpBaseUrl={buildAbsoluteAppUrl("/events/rsvp/")}
-            />
-          }
-        />
-        <p className="sr-only">{t.public.signInHint}</p>
-      </div>
+      <PublicEventCard
+        event={row.event}
+        ownerName={row.ownerName ?? organization.name}
+        locale={orgFormatLocale(organization.locale)}
+        timeZone={organization.timezone}
+        counts={counts}
+        t={t}
+        rsvp={
+          <GuestRsvpForm
+            eventSlug={row.event.slug}
+            open={isRsvpOpen(row.event, new Date())}
+            maxGuests={row.event.maxGuestsPerResponse}
+            rsvpBaseUrl={buildAbsoluteAppUrl("/events/rsvp/")}
+          />
+        }
+      />
     </PublicShell>
   );
 }

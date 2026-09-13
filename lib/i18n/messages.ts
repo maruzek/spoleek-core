@@ -310,6 +310,9 @@ const en = {
       copyLink: "Copy link",
       linkCopied: "Link copied.",
       signInHint: "Member? Sign in to answer from your portal instead.",
+      signInPrompt: "Member?",
+      signInLink: "Sign in",
+      signInSuffix: "to answer from your portal instead.",
     },
     token: {
       answeringAs: (name: string) => `Answering as ${name}`,
@@ -751,6 +754,9 @@ const cs: Dictionary = {
       copyLink: "Kopírovat odkaz",
       linkCopied: "Odkaz zkopírován.",
       signInHint: "Jste člen? Přihlaste se a odpovězte v portálu.",
+      signInPrompt: "Jste člen?",
+      signInLink: "Přihlaste se",
+      signInSuffix: "a odpovězte v portálu.",
     },
     token: {
       answeringAs: (name: string) => `Odpovídáte jako ${name}`,

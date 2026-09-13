@@ -2,22 +2,25 @@
 
 import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
-import { CopyIcon, Loader2Icon } from "lucide-react";
+import { CheckIcon, CopyIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
+import { AnswerTiles, GuestStepper } from "@/components/app/events/event-rsvp-parts";
 import { useDictionary } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
-import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
+import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { RsvpOpenResult } from "@/lib/events/rsvp";
+import { cn } from "@/lib/utils";
 import { respondAsGuestAction } from "@/server/actions/events";
 import type { EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
 
 /**
- * Anonymous RSVP on a public event: name, email, answer, guests. On success
- * the guest is shown a personal link (token) so they can change their answer
- * later — no email is sent, so the link must be shown here or it is lost.
+ * Anonymous RSVP on a public event: answer first, then name and email, then
+ * guests. On success the guest is shown a personal link (token) so they can
+ * change their answer later — no email is sent, so the link must be shown
+ * here or it is lost.
  */
 export function GuestRsvpForm({
   eventSlug,
@@ -37,35 +40,46 @@ export function GuestRsvpForm({
   const [answer, setAnswer] = useState<EventRsvpAnswer | null>(null);
   const [guestCount, setGuestCount] = useState(0);
   const [done, setDone] = useState<{ standing: EventRsvpStanding; token: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const respond = useAction(respondAsGuestAction);
 
   if (!open.open) {
-    return <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">{t.closed[open.reason]}</div>;
+    return <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">{t.closed[open.reason]}</p>;
   }
 
   if (done) {
     const link = `${rsvpBaseUrl}${done.token}`;
     return (
-      <div className="flex flex-col gap-3 rounded-xl border p-4">
-        <p className="text-sm font-medium">{t.public.thanks}</p>
-        {answer === "yes" ? <p className="text-sm">{t.standing[done.standing]}</p> : null}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <CheckIcon className="size-4" aria-hidden />
+          </span>
+          <p className="font-heading text-lg text-foreground">{t.public.thanks}</p>
+        </div>
+        {answer === "yes" ? (
+          <p className={cn("text-sm", done.standing === "confirmed" ? "text-primary" : "text-amber-700 dark:text-amber-400")}>
+            {t.standing[done.standing]}
+          </p>
+        ) : null}
         <p className="text-sm text-muted-foreground">{t.public.changeLater}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1 text-xs">{link}</code>
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-1 pl-2.5">
+          <code className="min-w-0 flex-1 truncate font-mono text-xs">{link}</code>
           <Button
             size="sm"
-            variant="outline"
+            variant={copied ? "outline" : "default"}
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(link);
+                setCopied(true);
                 toast.success(t.public.linkCopied);
               } catch {
                 toast.error(t.errors.generic);
               }
             }}
           >
-            <CopyIcon data-icon="inline-start" />
+            {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
             {t.public.copyLink}
           </Button>
         </div>
@@ -75,7 +89,7 @@ export function GuestRsvpForm({
 
   return (
     <form
-      className="flex flex-col gap-4 rounded-xl border p-4"
+      className="flex flex-col gap-4"
       onSubmit={async (e) => {
         e.preventDefault();
         if (!answer) return;
@@ -94,70 +108,58 @@ export function GuestRsvpForm({
         toast.error(t.errors[code] ?? t.errors.generic);
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-1">
+        <p className="font-heading text-lg text-foreground">{t.detail.answerPrompt}</p>
+      </div>
+
+      <AnswerTiles value={answer} onChange={setAnswer} />
+
+      {maxGuests > 0 && answer === "yes" ? <GuestStepper value={guestCount} max={maxGuests} onChange={setGuestCount} /> : null}
+
+      <div className="flex flex-col gap-3 border-t pt-4">
         <Field>
           <FieldLabel htmlFor="guest-name">{t.public.yourName}</FieldLabel>
           <FieldContent>
-            <Input id="guest-name" required minLength={2} maxLength={200} value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="guest-name"
+              required
+              minLength={2}
+              maxLength={200}
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </FieldContent>
         </Field>
         <Field>
-          <FieldLabel htmlFor="guest-email">{t.public.yourEmail}</FieldLabel>
-          <FieldContent>
-            <Input id="guest-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            <FieldDescription>{t.public.emailHint}</FieldDescription>
-          </FieldContent>
-        </Field>
-      </div>
-
-      <Field>
-        <FieldLabel>{t.yourAnswer}</FieldLabel>
-        <FieldContent>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={answer ?? ""}
-            onValueChange={(value: string) => {
-              if (value) setAnswer(value as EventRsvpAnswer);
-            }}
-            aria-label={t.yourAnswer}
-          >
-            {(["yes", "maybe", "no"] as const).map((value) => (
-              <ToggleGroupItem key={value} value={value}>
-                {t.answer[value]}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </FieldContent>
-      </Field>
-
-      {maxGuests > 0 && answer === "yes" ? (
-        <Field>
-          <FieldLabel htmlFor="guest-guests">{t.guests}</FieldLabel>
+          <FieldLabel htmlFor="guest-email" className="flex items-center gap-1.5">
+            {t.public.yourEmail}
+            <FieldHint>{t.public.emailHint}</FieldHint>
+          </FieldLabel>
           <FieldContent>
             <Input
-              id="guest-guests"
-              type="number"
-              min={0}
-              max={maxGuests}
-              className="w-24"
-              value={guestCount}
-              onChange={(e) => setGuestCount(Math.max(0, Math.min(maxGuests, Number(e.target.value) || 0)))}
+              id="guest-email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
-            <FieldDescription>{t.guestsHint(maxGuests)}</FieldDescription>
           </FieldContent>
         </Field>
-      ) : null}
-
-      <div className="flex items-center justify-between gap-3">
-        <a href="/login" className="text-xs text-muted-foreground underline-offset-4 hover:underline">
-          {t.public.signInHint}
-        </a>
-        <Button type="submit" disabled={!answer || respond.isPending}>
-          {respond.isPending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
-          {t.submit}
-        </Button>
       </div>
+
+      <Button type="submit" size="lg" className="w-full" disabled={!answer || respond.isPending}>
+        {respond.isPending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
+        {t.submit}
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        {t.public.signInPrompt}{" "}
+        <a href="/login" className="font-medium text-foreground underline underline-offset-4 hover:text-primary">
+          {t.public.signInLink}
+        </a>{" "}
+        {t.public.signInSuffix}
+      </p>
     </form>
   );
 }

@@ -41,8 +41,8 @@ function Row({
 
 /**
  * Admin-only overview: the description as the reading column, the facts as a
- * side ledger. The portal and public pages keep the shared `EventDetail`;
- * an admin wants the slug, the deadline and the guest allowance at a glance.
+ * side ledger. The portal and public pages have their own (`PortalEventDetail`,
+ * `PublicEventCard`); an admin wants the slug and the public link at a glance.
  */
 export function EventAdminOverview({
   event,

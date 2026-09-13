@@ -31,12 +31,6 @@ export function formatEventWhen(
   return format.formatRange(start, end);
 }
 
-export const eventStatusVariant: Record<EventStatus, "default" | "secondary" | "destructive"> = {
-  draft: "secondary",
-  published: "default",
-  cancelled: "destructive",
-};
-
 /** `Status` badge variant per event status; the list filter's dots derive from it. */
 export const eventStatusDotVariant: Record<EventStatus, StatusDotVariant> = {
   draft: "default",
@@ -76,4 +70,14 @@ export function fromDateTimeLocal(value: string): Date | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Whether a description is long enough to earn its own reading column. A
+ * one-liner beside a tall answer card leaves a hole; below ~600 characters
+ * of text the page stacks instead and puts the cards side by side.
+ */
+export function isLongDescription(html: string | null | undefined): boolean {
+  if (!html) return false;
+  return html.replace(/<[^>]+>/g, "").trim().length >= 600;
 }

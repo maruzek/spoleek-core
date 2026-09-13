@@ -1,7 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
-import { EventDetail } from "@/components/app/events/event-detail";
+import { PublicEventCard } from "@/components/app/events/public-event-card";
 import { TokenEventRsvp } from "@/components/app/events/token-event-rsvp";
 import { PublicShell } from "@/components/public/public-shell";
 import { isRsvpOpen, isTokenValid } from "@/lib/events/rsvp";
@@ -100,24 +100,23 @@ export default async function TokenRsvpPage({ params }: { params: Promise<{ toke
 
   return (
     <PublicShell brand={organization.name}>
-      <div className="mx-auto w-full max-w-3xl rounded-2xl border bg-background p-6 shadow-sm md:p-8">
-        <p className="mb-4 text-sm text-muted-foreground">{t.token.answeringAs(holderName ?? "")}</p>
-        <EventDetail
-          event={holder.event}
-          ownerName={row?.ownerName ?? organization.name}
-          locale={orgFormatLocale(organization.locale)}
-          timeZone={organization.timezone}
-          counts={counts}
-          rsvp={
-            <TokenEventRsvp
-              token={token}
-              open={open}
-              maxGuests={holder.event.maxGuestsPerResponse}
-              current={current ? { answer: current.answer, guestCount: current.guestCount, standing: current.standing } : null}
-            />
-          }
-        />
-      </div>
+      <PublicEventCard
+        event={holder.event}
+        ownerName={row?.ownerName ?? organization.name}
+        locale={orgFormatLocale(organization.locale)}
+        timeZone={organization.timezone}
+        counts={counts}
+        note={t.token.answeringAs(holderName ?? "")}
+        t={t}
+        rsvp={
+          <TokenEventRsvp
+            token={token}
+            open={open}
+            maxGuests={holder.event.maxGuestsPerResponse}
+            current={current ? { answer: current.answer, guestCount: current.guestCount, standing: current.standing } : null}
+          />
+        }
+      />
     </PublicShell>
   );
 }
