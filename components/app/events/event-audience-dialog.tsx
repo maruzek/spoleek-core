@@ -68,7 +68,8 @@ export function EventAudienceDialog({
   onAdd,
 }: {
   open: boolean;
-  eventId: string;
+  /** Absent while the event is still being created. */
+  eventId?: string;
   /** `kind:id` keys already in the draft — hidden from the list. */
   excludeKeys: Set<string>;
   onOpenChange: (open: boolean) => void;
@@ -89,7 +90,7 @@ function EventAudienceDialogBody({
   onOpenChange,
   onAdd,
 }: {
-  eventId: string;
+  eventId?: string;
   excludeKeys: Set<string>;
   onOpenChange: (open: boolean) => void;
   onAdd: (drafts: AudienceDraft[]) => void;

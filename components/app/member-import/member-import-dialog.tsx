@@ -35,7 +35,7 @@ import { StepMapFields } from "./step-map-fields";
 import { StepPreview } from "./step-preview";
 import { StepUpload } from "./step-upload";
 import { StepWorkspaceSync } from "./step-workspace-sync";
-import { WizardFooter } from "./wizard-footer";
+import { WizardFooter } from "@/components/app/wizard/wizard-footer";
 import {
   STEP_LABELS,
   type FieldTarget,

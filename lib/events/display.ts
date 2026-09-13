@@ -58,20 +58,6 @@ export const eventAnswerLabel: Record<EventRsvpAnswer, string> = {
   maybe: "Maybe",
 };
 
-/** `datetime-local` wants `yyyy-MM-ddTHH:mm` in the browser's zone. */
-export function toDateTimeLocal(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-export function fromDateTimeLocal(value: string): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
 /**
  * Whether a description is long enough to earn its own reading column. A
  * one-liner beside a tall answer card leaves a hole; below ~600 characters

@@ -2,6 +2,7 @@
 
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
+import { z } from "zod";
 
 import { canPromote, isTokenValid, seatsTaken } from "@/lib/events/rsvp";
 import {
@@ -36,6 +37,7 @@ import { sendEventInvites } from "@/server/notifications/events";
 import {
   requireCurrentMember,
   requireEventManagementAccess,
+  requireGroupAdminModuleAccess,
   requireEventOwnerAccess,
   requireOrganization,
 } from "@/server/queries/access";
@@ -237,9 +239,12 @@ export const deleteEventsAction = authActionClient
  */
 export const loadEventAudienceOptionsAction = authActionClient
   .metadata({ actionName: "loadEventAudienceOptions" })
-  .inputSchema(eventIdSchema)
+  .inputSchema(z.object({ eventId: z.string().uuid().optional() }))
   .action(async ({ parsedInput }) => {
-    const { context } = await requireEventManagementAccess(parsedInput.eventId);
+    // No event yet while the create wizard is open: any event manager may look.
+    const context = parsedInput.eventId
+      ? (await requireEventManagementAccess(parsedInput.eventId)).context
+      : await requireGroupAdminModuleAccess();
     const orgId = context.organization.id;
     const [picker, members] = await Promise.all([
       listEventsForOwnerPicker(orgId),

@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { dateFnsLocalizer, Views, type EventProps, type ToolbarProps } from "react-big-calendar";
 import { format, getDay, parse, startOfWeek } from "date-fns";
-import { cs, enGB, enUS } from "date-fns/locale";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
 import ShadcnBigCalendar from "@/components/shadcn-big-calendar/shadcn-big-calendar";
 import { Button } from "@/components/ui/button";
+import { dateFnsLocaleFor } from "@/lib/date-fns-locale";
 import { cn } from "@/lib/utils";
 import type { Event as EventRow } from "@/server/db/schema";
 
@@ -28,13 +28,6 @@ type RbcEvent = {
   allDay: boolean;
   tone: CalendarTone;
 };
-
-const DATE_FNS_LOCALES = { cs, "en-GB": enGB, "en-US": enUS } as const;
-
-function localeFor(tag: string) {
-  if (tag in DATE_FNS_LOCALES) return DATE_FNS_LOCALES[tag as keyof typeof DATE_FNS_LOCALES];
-  return tag.startsWith("cs") ? cs : enGB;
-}
 
 const TONE_CLASS: Record<CalendarTone, string> = {
   primary: "event-variant-primary",
@@ -72,7 +65,7 @@ export function EventsMonthCalendar({
   onSelect: (id: string) => void;
   className?: string;
 }) {
-  const dfLocale = useMemo(() => localeFor(locale), [locale]);
+  const dfLocale = useMemo(() => dateFnsLocaleFor(locale), [locale]);
   const localizer = useMemo(
     () =>
       dateFnsLocalizer({

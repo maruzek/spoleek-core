@@ -25,11 +25,12 @@ import { toast } from "sonner";
 import { EventAdminHeader } from "@/components/app/events/event-admin-header";
 import { EventAdminOverview } from "@/components/app/events/event-admin-overview";
 import { EventAdminStats } from "@/components/app/events/event-admin-stats";
+import type { AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { EventAudiencePanel, type AudienceRow } from "@/components/app/events/event-audience-panel";
 import { EventEmailsPanel } from "@/components/app/events/event-emails-panel";
-import type { OwnerOptions } from "@/components/app/events/event-form";
+import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
-import { EventSheet } from "@/components/app/events/event-sheet";
+import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
 import { useFormatters } from "@/components/locale-provider";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -58,7 +59,6 @@ import {
   cancelEventAction,
   deleteEventAction,
   publishEventAction,
-  updateEventAction,
 } from "@/server/actions/events";
 import type { Event } from "@/server/db/schema";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
@@ -151,13 +151,6 @@ export function EventAdminDetail({
     },
   });
 
-  const updateAction = useAction(updateEventAction, {
-    onSuccess() {
-      toast.success("Event updated.");
-      setEditOpen(false);
-      router.refresh();
-    },
-  });
   const publishAction = useAction(publishEventAction, refresh("Event published."));
   const cancelAction = useAction(cancelEventAction, refresh("Event cancelled."));
   const deleteAction = useAction(deleteEventAction, {
@@ -167,7 +160,13 @@ export function EventAdminDetail({
     },
   });
 
-  const formValues: Partial<EventInput> = { ...event, descriptionHtml: event.descriptionHtml };
+  const formValues: EventInput = { ...event, descriptionHtml: event.descriptionHtml };
+  const memberRules = audience.flatMap((r): AudienceDraft[] => {
+    if (r.kind === "group" && r.groupId) return [{ kind: "group", groupId: r.groupId, label: r.label }];
+    if (r.kind === "category" && r.categoryId) return [{ kind: "category", categoryId: r.categoryId, label: r.label }];
+    if (r.kind === "member" && r.memberId) return [{ kind: "member", memberId: r.memberId, label: r.label }];
+    return [];
+  });
 
   const externalCount = audience.filter((r) => r.kind === "external").length;
   const audienceRuleCount = audience.length;
@@ -382,17 +381,13 @@ export function EventAdminDetail({
         </TabsContent>
       </Tabs>
 
-      <EventSheet
+      <EventWizardDialog
         open={editOpen}
         event={formValues}
+        audience={memberRules}
         owners={owners}
-        isPending={updateAction.isPending}
-        validationErrors={updateAction.result.validationErrors}
         onOpenChange={setEditOpen}
-        onSubmit={async (value) => {
-          const result = await updateAction.executeAsync({ ...value, id: event.id });
-          if (result?.serverError) toast.error(result.serverError);
-        }}
+        onSaved={() => router.refresh()}
       />
 
       <AlertDialog open={confirm != null} onOpenChange={(open) => !open && setConfirm(null)}>

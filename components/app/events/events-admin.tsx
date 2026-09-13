@@ -19,9 +19,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { EventSheet } from "@/components/app/events/event-sheet";
+import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
 import { EventsMonthCalendar, type CalendarTone } from "@/components/app/events/events-month-calendar";
-import type { OwnerOptions } from "@/components/app/events/event-form";
+import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
 import { StatusFilter } from "@/components/app/status-filter";
 import { useFormatters } from "@/components/locale-provider";
 import {
@@ -56,10 +56,9 @@ import {
   eventVisibilityLabel,
   formatEventWhen,
 } from "@/lib/events/display";
-import type { EventInput } from "@/lib/events/schemas";
 import { matchesSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
-import { createEventAction, deleteEventsAction } from "@/server/actions/events";
+import { deleteEventsAction } from "@/server/actions/events";
 import type { EventStatus } from "@/server/db/schema";
 import type { EventListItem } from "@/server/queries/events";
 
@@ -133,16 +132,6 @@ export function EventsAdmin({
     },
     onError({ error }) {
       toast.error(error.serverError ?? "Could not delete the events.");
-    },
-  });
-
-  const createAction = useAction(createEventAction, {
-    onSuccess({ data }) {
-      if (data?.success) {
-        toast.success("Event created as a draft.");
-        setSheetOpen(false);
-        router.push(`/admin/events/${data.eventId}`);
-      }
     },
   });
 
@@ -546,16 +535,11 @@ export function EventsAdmin({
         </div>
       ) : null}
 
-      <EventSheet
+      <EventWizardDialog
         open={sheetOpen}
         owners={owners}
-        isPending={createAction.isPending}
-        validationErrors={createAction.result.validationErrors}
         onOpenChange={setSheetOpen}
-        onSubmit={async (value: EventInput) => {
-          const result = await createAction.executeAsync(value);
-          if (result?.serverError) toast.error(result.serverError);
-        }}
+        onSaved={(eventId) => router.push(`/admin/events/${eventId}`)}
       />
     </div>
   );
