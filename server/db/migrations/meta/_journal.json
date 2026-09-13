@@ -428,6 +428,13 @@
       "when": 1788965150179,
       "tag": "0060_next_jack_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1789290957106,
+      "tag": "0061_lucky_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

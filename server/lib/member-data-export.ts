@@ -5,6 +5,10 @@ import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
   emailActivities,
+  eventAudience,
+  eventResponses,
+  eventRsvpTokens,
+  events,
   groupCategories,
   groupMemberships,
   groups,
@@ -100,6 +104,9 @@ export async function buildMemberDataExport({
     pendingWorkspaceOperations,
     reportAppearances,
     reportSubmissions,
+    eventInvitations,
+    eventAnswers,
+    eventRsvpLinks,
   ] = await Promise.all([
     member.userId
       ? db
@@ -270,6 +277,47 @@ export async function buildMemberDataExport({
         eq(membershipReports.id, membershipReportGroups.reportId),
       )
       .where(eq(membershipReportGroups.submittedByMemberId, memberId)),
+
+    // Being named individually in an event's audience. Group and category
+    // rules are not listed here: they are about the group, not the member.
+    db
+      .select({
+        eventTitle: events.title,
+        startsAt: events.startsAt,
+        invitedAt: eventAudience.createdAt,
+      })
+      .from(eventAudience)
+      .innerJoin(events, eq(events.id, eventAudience.eventId))
+      .where(eq(eventAudience.memberId, memberId))
+      .orderBy(desc(events.startsAt)),
+
+    db
+      .select({
+        eventTitle: events.title,
+        startsAt: events.startsAt,
+        answer: eventResponses.answer,
+        guestCount: eventResponses.guestCount,
+        standing: eventResponses.standing,
+        respondedAt: eventResponses.respondedAt,
+        updatedAt: eventResponses.updatedAt,
+      })
+      .from(eventResponses)
+      .innerJoin(events, eq(events.id, eventResponses.eventId))
+      .where(eq(eventResponses.memberId, memberId))
+      .orderBy(desc(events.startsAt)),
+
+    // Described, never disclosed: the hash is a credential, so only the fact
+    // that a link exists and when it was last used goes in.
+    db
+      .select({
+        eventTitle: events.title,
+        issuedAt: eventRsvpTokens.issuedAt,
+        lastUsedAt: eventRsvpTokens.lastUsedAt,
+      })
+      .from(eventRsvpTokens)
+      .innerJoin(events, eq(events.id, eventRsvpTokens.eventId))
+      .where(eq(eventRsvpTokens.memberId, memberId))
+      .orderBy(desc(eventRsvpTokens.issuedAt)),
   ]);
 
   return {
@@ -291,7 +339,7 @@ export async function buildMemberDataExport({
         "Rectification (Art. 16), erasure (Art. 17), restriction (Art. 18), and objection (Art. 21). Erasure is limited where the organization is legally required to keep a member list. Contact the organization at the address above.",
       notes: [
         "Email records are metadata only — the organization does not store message bodies.",
-        "Security material held about you (activation tokens, password hashes, sign-in tokens) is deliberately excluded: disclosing it would let anyone holding this file access your account.",
+        "Security material held about you (activation tokens, event RSVP links, password hashes, sign-in tokens) is deliberately excluded: disclosing it would let anyone holding this file access your account.",
       ],
     },
 
@@ -333,6 +381,9 @@ export async function buildMemberDataExport({
     pendingWorkspaceOperations,
     membershipReports: reportAppearances,
     membershipReportSubmissions: reportSubmissions,
+    eventInvitations,
+    eventResponses: eventAnswers,
+    eventRsvpLinks,
   };
 }
 
