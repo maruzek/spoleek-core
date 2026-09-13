@@ -1,19 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import { ExternalLinkIcon, PencilIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  BanIcon,
+  CircleAlertIcon,
+  ExternalLinkIcon,
+  EyeIcon,
+  FileTextIcon,
+  InfoIcon,
+  MailIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
+  SendIcon,
+  Trash2Icon,
+  UsersIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { EventAdminHeader } from "@/components/app/events/event-admin-header";
+import { EventAdminOverview } from "@/components/app/events/event-admin-overview";
+import { EventAdminStats } from "@/components/app/events/event-admin-stats";
 import { EventAudiencePanel, type AudienceOptions, type AudienceRow } from "@/components/app/events/event-audience-panel";
-import { EventDetail } from "@/components/app/events/event-detail";
 import { EventEmailsPanel } from "@/components/app/events/event-emails-panel";
 import type { OwnerOptions } from "@/components/app/events/event-form";
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
 import { EventSheet } from "@/components/app/events/event-sheet";
 import { useFormatters } from "@/components/locale-provider";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,8 +43,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getEventNextStep, type EventNextStep } from "@/lib/events/next-step";
 import type { EventInput, EventRecipientFilter } from "@/lib/events/schemas";
+import { cn } from "@/lib/utils";
 import {
   cancelEventAction,
   deleteEventAction,
@@ -36,6 +63,33 @@ import {
 import type { Event } from "@/server/db/schema";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
 import type { EventRecipient, EventResponseRow } from "@/server/queries/events";
+
+const VALID_TABS = ["overview", "audience", "responses", "emails"] as const;
+type TabValue = (typeof VALID_TABS)[number];
+
+function toValidTab(tab: string | undefined): TabValue {
+  return VALID_TABS.includes(tab as TabValue) ? (tab as TabValue) : "overview";
+}
+
+/** Same wrapper on every tab so empty states line up; `wide` for the table. */
+function TabBody({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  return <div className={cn("pt-6", wide ? "w-full" : "max-w-4xl")}>{children}</div>;
+}
+
+function TabCount({ value }: { value: number }) {
+  if (value === 0) return null;
+  return <span className="text-xs font-normal tabular-nums text-muted-foreground">{value}</span>;
+}
+
+const BANNER_TONE: Record<EventNextStep["tone"], { alert: string; title: string; icon: string }> = {
+  info: { alert: "border-primary/30 bg-primary/5", title: "text-foreground", icon: "text-primary" },
+  warning: {
+    alert: "border-amber-500/30 bg-amber-500/5",
+    title: "text-amber-700 dark:text-amber-500",
+    icon: "text-amber-600 dark:text-amber-500",
+  },
+  danger: { alert: "border-destructive/30 bg-destructive/5", title: "text-destructive", icon: "text-destructive" },
+};
 
 export function EventAdminDetail({
   event,
@@ -50,6 +104,7 @@ export function EventAdminDetail({
   recipients,
   sendLog,
   publicUrl,
+  defaultTab,
 }: {
   event: Event;
   ownerName: string | null;
@@ -63,11 +118,29 @@ export function EventAdminDetail({
   recipients: Record<EventRecipientFilter, EventRecipient[]>;
   sendLog: EmailActivityRow[];
   publicUrl: string | null;
+  defaultTab?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { locale } = useFormatters();
+
+  const [activeTab, setActiveTab] = useState<TabValue>(toValidTab(defaultTab));
   const [editOpen, setEditOpen] = useState(false);
   const [confirm, setConfirm] = useState<"publish" | "cancel" | "delete" | null>(null);
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      const tab = toValidTab(value);
+      setActiveTab(tab);
+      const params = new URLSearchParams(searchParams.toString());
+      if (tab === "overview") params.delete("tab");
+      else params.set("tab", tab);
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
 
   const refresh = (message: string) => ({
     onSuccess() {
@@ -96,80 +169,219 @@ export function EventAdminDetail({
     },
   });
 
-  const formValues: Partial<EventInput> = {
-    ...event,
-    descriptionHtml: event.descriptionHtml,
+  const formValues: Partial<EventInput> = { ...event, descriptionHtml: event.descriptionHtml };
+
+  const externalCount = audience.filter((r) => r.kind === "external").length;
+  const audienceRuleCount = audience.length;
+  const notResponded = recipients.not_responded.length;
+
+  const nextStep = getEventNextStep({
+    event,
+    counts,
+    eligibleCount,
+    notRespondedCount: notResponded,
+    sentCount: sendLog.length,
+  });
+
+  const runBannerAction = (target: NonNullable<EventNextStep["action"]>["target"]) => {
+    if (target === "publish") setConfirm("publish");
+    else handleTabChange(target);
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {publicUrl ? (
-          <Button asChild variant="ghost" size="sm">
-            <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLinkIcon data-icon="inline-start" />
-              Public page
-            </a>
-          </Button>
-        ) : null}
-        <Button asChild variant="ghost" size="sm">
-          <Link href={`/portal/events/${event.slug}`}>Portal view</Link>
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-          <PencilIcon data-icon="inline-start" />
-          Edit
-        </Button>
-        {event.status === "draft" ? (
-          <Button size="sm" onClick={() => setConfirm("publish")}>
-            Publish
-          </Button>
-        ) : null}
-        {event.status === "published" ? (
-          <Button size="sm" variant="outline" onClick={() => setConfirm("cancel")}>
-            Cancel event
-          </Button>
-        ) : null}
-        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirm("delete")}>
-          Delete
+      <div>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/admin/events">
+            <ArrowLeftIcon data-icon="inline-start" />
+            All events
+          </Link>
         </Button>
       </div>
 
-      <Tabs defaultValue="overview">
+      <EventAdminHeader
+        event={event}
+        ownerName={ownerName}
+        locale={locale}
+        timeZone={timeZone}
+        actions={
+          <>
+            {event.status === "draft" ? (
+              <Button onClick={() => setConfirm("publish")}>
+                <SendIcon data-icon="inline-start" />
+                Publish
+              </Button>
+            ) : event.status === "published" ? (
+              <Button onClick={() => handleTabChange("emails")}>
+                <MailIcon data-icon="inline-start" />
+                Send invites
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <PencilIcon data-icon="inline-start" />
+              Edit
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" aria-label="More actions">
+                  <MoreHorizontalIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href={`/portal/events/${event.slug}`}>
+                    <EyeIcon />
+                    View as member
+                  </Link>
+                </DropdownMenuItem>
+                {publicUrl ? (
+                  <DropdownMenuItem asChild>
+                    <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLinkIcon />
+                      Open public page
+                    </a>
+                  </DropdownMenuItem>
+                ) : null}
+                {event.status === "published" ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setConfirm("cancel")}>
+                      <BanIcon />
+                      Cancel event
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onClick={() => setConfirm("delete")}>
+                  <Trash2Icon />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+      />
+
+      {nextStep ? (
+        <Alert className={cn("max-w-4xl px-4 py-3.5", BANNER_TONE[nextStep.tone].alert)}>
+          {nextStep.tone === "info" ? (
+            <InfoIcon className={BANNER_TONE[nextStep.tone].icon} />
+          ) : (
+            <CircleAlertIcon className={BANNER_TONE[nextStep.tone].icon} />
+          )}
+          <AlertTitle className={cn("text-base", BANNER_TONE[nextStep.tone].title)}>{nextStep.title}</AlertTitle>
+          <AlertDescription>{nextStep.description}</AlertDescription>
+          {nextStep.action ? (
+            <AlertAction className="top-3.5 right-3.5">
+              <Button variant="outline" size="sm" onClick={() => runBannerAction(nextStep.action!.target)}>
+                {nextStep.action.label}
+              </Button>
+            </AlertAction>
+          ) : null}
+        </Alert>
+      ) : null}
+
+      <EventAdminStats
+        stats={[
+          {
+            key: "going",
+            label: "Going",
+            value: counts.confirmedSeats,
+            of: event.capacity,
+            hint: event.capacity ? "confirmed places, guests included" : "confirmed, guests included",
+            onClick: () => handleTabChange("responses"),
+          },
+          {
+            key: "reserve",
+            label: "Reserve",
+            value: counts.reserveCount,
+            hint: counts.reserveCount > 0 ? "waiting for a place" : "nobody waiting",
+            tone: "warning",
+            onClick: () => handleTabChange("responses"),
+          },
+          {
+            key: "audience",
+            label: "Invited",
+            value: eligibleCount + externalCount,
+            hint:
+              event.visibility === "targeted"
+                ? externalCount > 0
+                  ? `${eligibleCount} members + ${externalCount} external`
+                  : "members matching the rules"
+                : event.visibility === "public"
+                  ? "eligible members · page is public"
+                  : "every active member",
+            onClick: () => handleTabChange("audience"),
+          },
+          {
+            key: "pending",
+            label: "No answer",
+            value: notResponded,
+            hint: sendLog.length > 0 ? `${sendLog.length} invite email${sendLog.length === 1 ? "" : "s"} sent` : "no invites sent yet",
+            onClick: () => handleTabChange("emails"),
+          },
+        ]}
+      />
+
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="audience">Audience</TabsTrigger>
-          <TabsTrigger value="responses">Responses</TabsTrigger>
-          <TabsTrigger value="emails">Emails</TabsTrigger>
+          <TabsTrigger value="overview">
+            <FileTextIcon data-icon="inline-start" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="audience">
+            <UsersRoundIcon data-icon="inline-start" />
+            Audience
+            <TabCount value={audienceRuleCount} />
+          </TabsTrigger>
+          <TabsTrigger value="responses">
+            <UsersIcon data-icon="inline-start" />
+            Responses
+            <TabCount value={responses.length} />
+          </TabsTrigger>
+          <TabsTrigger value="emails">
+            <MailIcon data-icon="inline-start" />
+            Emails
+            <TabCount value={sendLog.length} />
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="max-w-3xl pt-6">
-            <EventDetail event={event} ownerName={ownerName} locale={locale} timeZone={timeZone} showStatus counts={counts} />
-          </div>
+          <TabBody wide>
+            <EventAdminOverview
+              event={event}
+              locale={locale}
+              timeZone={timeZone}
+              counts={counts}
+              publicUrl={publicUrl}
+              onEdit={() => setEditOpen(true)}
+            />
+          </TabBody>
         </TabsContent>
 
         <TabsContent value="audience">
-          <div className="max-w-3xl pt-6">
+          <TabBody>
             <EventAudiencePanel
               eventId={event.id}
               visibility={event.visibility}
               rules={audience}
               options={audienceOptions}
               eligibleCount={eligibleCount}
+              onEditVisibility={() => setEditOpen(true)}
             />
-          </div>
+          </TabBody>
         </TabsContent>
 
         <TabsContent value="responses">
-          <div className="pt-6">
+          <TabBody wide>
             <EventResponsesPanel eventId={event.id} capacity={event.capacity} responses={responses} counts={counts} />
-          </div>
+          </TabBody>
         </TabsContent>
 
         <TabsContent value="emails">
-          <div className="max-w-3xl pt-6">
+          <TabBody>
             <EventEmailsPanel eventId={event.id} eventStatus={event.status} recipients={recipients} sendLog={sendLog} />
-          </div>
+          </TabBody>
         </TabsContent>
       </Tabs>
 
@@ -203,6 +415,7 @@ export function EventAdminDetail({
           <AlertDialogFooter>
             <AlertDialogCancel>Keep as is</AlertDialogCancel>
             <AlertDialogAction
+              className={confirm === "delete" ? "bg-destructive text-white hover:bg-destructive/90" : undefined}
               onClick={() => {
                 if (confirm === "publish") publishAction.execute({ eventId: event.id });
                 if (confirm === "cancel") cancelAction.execute({ eventId: event.id });

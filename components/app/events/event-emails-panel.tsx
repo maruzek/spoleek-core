@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import { CopyIcon, Loader2Icon, SendIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, Loader2Icon, SendIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { useFormatters } from "@/components/locale-provider";
@@ -25,17 +25,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { EventRecipientFilter } from "@/lib/events/schemas";
+import { cn } from "@/lib/utils";
 import { sendEventInviteEmailsAction } from "@/server/actions/events";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
 import type { EventRecipient } from "@/server/queries/events";
 
-const FILTERS: { value: EventRecipientFilter; label: string; hint: string }[] = [
+const FILTERS: { value: EventRecipientFilter; label: string; hint: string; primary?: boolean }[] = [
+  { value: "not_responded", label: "Not yet answered", hint: "Eligible members without a response.", primary: true },
   { value: "all_eligible", label: "Everyone invited", hint: "Every eligible member." },
-  { value: "not_responded", label: "Not yet answered", hint: "Eligible members without a response." },
-  { value: "not_activated", label: "No account yet", hint: "Eligible members who cannot sign in — they get a link instead." },
+  { value: "not_activated", label: "No account yet", hint: "Cannot sign in — they get a link instead." },
+  { value: "externals", label: "External invitees", hint: "People added by email.", primary: true },
   { value: "accepted", label: "Going", hint: "Confirmed yes answers, members and guests." },
   { value: "reserve", label: "Reserve list", hint: "Yes answers waiting for a place." },
-  { value: "externals", label: "External invitees", hint: "People added by email." },
 ];
 
 /**
@@ -59,6 +60,7 @@ export function EventEmailsPanel({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [filter, setFilter] = useState<EventRecipientFilter>("not_responded");
   const [dryRunCount, setDryRunCount] = useState<number | null>(null);
+  const [copied, setCopied] = useState<EventRecipientFilter | null>(null);
 
   const sendAction = useAction(sendEventInviteEmailsAction, {
     onSuccess({ data }) {
@@ -85,7 +87,8 @@ export function EventEmailsPanel({
     }
     try {
       await navigator.clipboard.writeText(list);
-      toast.success(`${recipients[value].length} address${recipients[value].length === 1 ? "" : "es"} copied.`);
+      setCopied(value);
+      setTimeout(() => setCopied((c) => (c === value ? null : c)), 1500);
     } catch {
       toast.error("Clipboard is not available in this browser.");
     }
@@ -98,64 +101,112 @@ export function EventEmailsPanel({
     sendAction.execute({ eventId, filter: value, dryRun: true });
   };
 
+  const canSend = eventStatus === "published";
+
   return (
-    <div className="flex flex-col gap-6">
-      {eventStatus !== "published" ? (
-        <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-          The event is {eventStatus}. You can copy lists, but invite links only work once it is published.
+    <div className="flex flex-col gap-8">
+      {!canSend ? (
+        <p className="rounded-xl border border-dashed px-4 py-3 text-sm text-muted-foreground">
+          The event is <span className="font-medium text-foreground">{eventStatus}</span>. You can copy lists, but invite
+          links only work once it is published.
         </p>
       ) : null}
 
-      <ul className="divide-y rounded-xl border">
-        {FILTERS.map((f) => (
-          <li key={f.value} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {f.label} <span className="text-muted-foreground">· {recipients[f.value].length}</span>
-              </p>
-              <p className="text-xs text-muted-foreground">{f.hint}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => copy(f.value)}>
-                <CopyIcon data-icon="inline-start" />
-                Copy emails
-              </Button>
-              <Button
-                size="sm"
-                disabled={eventStatus !== "published" || recipients[f.value].length === 0}
-                onClick={() => openDialog(f.value)}
-              >
-                <SendIcon data-icon="inline-start" />
-                Send invite
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <section className="rounded-xl border">
+        <header className="border-b px-4 py-3">
+          <h3 className="text-sm font-semibold">Recipients</h3>
+          <p className="text-xs text-muted-foreground">
+            Each invite carries a personal RSVP link. Lists are deduplicated by address.
+          </p>
+        </header>
+        <ul className="divide-y">
+          {FILTERS.map((f) => {
+            const count = recipients[f.value].length;
+            const empty = count === 0;
+            return (
+              <li key={f.value} className="flex flex-wrap items-center gap-4 px-4 py-3">
+                <span
+                  className={cn(
+                    "w-10 shrink-0 font-heading text-2xl leading-none tabular-nums tracking-tight",
+                    empty ? "text-muted-foreground/50" : "text-foreground",
+                  )}
+                >
+                  {count}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={cn("text-sm font-medium", empty && "text-muted-foreground")}>{f.label}</p>
+                  <p className="text-xs text-muted-foreground">{f.hint}</p>
+                </div>
+                <div className="flex gap-1.5">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={empty}
+                    onClick={() => copy(f.value)}
+                    aria-label={`Copy ${f.label} emails`}
+                  >
+                    {copied === f.value ? (
+                      <CheckIcon data-icon="inline-start" className="text-primary" />
+                    ) : (
+                      <CopyIcon data-icon="inline-start" />
+                    )}
+                    {copied === f.value ? "Copied" : "Copy"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={f.primary && !empty ? "default" : "outline"}
+                    disabled={!canSend || empty}
+                    onClick={() => openDialog(f.value)}
+                  >
+                    <SendIcon data-icon="inline-start" />
+                    Send
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
-      <div className="flex flex-col gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Send log</p>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Send log</h3>
+          {sendLog.length > 0 ? (
+            <span className="text-xs tabular-nums text-muted-foreground">{sendLog.length} sent</span>
+          ) : null}
+        </div>
         {sendLog.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No invites sent for this event yet.</p>
+          <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+            No invites sent for this event yet.
+          </p>
         ) : (
           <ul className="divide-y rounded-xl border">
             {sendLog.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm">
-                <span className="min-w-0 truncate">
-                  {row.memberName ?? row.toName ?? row.toEmail}
-                  <span className="ml-2 text-xs text-muted-foreground">{row.toEmail}</span>
+              <li key={row.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+                <span
+                  className={cn(
+                    "size-2 shrink-0 rounded-full",
+                    row.hasProblem ? "bg-destructive" : "bg-primary",
+                  )}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-medium">{row.memberName ?? row.toName ?? row.toEmail}</span>
+                  {row.memberName || row.toName ? (
+                    <span className="ml-2 text-xs text-muted-foreground">{row.toEmail}</span>
+                  ) : null}
                 </span>
-                <span className="flex items-center gap-2">
-                  <Badge variant={row.hasProblem ? "destructive" : "outline"} className="capitalize">
-                    {row.currentStatus}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">{formatDateTime(row.lastStatusAt)}</span>
+                <Badge variant={row.hasProblem ? "destructive" : "outline"} className="capitalize">
+                  {row.currentStatus}
+                </Badge>
+                <span className="w-36 text-right text-xs tabular-nums text-muted-foreground">
+                  {formatDateTime(row.lastStatusAt)}
                 </span>
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </section>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -185,16 +236,18 @@ export function EventEmailsPanel({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-sm">
+            <div className="flex items-baseline gap-2 rounded-lg bg-muted/50 px-4 py-3">
               {dryRunCount == null ? (
-                <span className="text-muted-foreground">Counting recipients…</span>
+                <span className="text-sm text-muted-foreground">Counting recipients…</span>
               ) : (
                 <>
-                  This will email <span className="font-semibold">{dryRunCount}</span> recipient
-                  {dryRunCount === 1 ? "" : "s"}.
+                  <span className="font-heading text-3xl leading-none tabular-nums">{dryRunCount}</span>
+                  <span className="text-sm text-muted-foreground">
+                    recipient{dryRunCount === 1 ? "" : "s"} will be emailed
+                  </span>
                 </>
               )}
-            </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)} disabled={sendAction.isPending}>
@@ -206,7 +259,9 @@ export function EventEmailsPanel({
             >
               {sendAction.isPending && dryRunCount != null ? (
                 <Loader2Icon className="animate-spin" data-icon="inline-start" />
-              ) : null}
+              ) : (
+                <SendIcon data-icon="inline-start" />
+              )}
               Send to {dryRunCount ?? 0}
             </Button>
           </DialogFooter>

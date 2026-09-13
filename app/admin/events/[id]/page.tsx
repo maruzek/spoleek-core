@@ -1,4 +1,3 @@
-import { AppPage } from "@/components/app/app-page";
 import { EventAdminDetail } from "@/components/app/events/event-admin-detail";
 import type { AudienceRow } from "@/components/app/events/event-audience-panel";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
@@ -18,8 +17,15 @@ import {
 import { listAssignableTenantMembers } from "@/server/queries/groups";
 import type { EventRecipient } from "@/server/queries/events";
 
-export default async function AdminEventPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminEventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : {};
   const { context, event } = await requireEventManagementAccess(id);
   const orgId = context.organization.id;
 
@@ -61,8 +67,10 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
             : (rule.externalEmail ?? ""),
   }));
 
+  // Not wrapped in `AppPage`: the event header is the page title, same as
+  // the member record.
   return (
-    <AppPage eyebrow="Events" title={event.title} description="Audience, responses and invitations for this event.">
+    <div className="flex flex-1 flex-col pb-8">
       <EventAdminDetail
         event={event}
         ownerName={row?.ownerName ?? null}
@@ -86,7 +94,8 @@ export default async function AdminEventPage({ params }: { params: Promise<{ id:
         recipients={recipients}
         sendLog={sendLog}
         publicUrl={event.visibility === "public" ? buildAbsoluteAppUrl(`/events/${event.slug}`) : null}
+        defaultTab={typeof query.tab === "string" ? query.tab : undefined}
       />
-    </AppPage>
+    </div>
   );
 }
