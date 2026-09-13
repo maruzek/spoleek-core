@@ -14,6 +14,7 @@ import {
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { JoinPageSettingsForm } from "@/components/app/join-page-settings-form";
+import { EventsSettingsCard, type EventSettingsState } from "@/components/app/events-settings-card";
 import {
   EmailNotificationSettingsCard,
   type EmailNotificationSettingsState,
@@ -55,6 +56,7 @@ type AdminSettingsTabsProps = {
   feeManagingCategoryName: string | null;
   localizationState: LocalizationSettingsState;
   emailNotificationState: EmailNotificationSettingsState;
+  eventSettingsState: EventSettingsState;
   workspaceState: WorkspaceSettingsState;
   workspaceLinks: GroupWorkspaceLinkRow[];
   defaultTab?: string;
@@ -65,6 +67,7 @@ const VALID_TABS = [
   "legal",
   "membership",
   "notifications",
+  "events",
   "groups",
   "workspace",
   "localization",
@@ -84,6 +87,7 @@ export function AdminSettingsTabs({
   feeManagingCategoryName,
   localizationState,
   emailNotificationState,
+  eventSettingsState,
   workspaceState,
   workspaceLinks,
   defaultTab,
@@ -115,6 +119,9 @@ export function AdminSettingsTabs({
         <TabsTrigger value="notifications">
           <BellIcon data-icon="inline-start" />
           Notifications
+        </TabsTrigger>
+        <TabsTrigger value="events">
+          Events
         </TabsTrigger>
         <TabsTrigger value="groups">
           <Link2Icon data-icon="inline-start" />
@@ -155,6 +162,12 @@ export function AdminSettingsTabs({
       <TabsContent value="notifications">
         <div className="max-w-2xl pt-6">
           <EmailNotificationSettingsCard state={emailNotificationState} />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="events">
+        <div className="max-w-2xl pt-6">
+          <EventsSettingsCard state={eventSettingsState} />
         </div>
       </TabsContent>
 

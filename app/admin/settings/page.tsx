@@ -155,6 +155,10 @@ export default async function AdminSettingsPage({
         feeManagingCategoryName={feeManagingCategory?.name ?? null}
         localizationState={localizationState}
         emailNotificationState={emailNotificationState}
+        eventSettingsState={{
+          orgEventCreators: organization.orgEventCreators,
+          eventGuestRetentionDays: organization.eventGuestRetentionDays,
+        }}
         workspaceState={workspaceState}
         workspaceLinks={workspaceLinks}
         defaultTab={tab}

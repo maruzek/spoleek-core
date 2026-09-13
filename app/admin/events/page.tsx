@@ -1,20 +1,26 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
-import { requireAdminAccess } from "@/server/queries/access";
+import { EventsAdmin } from "@/components/app/events/events-admin";
+import { listEventsForManager, listEventsForOwnerPicker } from "@/server/queries/events";
 
 export default async function AdminEventsPage() {
-  await requireAdminAccess();
+  const { context, owners, items } = await listEventsForManager();
+  const picker = await listEventsForOwnerPicker(context.organization.id);
+
+  const ownerOptions = {
+    organization: owners.organization,
+    categories: picker.categories.filter((c) => owners.categoryIds.includes(c.id)),
+    groups: picker.groups.filter((g) => owners.groupIds.includes(g.id)),
+  };
+  const canCreate =
+    ownerOptions.organization || ownerOptions.categories.length > 0 || ownerOptions.groups.length > 0;
 
   return (
     <AppPage
       eyebrow="Administration"
-      title="Event operations will live in the same admin frame."
-      description="Staff-facing event setup, visibility rules, invitations, and linked forms will use the same sidebar shell as member management."
+      title="Events"
+      description="Camps, meetings and open days with a built-in RSVP. Nothing is emailed unless you send it."
     >
-      <AppPlaceholder
-        title="Admin events space ready"
-        description="The route and shell are in place so the events engine can plug into the admin experience without another navigation rewrite."
-      />
+      <EventsAdmin items={items} owners={ownerOptions} canCreate={canCreate} />
     </AppPage>
   );
 }

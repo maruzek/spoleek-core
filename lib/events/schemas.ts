@@ -165,3 +165,10 @@ export const removeResponseSchema = z.object({
   eventId: z.string().uuid(),
   responseId: z.string().uuid(),
 });
+
+export const eventSettingsSchema = z.object({
+  orgEventCreators: z.enum(["org_admins", "category_admins", "any_admin"]),
+  eventGuestRetentionDays: z.number().int().min(1).max(3650),
+});
+
+export type EventSettingsInput = z.infer<typeof eventSettingsSchema>;
