@@ -14,7 +14,6 @@ import {
   listEventResponses,
   listEventsForOwnerPicker,
 } from "@/server/queries/events";
-import { listAssignableTenantMembers } from "@/server/queries/groups";
 import type { EventRecipient } from "@/server/queries/events";
 
 export default async function AdminEventPage({
@@ -29,7 +28,7 @@ export default async function AdminEventPage({
   const { context, event } = await requireEventManagementAccess(id);
   const orgId = context.organization.id;
 
-  const [row, owners, picker, audience, eligibleIds, responses, counts, sendLog, members] =
+  const [row, owners, picker, audience, eligibleIds, responses, counts, sendLog] =
     await Promise.all([
       getEventById(orgId, event.id),
       listManageableOwners(context),
@@ -39,7 +38,6 @@ export default async function AdminEventPage({
       listEventResponses(orgId, event.id),
       getEventCounts(orgId, event.id),
       listEventEmailActivities(orgId, event.id),
-      listAssignableTenantMembers(orgId),
     ]);
 
   const recipientEntries = await Promise.all(
@@ -81,13 +79,6 @@ export default async function AdminEventPage({
           groups: picker.groups.filter((g) => owners.groupIds.includes(g.id)),
         }}
         audience={audienceRows}
-        audienceOptions={{
-          groups: picker.groups,
-          categories: picker.categories,
-          members: members
-            .filter((m) => m.status === "active")
-            .map((m) => ({ id: m.id, firstName: m.firstName, lastName: m.lastName, email: m.email })),
-        }}
         eligibleCount={eligibleIds.size}
         responses={responses}
         counts={counts}

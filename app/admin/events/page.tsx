@@ -3,6 +3,7 @@ import { EventsAdmin } from "@/components/app/events/events-admin";
 import { listEventsForManager, listEventsForOwnerPicker } from "@/server/queries/events";
 
 export default async function AdminEventsPage() {
+  const now = new Date().getTime();
   const { context, owners, items } = await listEventsForManager();
   const picker = await listEventsForOwnerPicker(context.organization.id);
 
@@ -20,7 +21,13 @@ export default async function AdminEventsPage() {
       title="Events"
       description="Camps, meetings and open days with a built-in RSVP. Nothing is emailed unless you send it."
     >
-      <EventsAdmin items={items} owners={ownerOptions} canCreate={canCreate} />
+      <EventsAdmin
+        items={items}
+        owners={ownerOptions}
+        canCreate={canCreate}
+        timeZone={context.organization.timezone}
+        now={now}
+      />
     </AppPage>
   );
 }

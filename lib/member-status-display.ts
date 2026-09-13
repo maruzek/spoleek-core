@@ -1,6 +1,7 @@
 import type { MembershipStatus } from "@/server/db/schema";
 
 import { MEMBER_STATUS_DISPLAY_ORDER } from "@/lib/member-ordering";
+import { STATUS_DOT_CLASSES, type StatusDotVariant } from "@/lib/status-dot";
 
 /**
  * How a membership status looks, in one place.
@@ -15,12 +16,7 @@ import { MEMBER_STATUS_DISPLAY_ORDER } from "@/lib/member-ordering";
  * `variant` is the `Status` component's; `dotClassName` is derived from the
  * same variant's indicator colour so the two cannot drift.
  */
-export type MemberStatusVariant =
-  | "default"
-  | "success"
-  | "error"
-  | "warning"
-  | "info";
+export type MemberStatusVariant = StatusDotVariant;
 
 const STATUS_VARIANTS: Record<MembershipStatus, MemberStatusVariant> = {
   active: "success",
@@ -31,14 +27,6 @@ const STATUS_VARIANTS: Record<MembershipStatus, MemberStatusVariant> = {
   deleted: "default",
 };
 
-const DOT_CLASSES: Record<MemberStatusVariant, string> = {
-  default: "bg-muted-foreground",
-  success: "bg-green-600 dark:bg-green-400",
-  error: "bg-destructive",
-  warning: "bg-orange-600 dark:bg-orange-400",
-  info: "bg-blue-600 dark:bg-blue-400",
-};
-
 export function getMemberStatusVariant(
   status: MembershipStatus,
 ): MemberStatusVariant {
@@ -46,7 +34,7 @@ export function getMemberStatusVariant(
 }
 
 export function getMemberStatusDotClassName(status: MembershipStatus) {
-  return DOT_CLASSES[getMemberStatusVariant(status)];
+  return STATUS_DOT_CLASSES[getMemberStatusVariant(status)];
 }
 
 export function getMemberStatusLabel(status: MembershipStatus) {

@@ -1,3 +1,4 @@
+import { STATUS_DOT_CLASSES, type StatusDotVariant } from "@/lib/status-dot";
 import type { EventRsvpAnswer, EventStatus, EventVisibility } from "@/server/db/schema";
 
 /**
@@ -35,6 +36,21 @@ export const eventStatusVariant: Record<EventStatus, "default" | "secondary" | "
   published: "default",
   cancelled: "destructive",
 };
+
+/** `Status` badge variant per event status; the list filter's dots derive from it. */
+export const eventStatusDotVariant: Record<EventStatus, StatusDotVariant> = {
+  draft: "default",
+  published: "success",
+  cancelled: "error",
+};
+
+export const EVENT_STATUS_ORDER: EventStatus[] = ["published", "draft", "cancelled"];
+
+export const EVENT_STATUS_OPTIONS = EVENT_STATUS_ORDER.map((status) => ({
+  value: status,
+  label: status.charAt(0).toUpperCase() + status.slice(1),
+  dotClassName: STATUS_DOT_CLASSES[eventStatusDotVariant[status]],
+}));
 
 export const eventVisibilityLabel: Record<EventVisibility, string> = {
   public: "Public",

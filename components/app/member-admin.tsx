@@ -233,7 +233,15 @@ export function MemberAdmin({
   manageableGroupCategories: MemberManagementGroupCategory[];
   workspace: WorkspaceModuleProp;
   workspaceProvisionFields?: EnabledProvisionField[];
-  groupsById?: Map<string, { id: string; name: string; categoryId: string; workspaceOrgUnitPath: string | null }>;
+  groupsById?: Map<
+    string,
+    {
+      id: string;
+      name: string;
+      categoryId: string;
+      workspaceOrgUnitPath: string | null;
+    }
+  >;
   orgUnitCategoryId?: string | null;
 }) {
   const { formatDateTime } = useFormatters();
@@ -687,8 +695,13 @@ export function MemberAdmin({
                   {overdueFees.overdueCount} unpaid
                 </Badge>
                 <span className="text-xs text-muted-foreground">
-                  {formatFeeAmount(overdueFees.overdueAmountCents, overdueFees.currency)}
-                  {overdueFees.daysOverdue > 0 ? ` · ${overdueFees.daysOverdue} days late` : null}
+                  {formatFeeAmount(
+                    overdueFees.overdueAmountCents,
+                    overdueFees.currency,
+                  )}
+                  {overdueFees.daysOverdue > 0
+                    ? ` · ${overdueFees.daysOverdue} days late`
+                    : null}
                 </span>
               </div>
             );
@@ -819,9 +832,7 @@ export function MemberAdmin({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() =>
-                    restoreAction.execute({ memberId: member.id })
-                  }
+                  onClick={() => restoreAction.execute({ memberId: member.id })}
                   disabled={restoreAction.isPending}
                 >
                   <UndoIcon data-icon="inline-start" />
@@ -967,7 +978,10 @@ export function MemberAdmin({
           >
             <BanknoteIcon data-icon="inline-start" />
             Unpaid fees
-            <Badge variant={overdueOnly ? "secondary" : "destructive"} className="ml-2">
+            <Badge
+              variant={overdueOnly ? "secondary" : "destructive"}
+              className="ml-2"
+            >
               {membersWithOverdueFees}
             </Badge>
           </Button>
@@ -1156,8 +1170,8 @@ export function MemberAdmin({
                 ? `${unconnectedWarningMember.firstName} ${unconnectedWarningMember.lastName}`.trim()
                 : "this member"}{" "}
               will activate their membership without creating a Google account.
-              You can connect Workspace first and approve afterwards, or
-              approve now and provision the account later.
+              You can connect Workspace first and approve afterwards, or approve
+              now and provision the account later.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

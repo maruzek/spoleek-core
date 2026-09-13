@@ -3,30 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import {
-  FolderIcon,
-  GlobeIcon,
-  Loader2Icon,
-  MailIcon,
-  PlusIcon,
-  UserRoundIcon,
-  UsersIcon,
-  XIcon,
-} from "lucide-react";
+import { FolderIcon, GlobeIcon, Loader2Icon, MailIcon, PlusIcon, UserRoundIcon, UsersIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { EventAudienceDialog, type AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import type { AudienceRuleInput } from "@/lib/events/schemas";
 import { cn } from "@/lib/utils";
 import {
@@ -46,13 +28,7 @@ export type AudienceRow = {
   label: string;
 };
 
-export type AudienceOptions = {
-  groups: { id: string; name: string; categoryId: string }[];
-  categories: { id: string; name: string }[];
-  members: { id: string; firstName: string; lastName: string; email: string | null }[];
-};
-
-type Draft = AudienceRuleInput & { label: string };
+type Draft = AudienceDraft;
 
 function toDraft(row: AudienceRow): Draft | null {
   if (row.kind === "group" && row.groupId) return { kind: "group", groupId: row.groupId, label: row.label };
@@ -160,14 +136,12 @@ export function EventAudiencePanel({
   eventId,
   visibility,
   rules,
-  options,
   eligibleCount,
   onEditVisibility,
 }: {
   eventId: string;
   visibility: "public" | "org" | "targeted";
   rules: AudienceRow[];
-  options: AudienceOptions;
   eligibleCount: number;
   onEditVisibility?: () => void;
 }) {
@@ -209,11 +183,13 @@ export function EventAudiencePanel({
 
   const chosen = useMemo(() => new Set(drafts.map(draftKey)), [drafts]);
 
-  const add = (draft: Draft) => {
-    const key = draftKey(draft);
-    setDrafts((current) => (current.some((d) => draftKey(d) === key) ? current : [...current, draft]));
-    setDirty(true);
-    setPickerOpen(false);
+  const addMany = (incoming: Draft[]) => {
+    setDrafts((current) => {
+      const have = new Set(current.map(draftKey));
+      const fresh = incoming.filter((d) => !have.has(draftKey(d)));
+      return fresh.length > 0 ? [...current, ...fresh] : current;
+    });
+    if (incoming.length > 0) setDirty(true);
   };
   const remove = (key: string) => {
     setDrafts((current) => current.filter((d) => draftKey(d) !== key));
@@ -224,7 +200,6 @@ export function EventAudiencePanel({
     setDirty(false);
   };
 
-  const categoryNames = useMemo(() => new Map(options.categories.map((c) => [c.id, c.name])), [options.categories]);
   const byKind = (kind: MemberKind) => drafts.filter((d) => d.kind === kind);
 
   return (
@@ -252,69 +227,10 @@ export function EventAudiencePanel({
             </p>
           </div>
 
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="outline">
-                <PlusIcon data-icon="inline-start" />
-                Add rule
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-0">
-              <Command>
-                <CommandInput placeholder="Category, group or member…" />
-                <CommandList>
-                  <CommandEmpty>Nothing matches.</CommandEmpty>
-                  <CommandGroup heading="Categories">
-                    {options.categories
-                      .filter((c) => !chosen.has(`category:${c.id}`))
-                      .map((c) => (
-                        <CommandItem
-                          key={c.id}
-                          value={`category ${c.name}`}
-                          onSelect={() => add({ kind: "category", categoryId: c.id, label: c.name })}
-                        >
-                          <FolderIcon />
-                          {c.name}
-                          <span className="ml-auto text-xs text-muted-foreground">all groups</span>
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
-                  <CommandGroup heading="Groups">
-                    {options.groups
-                      .filter((g) => !chosen.has(`group:${g.id}`))
-                      .map((g) => (
-                        <CommandItem
-                          key={g.id}
-                          value={`group ${g.name} ${categoryNames.get(g.categoryId) ?? ""}`}
-                          onSelect={() => add({ kind: "group", groupId: g.id, label: g.name })}
-                        >
-                          <UsersIcon />
-                          {g.name}
-                          <span className="ml-auto truncate text-xs text-muted-foreground">
-                            {categoryNames.get(g.categoryId)}
-                          </span>
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
-                  <CommandGroup heading="Members">
-                    {options.members
-                      .filter((m) => !chosen.has(`member:${m.id}`))
-                      .map((m) => (
-                        <CommandItem
-                          key={m.id}
-                          value={`member ${getMemberDisplayName(m)} ${m.email ?? ""}`}
-                          onSelect={() => add({ kind: "member", memberId: m.id, label: getMemberDisplayName(m) })}
-                        >
-                          <UserRoundIcon />
-                          {getMemberDisplayName(m)}
-                          <span className="ml-auto truncate text-xs text-muted-foreground">{m.email}</span>
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+          <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>
+            <PlusIcon data-icon="inline-start" />
+            Add rule
+          </Button>
         </header>
 
         <div className="flex flex-col gap-4 p-4">
@@ -368,6 +284,14 @@ export function EventAudiencePanel({
           </footer>
         ) : null}
       </section>
+
+      <EventAudienceDialog
+        open={pickerOpen}
+        eventId={eventId}
+        excludeKeys={chosen}
+        onOpenChange={setPickerOpen}
+        onAdd={addMany}
+      />
 
       <section className="rounded-xl border">
         <header className="border-b px-4 py-3">

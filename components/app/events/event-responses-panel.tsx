@@ -10,23 +10,41 @@ import { useFormatters } from "@/components/locale-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { eventAnswerLabel } from "@/lib/events/display";
+import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { removeResponseAction, setResponseStandingAction } from "@/server/actions/events";
 import type { EventResponseRow } from "@/server/queries/events";
 
-type Row = EventResponseRow & { name: string; email: string; search: string };
-type AnswerFilter = "all" | "yes" | "reserve" | "maybe" | "no";
+type Row = EventResponseRow & { name: string; email: string; search: string; outcome: ResponseOutcome };
+
+/** Answer × standing collapsed into the one status the table filters on. */
+type ResponseOutcome = "going" | "reserve" | "maybe" | "no";
 
 const columnHelper = createColumnHelper<Row>();
 
-const ANSWER_VARIANT: Record<EventResponseRow["answer"], "success" | "warning" | "default"> = {
+/** Badge variant per answer; the filter dots below use the same variants. */
+const ANSWER_VARIANT: Record<EventResponseRow["answer"], "success" | "info" | "default"> = {
   yes: "success",
-  maybe: "warning",
+  maybe: "info",
   no: "default",
 };
+
+const OUTCOME_OPTIONS: StatusFilterOption<ResponseOutcome>[] = [
+  { value: "going", label: "Going", dotClassName: STATUS_DOT_CLASSES.success },
+  { value: "reserve", label: "Reserve", dotClassName: STATUS_DOT_CLASSES.warning },
+  { value: "maybe", label: "Maybe", dotClassName: STATUS_DOT_CLASSES.info },
+  { value: "no", label: "Not going", dotClassName: STATUS_DOT_CLASSES.default },
+];
+
+const ALL_OUTCOMES = OUTCOME_OPTIONS.map((o) => o.value);
+
+function outcomeOf(r: EventResponseRow): ResponseOutcome {
+  if (r.answer === "yes") return r.standing === "reserve" ? "reserve" : "going";
+  return r.answer;
+}
 
 export function EventResponsesPanel({
   eventId,
@@ -41,7 +59,7 @@ export function EventResponsesPanel({
 }) {
   const router = useRouter();
   const { formatDateTime } = useFormatters();
-  const [filter, setFilter] = useState<AnswerFilter>("all");
+  const [outcomes, setOutcomes] = useState<ResponseOutcome[]>(ALL_OUTCOMES);
 
   const standingAction = useAction(setResponseStandingAction, {
     onSuccess() {
@@ -62,30 +80,16 @@ export function EventResponsesPanel({
     },
   });
 
-  const tally = useMemo(() => {
-    const t = { yes: 0, reserve: 0, maybe: 0, no: 0 };
-    for (const r of responses) {
-      if (r.answer === "yes" && r.standing === "reserve") t.reserve += 1;
-      else t[r.answer] += 1;
-    }
-    return t;
-  }, [responses]);
-
   const rows = useMemo<Row[]>(
     () =>
       responses
-        .filter((r) => {
-          if (filter === "all") return true;
-          if (filter === "reserve") return r.answer === "yes" && r.standing === "reserve";
-          if (filter === "yes") return r.answer === "yes" && r.standing === "confirmed";
-          return r.answer === filter;
-        })
+        .filter((r) => outcomes.includes(outcomeOf(r)))
         .map((r) => {
           const name = r.member ? getMemberDisplayName(r.member) : (r.guestName ?? "Anonymised guest");
           const email = r.member ? (r.member.email ?? "") : (r.guestEmail ?? "");
-          return { ...r, name, email, search: `${name} ${email}` };
+          return { ...r, name, email, search: `${name} ${email}`, outcome: outcomeOf(r) };
         }),
-    [responses, filter],
+    [responses, outcomes],
   );
 
   const columns = useMemo(
@@ -171,13 +175,7 @@ export function EventResponsesPanel({
     [eventId, formatDateTime, removeAction, standingAction],
   );
 
-  const segments: { value: AnswerFilter; label: string; count: number }[] = [
-    { value: "all", label: "All", count: responses.length },
-    { value: "yes", label: "Going", count: tally.yes },
-    { value: "reserve", label: "Reserve", count: tally.reserve },
-    { value: "maybe", label: "Maybe", count: tally.maybe },
-    { value: "no", label: "Not going", count: tally.no },
-  ];
+  const allShown = outcomes.length === ALL_OUTCOMES.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -187,26 +185,10 @@ export function EventResponsesPanel({
         columns={columns as any}
         searchKey="person"
         searchPlaceholder="Search responses..."
-        emptyStateTitle={filter === "all" ? "No responses yet" : "Nobody here"}
-        emptyStateDescription={
-          filter === "all" ? "Answers appear here as people respond." : "No response matches this filter."
-        }
+        emptyStateTitle={allShown ? "No responses yet" : "Nobody here"}
+        emptyStateDescription={allShown ? "Answers appear here as people respond." : "No response matches this filter."}
         toolbarActions={() => (
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            spacing={0}
-            value={filter}
-            onValueChange={(v) => v && setFilter(v as AnswerFilter)}
-            aria-label="Filter by answer"
-          >
-            {segments.map((s) => (
-              <ToggleGroupItem key={s.value} value={s.value} className="gap-1.5 px-3">
-                {s.label}
-                <span className="text-xs tabular-nums text-muted-foreground">{s.count}</span>
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <StatusFilter options={OUTCOME_OPTIONS} value={outcomes} onChange={setOutcomes} ariaLabel="Filter by answer" />
         )}
       />
       {counts.reserveCount > 0 ? (

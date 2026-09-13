@@ -154,6 +154,7 @@ export const sendEventInviteEmailsSchema = z.object({
 });
 
 export const eventIdSchema = z.object({ eventId: z.string().uuid() });
+export const eventIdsSchema = z.object({ eventIds: z.array(z.string().uuid()).min(1).max(200) });
 
 export const setResponseStandingSchema = z.object({
   eventId: z.string().uuid(),

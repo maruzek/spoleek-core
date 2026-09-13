@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { EventAdminHeader } from "@/components/app/events/event-admin-header";
 import { EventAdminOverview } from "@/components/app/events/event-admin-overview";
 import { EventAdminStats } from "@/components/app/events/event-admin-stats";
-import { EventAudiencePanel, type AudienceOptions, type AudienceRow } from "@/components/app/events/event-audience-panel";
+import { EventAudiencePanel, type AudienceRow } from "@/components/app/events/event-audience-panel";
 import { EventEmailsPanel } from "@/components/app/events/event-emails-panel";
 import type { OwnerOptions } from "@/components/app/events/event-form";
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
@@ -97,7 +97,6 @@ export function EventAdminDetail({
   timeZone,
   owners,
   audience,
-  audienceOptions,
   eligibleCount,
   responses,
   counts,
@@ -111,7 +110,6 @@ export function EventAdminDetail({
   timeZone: string;
   owners: OwnerOptions;
   audience: AudienceRow[];
-  audienceOptions: AudienceOptions;
   eligibleCount: number;
   responses: EventResponseRow[];
   counts: { confirmedSeats: number; reserveCount: number };
@@ -365,7 +363,6 @@ export function EventAdminDetail({
               eventId={event.id}
               visibility={event.visibility}
               rules={audience}
-              options={audienceOptions}
               eligibleCount={eligibleCount}
               onEditVisibility={() => setEditOpen(true)}
             />

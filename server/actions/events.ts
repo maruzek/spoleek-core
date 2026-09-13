@@ -1,12 +1,13 @@
 "use server";
 
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 
 import { canPromote, isTokenValid, seatsTaken } from "@/lib/events/rsvp";
 import {
   addExternalInviteesSchema,
   eventIdSchema,
+  eventIdsSchema,
   eventInputSchema,
   removeExternalInviteeSchema,
   removeResponseSchema,
@@ -42,7 +43,9 @@ import {
   getEventBySlug,
   getEventRecipients,
   isMemberEligibleForEvent,
+  listEventsForOwnerPicker,
 } from "@/server/queries/events";
+import { listAssignableTenantMembers } from "@/server/queries/groups";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -207,6 +210,48 @@ export const deleteEventAction = authActionClient
     const { event } = await requireEventManagementAccess(parsedInput.eventId);
     await db.update(events).set({ deletedAt: new Date() }).where(eq(events.id, event.id));
     return { success: true as const };
+  });
+
+/**
+ * Bulk soft-delete from the list. Access is checked per event, so a selection
+ * that mixes in one event the caller cannot manage fails as a whole rather
+ * than silently skipping it.
+ */
+export const deleteEventsAction = authActionClient
+  .metadata({ actionName: "deleteEvents" })
+  .inputSchema(eventIdsSchema)
+  .action(async ({ parsedInput }) => {
+    const ids: string[] = [];
+    for (const eventId of parsedInput.eventIds) {
+      const { event } = await requireEventManagementAccess(eventId);
+      ids.push(event.id);
+    }
+    await db.update(events).set({ deletedAt: new Date() }).where(inArray(events.id, ids));
+    return { success: true as const, deleted: ids.length };
+  });
+
+/**
+ * Everything the audience dialog can pick from. Fetched on open rather than
+ * with the page: the member list is the biggest payload on the route and most
+ * visits never touch it.
+ */
+export const loadEventAudienceOptionsAction = authActionClient
+  .metadata({ actionName: "loadEventAudienceOptions" })
+  .inputSchema(eventIdSchema)
+  .action(async ({ parsedInput }) => {
+    const { context } = await requireEventManagementAccess(parsedInput.eventId);
+    const orgId = context.organization.id;
+    const [picker, members] = await Promise.all([
+      listEventsForOwnerPicker(orgId),
+      listAssignableTenantMembers(orgId),
+    ]);
+    return {
+      categories: picker.categories,
+      groups: picker.groups,
+      members: members
+        .filter((m) => m.status === "active")
+        .map((m) => ({ id: m.id, firstName: m.firstName, lastName: m.lastName, email: m.email })),
+    };
   });
 
 /** Replaces the full rule list. External rules are managed by `addExternalInviteesAction`. */
