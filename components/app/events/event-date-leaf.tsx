@@ -23,7 +23,7 @@ export function EventDateLeaf({
   size?: "sm" | "lg";
   className?: string;
 }) {
-  const box = size === "lg" ? "size-[4.5rem] rounded-xl" : "h-11 w-10 rounded-lg";
+  const box = size === "lg" ? "size-[4.5rem] rounded-xl" : "h-12 w-10 rounded-lg";
 
   if (!startsAt) {
     return (
@@ -42,7 +42,8 @@ export function EventDateLeaf({
   }
 
   const date = new Date(startsAt);
-  const day = new Intl.DateTimeFormat(locale, { day: "numeric", timeZone }).format(date);
+  // Czech-style "5." loses its period: the leaf is a glyph, not a sentence.
+  const day = new Intl.DateTimeFormat(locale, { day: "numeric", timeZone }).format(date).replace(".", "");
   const month = new Intl.DateTimeFormat(locale, { month: "short", timeZone }).format(date).replace(".", "");
   const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone }).format(date).replace(".", "");
 
@@ -59,28 +60,29 @@ export function EventDateLeaf({
       <span
         className={cn(
           "w-full bg-primary text-center font-semibold uppercase text-primary-foreground",
-          size === "lg" ? "py-0.5 text-[10px] tracking-widest" : "text-[8px] leading-[11px] tracking-wider",
+          size === "lg" ? "h-4 text-[10px] leading-4 tracking-widest" : "h-[11px] text-[8px] leading-[11px] tracking-wider",
         )}
       >
         {weekday}
       </span>
-      <span className={cn("flex flex-1 flex-col items-center justify-center", size === "lg" ? "gap-0.5 pb-1" : "pb-px")}>
-        <span
-          className={cn(
-            "font-heading leading-none tracking-tight text-foreground",
-            size === "lg" ? "text-[1.75rem]" : "text-base",
-          )}
-        >
-          {day}
-        </span>
-        <span
-          className={cn(
-            "font-semibold uppercase leading-none tracking-wider text-muted-foreground",
-            size === "lg" ? "text-[10px]" : "text-[8px]",
-          )}
-        >
-          {month}
-        </span>
+      {/* Fixed line boxes rather than flex centring: the serif has a tall
+          ascender box, and letting it size the row pushed the month out of
+          the leaf. Band + day + month must add up to the box height. */}
+      <span
+        className={cn(
+          "block w-full text-center font-heading tracking-tight text-foreground",
+          size === "lg" ? "h-9 text-[1.75rem] leading-9" : "h-6 text-base leading-6",
+        )}
+      >
+        {day}
+      </span>
+      <span
+        className={cn(
+          "block w-full text-center font-semibold uppercase tracking-wider text-muted-foreground",
+          size === "lg" ? "h-4 text-[10px] leading-4" : "h-3 text-[8px] leading-3",
+        )}
+      >
+        {month}
       </span>
     </div>
   );

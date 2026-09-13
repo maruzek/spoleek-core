@@ -78,7 +78,7 @@ export function EventAdminOverview({
   };
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <section className="min-w-0">
         {event.descriptionHtml ? (
           <div

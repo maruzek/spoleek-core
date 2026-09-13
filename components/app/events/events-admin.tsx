@@ -52,6 +52,7 @@ import {
   formatEventWhen,
 } from "@/lib/events/display";
 import type { EventInput } from "@/lib/events/schemas";
+import { matchesSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { createEventAction, deleteEventsAction } from "@/server/actions/events";
 import type { EventStatus } from "@/server/db/schema";
@@ -188,6 +189,7 @@ export function EventsAdmin({
         meta: { label: "Event" },
         header: ({ column }) => <SortableHeader column={column}>Event</SortableHeader>,
         sortingFn: (a, b) => a.original.event.title.localeCompare(b.original.event.title),
+        filterFn: (row, _id, value: string) => matchesSearch(row.original.search, value ?? ""),
         cell: ({ row }) => {
           const { event, ownerName } = row.original;
           const when = formatEventWhen(event, locale, timeZone);

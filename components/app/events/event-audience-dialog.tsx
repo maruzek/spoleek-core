@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { AudienceRuleInput } from "@/lib/events/schemas";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
+import { matchesSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
 import { loadEventAudienceOptionsAction } from "@/server/actions/events";
 
@@ -141,11 +142,10 @@ function EventAudienceDialogBody({
   }, [load.result.data, excludeKeys]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     const chosen = new Set(selected);
     return options
       .filter((o) => o.kind === kind)
-      .filter((o) => !q || `${o.label} ${o.detail ?? ""}`.toLowerCase().includes(q))
+      .filter((o) => matchesSearch(`${o.label} ${o.detail ?? ""}`, query))
       .sort((a, b) => {
         const sa = chosen.has(a.key) ? 0 : 1;
         const sb = chosen.has(b.key) ? 0 : 1;
