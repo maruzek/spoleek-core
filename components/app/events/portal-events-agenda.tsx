@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon, CalendarIcon, MapPinIcon, SearchIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRightIcon, CalendarDaysIcon, CalendarIcon, ListIcon, MapPinIcon, SearchIcon } from "lucide-react";
 
 import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
+import { EventsMonthCalendar, type CalendarTone } from "@/components/app/events/events-month-calendar";
 import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { useDictionary } from "@/components/locale-provider";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +22,15 @@ import type { ViewerEventItem } from "@/server/queries/events";
 
 type Outcome = "pending" | "going" | "reserve" | "maybe" | "no";
 type Window = "upcoming" | "past";
+type View = "list" | "calendar";
+
+const OUTCOME_TONE: Record<Outcome, CalendarTone> = {
+  pending: "pending",
+  going: "primary",
+  reserve: "warning",
+  maybe: "info",
+  no: "muted",
+};
 
 const OUTCOME_VARIANT: Record<Outcome, "success" | "warning" | "info" | "default"> = {
   pending: "default",
@@ -55,6 +66,8 @@ export function PortalEventsAgenda({
 }) {
   const t = useDictionary().events;
   const l = t.list;
+  const router = useRouter();
+  const [view, setView] = useState<View>("list");
   const [window, setWindow] = useState<Window>("upcoming");
   const [query, setQuery] = useState("");
 
@@ -102,30 +115,65 @@ export function PortalEventsAgenda({
     return out;
   }, [source, outcomes, query, window, monthLabel, l.dateTba]);
 
+  const calendarItems = useMemo(
+    () =>
+      [...upcoming, ...past]
+        .filter((i) => outcomes.includes(outcomeOf(i)))
+        .filter((i) =>
+          matchesSearch(
+            [i.event.title, i.event.locationName ?? "", i.event.locationAddress ?? "", i.ownerName ?? ""].join(" "),
+            query,
+          ),
+        )
+        .map((i) => ({
+          id: i.event.slug,
+          event: i.event,
+          tone: i.event.status === "cancelled" ? ("cancelled" as const) : OUTCOME_TONE[outcomeOf(i)],
+        })),
+    [upcoming, past, outcomes, query],
+  );
+
   const filtered = query.trim().length > 0 || outcomes.length !== outcomeOptions.length;
   const emptyTitle = filtered ? l.noMatch : window === "upcoming" ? l.nothingUpcoming : l.nothingPast;
   const emptyBody = filtered ? l.noMatchBody : window === "upcoming" ? l.nothingUpcomingBody : l.nothingPastBody;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-6">
+    <div className={cn("flex flex-col gap-6", view === "list" ? "max-w-4xl" : "max-w-6xl")}>
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup
           type="single"
           variant="outline"
           spacing={0}
-          value={window}
-          onValueChange={(v) => v && setWindow(v as Window)}
-          aria-label={l.upcoming + " / " + l.past}
+          value={view}
+          onValueChange={(v) => v && setView(v as View)}
+          aria-label={l.viewList + " / " + l.viewCalendar}
         >
-          <ToggleGroupItem value="upcoming" className="gap-1.5 px-3">
-            {l.upcoming}
-            <span className="text-xs tabular-nums text-muted-foreground">{upcoming.length}</span>
+          <ToggleGroupItem value="list" aria-label={l.viewList}>
+            <ListIcon className="size-4" aria-hidden />
           </ToggleGroupItem>
-          <ToggleGroupItem value="past" className="gap-1.5 px-3">
-            {l.past}
-            <span className="text-xs tabular-nums text-muted-foreground">{past.length}</span>
+          <ToggleGroupItem value="calendar" aria-label={l.viewCalendar}>
+            <CalendarDaysIcon className="size-4" aria-hidden />
           </ToggleGroupItem>
         </ToggleGroup>
+        {view === "list" ? (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            spacing={0}
+            value={window}
+            onValueChange={(v) => v && setWindow(v as Window)}
+            aria-label={l.upcoming + " / " + l.past}
+          >
+            <ToggleGroupItem value="upcoming" className="gap-1.5 px-3">
+              {l.upcoming}
+              <span className="text-xs tabular-nums text-muted-foreground">{upcoming.length}</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="past" className="gap-1.5 px-3">
+              {l.past}
+              <span className="text-xs tabular-nums text-muted-foreground">{past.length}</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
+        ) : null}
         <StatusFilter options={outcomeOptions} value={outcomes} onChange={setOutcomes} label={l.filterLabel} ariaLabel={l.filterLabel} />
         <InputGroup className="w-full sm:ml-auto sm:w-64">
           <InputGroupAddon align="inline-start">
@@ -141,7 +189,7 @@ export function PortalEventsAgenda({
         </InputGroup>
       </div>
 
-      {window === "upcoming" && pendingCount > 0 && !filtered ? (
+      {pendingCount > 0 && !filtered && (view === "calendar" || window === "upcoming") ? (
         <p className="text-sm text-muted-foreground">
           <span className="font-medium text-amber-700 dark:text-amber-500">{l.waiting(pendingCount)}</span>
           {" · "}
@@ -149,7 +197,14 @@ export function PortalEventsAgenda({
         </p>
       ) : null}
 
-      {groups.length === 0 ? (
+      {view === "calendar" ? (
+        <EventsMonthCalendar
+          items={calendarItems}
+          locale={locale}
+          labels={{ today: l.today, previousMonth: l.previousMonth, nextMonth: l.nextMonth, showMore: l.showMore }}
+          onSelect={(slug) => router.push(`/portal/events/${slug}`)}
+        />
+      ) : groups.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed px-6 py-12 text-center">
           <div className="flex size-12 items-center justify-center rounded-full border bg-muted">
             <CalendarIcon className="size-5 text-muted-foreground" aria-hidden />

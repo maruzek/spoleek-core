@@ -8,15 +8,19 @@ import { useAction } from "next-safe-action/hooks";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  CalendarDaysIcon,
   CalendarPlusIcon,
   ClockIcon,
+  ListIcon,
   MapPinIcon,
   PlusIcon,
+  SearchIcon,
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { EventSheet } from "@/components/app/events/event-sheet";
+import { EventsMonthCalendar, type CalendarTone } from "@/components/app/events/events-month-calendar";
 import type { OwnerOptions } from "@/components/app/events/event-form";
 import { StatusFilter } from "@/components/app/status-filter";
 import { useFormatters } from "@/components/locale-provider";
@@ -43,6 +47,7 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -66,7 +71,14 @@ type Row = EventListItem & {
 };
 
 type TimeWindow = "upcoming" | "past";
+type View = "list" | "calendar";
 type OwnerOption = { value: string; label: string };
+
+const STATUS_TONE: Record<EventStatus, CalendarTone> = {
+  draft: "pending",
+  published: "primary",
+  cancelled: "cancelled",
+};
 
 const columnHelper = createColumnHelper<Row>();
 const ALL_STATUSES = EVENT_STATUS_OPTIONS.map((o) => o.value);
@@ -106,7 +118,9 @@ export function EventsAdmin({
   const router = useRouter();
   const { locale } = useFormatters();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [view, setView] = useState<View>("list");
   const [window, setWindow] = useState<TimeWindow>("upcoming");
+  const [calendarQuery, setCalendarQuery] = useState("");
   const [statuses, setStatuses] = useState<EventStatus[]>(ALL_STATUSES);
   const [owner, setOwner] = useState<OwnerOption | null>(null);
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
@@ -323,7 +337,78 @@ export function EventsAdmin({
     [owners],
   );
 
+  const ownerKeyOf = (item: EventListItem) =>
+    item.event.ownerType === "organization"
+      ? "organization"
+      : item.event.ownerType === "category"
+        ? `category:${item.event.ownerCategoryId}`
+        : `group:${item.event.ownerGroupId}`;
+
+  // Both windows: the month grid is its own way of moving through time.
+  const calendarItems = useMemo(
+    () =>
+      items
+        .filter((item) => statuses.includes(item.event.status))
+        .filter((item) => owner == null || ownerKeyOf(item) === owner.value)
+        .filter((item) =>
+          matchesSearch([item.event.title, item.event.slug, item.ownerName ?? ""].join(" "), calendarQuery),
+        )
+        .map((item) => ({ id: item.event.id, event: item.event, tone: STATUS_TONE[item.event.status] })),
+    [items, statuses, owner, calendarQuery],
+  );
+
   const filtered = statuses.length !== ALL_STATUSES.length || owner != null;
+
+  const viewToggle = (
+    <ToggleGroup
+      type="single"
+      variant="outline"
+      spacing={0}
+      value={view}
+      onValueChange={(v) => v && setView(v as View)}
+      aria-label="List or calendar"
+    >
+      <ToggleGroupItem value="list" aria-label="List">
+        <ListIcon className="size-4" aria-hidden />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="calendar" aria-label="Calendar">
+        <CalendarDaysIcon className="size-4" aria-hidden />
+      </ToggleGroupItem>
+    </ToggleGroup>
+  );
+
+  const filterControls = (
+    <>
+      <StatusFilter options={EVENT_STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
+      {ownerOptions.length > 1 ? (
+        <Combobox
+          items={ownerOptions}
+          value={owner}
+          onValueChange={(next: OwnerOption | null) => setOwner(next)}
+          itemToStringLabel={(item: OwnerOption) => item.label}
+        >
+          <ComboboxInput className="w-48" placeholder="All owners" aria-label="Filter by owner" showClear={owner != null} />
+          <ComboboxContent>
+            <ComboboxEmpty>No owner matches.</ComboboxEmpty>
+            <ComboboxList>
+              {(item: OwnerOption) => (
+                <ComboboxItem key={item.value} value={item}>
+                  {item.label}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
+      ) : null}
+    </>
+  );
+
+  const newEventButton = canCreate ? (
+    <Button onClick={() => setSheetOpen(true)}>
+      <PlusIcon data-icon="inline-start" />
+      New event
+    </Button>
+  ) : null;
   const emptyTitle = filtered
     ? "Nothing matches these filters"
     : window === "upcoming"
@@ -339,6 +424,33 @@ export function EventsAdmin({
 
   return (
     <div className="flex flex-col gap-6">
+      {view === "calendar" ? (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {viewToggle}
+            {filterControls}
+            <InputGroup className="w-full sm:ml-auto sm:w-64">
+              <InputGroupAddon align="inline-start">
+                <SearchIcon aria-hidden />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={calendarQuery}
+                onChange={(e) => setCalendarQuery(e.target.value)}
+                placeholder="Search events..."
+                aria-label="Search events"
+                autoComplete="off"
+              />
+            </InputGroup>
+            {newEventButton}
+          </div>
+          <EventsMonthCalendar
+            items={calendarItems}
+            locale={locale}
+            labels={{ today: "Today", previousMonth: "Previous month", nextMonth: "Next month", showMore: (n) => `+${n} more` }}
+            onSelect={(id) => router.push(`/admin/events/${id}`)}
+          />
+        </div>
+      ) : (
       <DataTable
         data={rows}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -355,6 +467,7 @@ export function EventsAdmin({
           const selected = table.getFilteredSelectedRowModel().rows;
           return (
             <div className="flex flex-wrap items-center gap-2">
+              {viewToggle}
               <ToggleGroup
                 type="single"
                 variant="outline"
@@ -372,33 +485,8 @@ export function EventsAdmin({
                   <span className="text-xs tabular-nums text-muted-foreground">{tally.past}</span>
                 </ToggleGroupItem>
               </ToggleGroup>
-              <StatusFilter options={EVENT_STATUS_OPTIONS} value={statuses} onChange={setStatuses} />
-              {ownerOptions.length > 1 ? (
-                <Combobox
-                  items={ownerOptions}
-                  value={owner}
-                  onValueChange={(next: OwnerOption | null) => setOwner(next)}
-                  itemToStringLabel={(item: OwnerOption) => item.label}
-                >
-                  <ComboboxInput className="w-48" placeholder="All owners" aria-label="Filter by owner" showClear={owner != null} />
-                  <ComboboxContent>
-                    <ComboboxEmpty>No owner matches.</ComboboxEmpty>
-                    <ComboboxList>
-                      {(item: OwnerOption) => (
-                        <ComboboxItem key={item.value} value={item}>
-                          {item.label}
-                        </ComboboxItem>
-                      )}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
-              ) : null}
-              {canCreate ? (
-                <Button onClick={() => setSheetOpen(true)}>
-                  <PlusIcon data-icon="inline-start" />
-                  New event
-                </Button>
-              ) : null}
+              {filterControls}
+              {newEventButton}
               {selected.length > 0 ? (
                 <Button
                   type="button"
@@ -413,6 +501,7 @@ export function EventsAdmin({
           );
         }}
       />
+      )}
 
       <AlertDialog open={deleteIds != null} onOpenChange={(open) => !open && setDeleteIds(null)}>
         <AlertDialogContent>
