@@ -226,6 +226,22 @@ const en = {
       notYou: (organizationName: string) =>
         `If you did not apply to ${organizationName}, you can ignore this email. Nothing further happens without an administrator approving the application.`,
     },
+    eventInvite: {
+      subject: (organizationName: string, eventTitle: string) =>
+        `${organizationName}: you are invited to ${eventTitle}`,
+      heading: (eventTitle: string) => `You are invited: ${eventTitle}`,
+      greeting: (name: string) => `Hello ${name},`,
+      body: (organizationName: string) =>
+        `${organizationName} would like to know whether you are coming. Use the button below to answer — no sign-in needed.`,
+      whenTitle: "When",
+      whereTitle: "Where",
+      deadline: (date: string) => `Please answer by ${date}.`,
+      rsvp: "Answer the invitation",
+      communication: "Join the event chat",
+      fallbackIntro: "If the button does not open, paste this URL into your browser:",
+      keepThis: "This link is personal to you. Anyone who has it can answer in your name, so do not forward it.",
+    },
+
     policyPublished: {
       subject: (organizationName: string, documentTitle: string) =>
         `${organizationName}: ${documentTitle} has been updated`,
@@ -530,6 +546,22 @@ const cs: Dictionary = {
       notYou: (organizationName: string) =>
         `Pokud jste se do organizace ${organizationName} nepřihlašovali, můžete tento e-mail ignorovat. Bez schválení správcem se nic dalšího neděje.`,
     },
+    eventInvite: {
+      subject: (organizationName: string, eventTitle: string) =>
+        `${organizationName}: pozvánka na ${eventTitle}`,
+      heading: (eventTitle: string) => `Pozvánka: ${eventTitle}`,
+      greeting: (name: string) => `Dobrý den, ${name},`,
+      body: (organizationName: string) =>
+        `Organizace ${organizationName} by ráda věděla, zda dorazíte. Odpovězte tlačítkem níže — přihlášení není potřeba.`,
+      whenTitle: "Kdy",
+      whereTitle: "Kde",
+      deadline: (date: string) => `Odpovězte prosím do ${date}.`,
+      rsvp: "Odpovědět na pozvánku",
+      communication: "Připojit se ke skupinovému chatu",
+      fallbackIntro: "Pokud tlačítko nefunguje, vložte tuto adresu do prohlížeče:",
+      keepThis: "Tento odkaz je osobní. Kdokoli, kdo jej má, může odpovědět vaším jménem, proto jej nepřeposílejte.",
+    },
+
     policyPublished: {
       subject: (organizationName: string, documentTitle: string) =>
         `${organizationName}: dokument ${documentTitle} byl aktualizován`,

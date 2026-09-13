@@ -295,6 +295,8 @@ type NotificationEmailActivityPayload = {
   orgId: string;
   kind: EmailKind;
   memberId?: string | null;
+  /** Set for event invites so the per-event send log can be read back. */
+  eventId?: string | null;
   fromEmail: string;
   toEmail: string;
   toName?: string | null;
@@ -324,6 +326,7 @@ export async function recordNotificationEmail(
       currentStatus: failed ? "failed" : "sent",
       memberId: params.memberId ?? null,
       inviteId: null,
+      eventId: params.eventId ?? null,
       providerEmailId: params.providerEmailId ?? null,
       fromEmail: params.fromEmail,
       toEmail: params.toEmail,

@@ -1,4 +1,4 @@
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { forbidden, redirect } from "next/navigation";
 
 import type {
@@ -9,11 +9,13 @@ import type {
 import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
+  events,
   groupCategories,
   groupMemberships,
   groups,
   tenantMembers,
   users,
+  type EventOwnerType,
 } from "@/server/db/schema";
 import { getAppOrganization } from "@/server/queries/app";
 import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
@@ -659,4 +661,155 @@ export async function requireOrgAdminAccess(userId?: string) {
   });
 
   return { organization, member };
+}
+
+// ─── Events ─────────────────────────────────────────────────────────────────
+
+/**
+ * Who may manage an event, decided by its owner.
+ *
+ * `group` and `category` owners reuse the existing group/category guards. An
+ * `organization` owner is gated by `organizations.orgEventCreators`, so a
+ * federation can let every troop leader post org-wide without making them org
+ * admins. Used both before a row exists (create) and after (everything else,
+ * through `requireEventManagementAccess`).
+ */
+export async function requireEventOwnerAccess(
+  ownerType: EventOwnerType,
+  ownerId?: string | null,
+) {
+  if (ownerType === "group") {
+    if (!ownerId) forbidden();
+    return requireGroupManagementAccess(ownerId);
+  }
+
+  if (ownerType === "category") {
+    if (!ownerId) forbidden();
+    return requireCategoryManagementAccess(ownerId);
+  }
+
+  const context = await requireGroupAdminModuleAccess();
+
+  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
+    return context;
+  }
+
+  const setting = context.organization.orgEventCreators;
+
+  if (setting === "org_admins" || !context.member) {
+    forbidden();
+  }
+
+  const scopedCategoryIds = await listScopedCategoryIds(
+    context.organization.id,
+    context.member.id,
+  );
+
+  if (scopedCategoryIds.length > 0) {
+    return context;
+  }
+
+  if (setting === "any_admin") {
+    const scopedGroupIds = await listScopedGroupIds(
+      context.organization.id,
+      context.member.id,
+    );
+
+    if (scopedGroupIds.length > 0) {
+      return context;
+    }
+  }
+
+  forbidden();
+}
+
+/** Loads a live event in the current org and checks management access to its owner. */
+export async function requireEventManagementAccess(eventId: string) {
+  const organization = await requireOrganization();
+
+  const [event] = await db
+    .select()
+    .from(events)
+    .where(
+      and(
+        eq(events.orgId, organization.id),
+        eq(events.id, eventId),
+        isNull(events.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  if (!event) {
+    forbidden();
+  }
+
+  const context = await requireEventOwnerAccess(
+    event.ownerType,
+    event.ownerType === "group" ? event.ownerGroupId : event.ownerCategoryId,
+  );
+
+  return { context, event };
+}
+
+/**
+ * The owners the viewer may create events for, which is also the filter for
+ * the admin event list. Org-wide access is a boolean; scoped access lists ids.
+ */
+export async function listManageableOwners(
+  context: Awaited<ReturnType<typeof requireGroupAdminModuleAccess>>,
+): Promise<{ organization: boolean; categoryIds: string[]; groupIds: string[] }> {
+  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
+    const [categoryRows, groupRows] = await Promise.all([
+      db
+        .select({ id: groupCategories.id })
+        .from(groupCategories)
+        .where(eq(groupCategories.orgId, context.organization.id)),
+      db
+        .select({ id: groups.id })
+        .from(groups)
+        .where(eq(groups.orgId, context.organization.id)),
+    ]);
+
+    return {
+      organization: true,
+      categoryIds: categoryRows.map((row) => row.id),
+      groupIds: groupRows.map((row) => row.id),
+    };
+  }
+
+  if (!context.member) {
+    return { organization: false, categoryIds: [], groupIds: [] };
+  }
+
+  const [scopedCategoryIds, scopedGroupIds] = await Promise.all([
+    listScopedCategoryIds(context.organization.id, context.member.id),
+    listScopedGroupIds(context.organization.id, context.member.id),
+  ]);
+
+  // A category admin manages every group in the category, so those groups are
+  // manageable owners too.
+  const categoryGroupRows =
+    scopedCategoryIds.length > 0
+      ? await db
+          .select({ id: groups.id })
+          .from(groups)
+          .where(
+            and(
+              eq(groups.orgId, context.organization.id),
+              or(...scopedCategoryIds.map((id) => eq(groups.categoryId, id))),
+            ),
+          )
+      : [];
+
+  const setting = context.organization.orgEventCreators;
+  const organization =
+    (setting === "category_admins" && scopedCategoryIds.length > 0) ||
+    (setting === "any_admin" &&
+      (scopedCategoryIds.length > 0 || scopedGroupIds.length > 0));
+
+  return {
+    organization,
+    categoryIds: scopedCategoryIds,
+    groupIds: [...new Set([...scopedGroupIds, ...categoryGroupRows.map((row) => row.id)])],
+  };
 }
