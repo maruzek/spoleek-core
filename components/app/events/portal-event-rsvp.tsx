@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
@@ -40,13 +40,12 @@ export function PortalEventRsvp({
   );
 
   // Open once the refreshed props (with the new RSVP) have landed, so the
-  // dialog never flashes "answer the invitation first".
-  useEffect(() => {
-    if (justAnswered && !refreshing && afterRsvpForm?.canSubmit.ok) {
-      setDialogOpen(true);
-      setJustAnswered(false);
-    }
-  }, [justAnswered, refreshing, afterRsvpForm]);
+  // dialog never flashes "answer the invitation first". Adjusted during
+  // render rather than in an effect, as the wizard resets on reopen.
+  if (justAnswered && !refreshing && afterRsvpForm?.canSubmit.ok) {
+    setJustAnswered(false);
+    setDialogOpen(true);
+  }
 
   return (
     <>
