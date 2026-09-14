@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, ClipboardListIcon } from "lucide-react";
 
 import { AppPage } from "@/components/app/app-page";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { getDictionary } from "@/lib/i18n";
+import { listFormsForViewer } from "@/server/queries/forms";
 import { getPendingPaymentsForMember } from "@/server/queries/payments";
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -33,8 +35,13 @@ export default async function PortalOverviewPage() {
     requirePolicyAcknowledgement: true,
   });
 
-  const pendingPayments = await getPendingPaymentsForMember(organization.id, member.id);
+  const [pendingPayments, forms] = await Promise.all([
+    getPendingPaymentsForMember(organization.id, member.id),
+    listFormsForViewer({ orgId: organization.id, memberId: member.id }),
+  ]);
   const hasOverdue = pendingPayments.some((p) => p.status === "overdue");
+  const pendingForms = forms.pending.filter((item) => item.pending);
+  const tf = getDictionary().forms.home;
 
   return (
     <AppPage
@@ -58,6 +65,18 @@ export default async function PortalOverviewPage() {
           <AlertAction>
             <Button asChild size="sm" variant="outline">
               <Link href="/portal/payments">View payments</Link>
+            </Button>
+          </AlertAction>
+        </Alert>
+      ) : null}
+      {pendingForms.length > 0 ? (
+        <Alert className="border-amber-500/30 bg-amber-500/5">
+          <ClipboardListIcon className="text-amber-600 dark:text-amber-500" />
+          <AlertTitle className="text-amber-700 dark:text-amber-500">{tf.title}</AlertTitle>
+          <AlertDescription>{tf.body(pendingForms.length)}</AlertDescription>
+          <AlertAction>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/portal/forms">{tf.action}</Link>
             </Button>
           </AlertAction>
         </Alert>

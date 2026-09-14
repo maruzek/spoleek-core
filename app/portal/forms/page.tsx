@@ -1,23 +1,20 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
+import { PortalFormsList } from "@/components/app/forms/portal-forms-list";
+import { getDictionary } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { listFormsForViewer } from "@/server/queries/forms";
 
 export default async function PortalFormsPage() {
-  await requireCurrentMemberAccess({
+  const { member, organization } = await requireCurrentMemberAccess({
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });
+  const t = getDictionary().forms;
+  const buckets = await listFormsForViewer({ orgId: organization.id, memberId: member.id });
 
   return (
-    <AppPage
-      eyebrow="Member portal"
-      title="Your forms will be handled here."
-      description="Event forms, onboarding forms, and other self-service submissions will stay in the portal so members do not need admin access."
-    >
-      <AppPlaceholder
-        title="Portal forms space ready"
-        description="This route reserves a stable place for member-facing forms inside the new shell."
-      />
+    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription}>
+      <PortalFormsList pending={buckets.pending} submitted={buckets.submitted} />
     </AppPage>
   );
 }

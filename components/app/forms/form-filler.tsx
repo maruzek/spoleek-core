@@ -8,11 +8,31 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { Locale } from "@/lib/i18n/messages";
+import { messages, type Locale } from "@/lib/i18n/messages";
 import type { CustomFieldValue, MemberCustomField } from "@/server/db/schema";
 import type { FillerQuestion } from "@/server/queries/forms";
 
 export type FillerMode = "member" | "token" | "guest" | "proxy";
+
+export type FillerLabels = {
+  encrypted: string;
+  saveToProfile: string;
+  savedToProfile: string;
+  yourName: string;
+  yourEmail: string;
+  nameRequired: string;
+  emailInvalid: string;
+};
+
+const DEFAULT_LABELS: FillerLabels = {
+  encrypted: messages.en.forms.detail.encrypted,
+  saveToProfile: messages.en.forms.detail.saveToProfile,
+  savedToProfile: messages.en.forms.detail.savedToProfile,
+  yourName: messages.en.forms.public.yourName,
+  yourEmail: messages.en.forms.public.yourEmail,
+  nameRequired: "Name is required.",
+  emailInvalid: "Enter a valid email address.",
+};
 
 export type FillerSubmit = {
   answers: Record<string, unknown>;
@@ -36,6 +56,7 @@ export function FormFiller({
   submitLabel = "Submit",
   shredNote,
   locale = "en",
+  labels = DEFAULT_LABELS,
   guestDefaults,
   footer,
   onSubmit,
@@ -52,6 +73,7 @@ export function FormFiller({
   /** "(deleted N days after the event)" — built by the caller who knows the anchor. */
   shredNote?: (days: number) => string;
   locale?: Locale;
+  labels?: FillerLabels;
   guestDefaults?: { name: string; email: string };
   /** Rendered left of the submit button. */
   footer?: ReactNode;
@@ -73,8 +95,8 @@ export function FormFiller({
   const submit = () => {
     if (mode === "guest") {
       const errors: { name?: string; email?: string } = {};
-      if (guest.name.trim().length < 2) errors.name = "Name is required.";
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim())) errors.email = "Enter a valid email address.";
+      if (guest.name.trim().length < 2) errors.name = labels.nameRequired;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guest.email.trim())) errors.email = labels.emailInvalid;
       setGuestErrors(errors);
       if (Object.keys(errors).length > 0) return;
     }
@@ -100,7 +122,7 @@ export function FormFiller({
         <FieldGroup className="rounded-xl border bg-muted/30 p-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field data-invalid={!!guestErrors.name}>
-              <FieldLabel htmlFor="ff-guest-name">Your name</FieldLabel>
+              <FieldLabel htmlFor="ff-guest-name">{labels.yourName}</FieldLabel>
               <FieldContent>
                 <Input
                   id="ff-guest-name"
@@ -113,7 +135,7 @@ export function FormFiller({
               </FieldContent>
             </Field>
             <Field data-invalid={!!guestErrors.email}>
-              <FieldLabel htmlFor="ff-guest-email">Your email</FieldLabel>
+              <FieldLabel htmlFor="ff-guest-email">{labels.yourEmail}</FieldLabel>
               <FieldContent>
                 <Input
                   id="ff-guest-email"
@@ -180,7 +202,7 @@ export function FormFiller({
               {sensitive ? (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <LockIcon className="size-3" aria-hidden />
-                  Stored encrypted
+                  {labels.encrypted}
                   {q.shredAfterEventDays && shredNote ? ` · ${shredNote(q.shredAfterEventDays)}` : null}
                 </p>
               ) : null}
@@ -190,12 +212,12 @@ export function FormFiller({
                     checked={sync[q.id] === true}
                     onCheckedChange={(checked) => setSync((s) => ({ ...s, [q.id]: checked === true }))}
                   />
-                  Also save this to my profile
+                  {labels.saveToProfile}
                 </label>
               ) : alwaysSyncs ? (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <UserRoundCheckIcon className="size-3" aria-hidden />
-                  Saved to the profile as well
+                  {labels.savedToProfile}
                 </p>
               ) : null}
             </div>

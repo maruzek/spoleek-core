@@ -41,14 +41,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
-import {
-  Stepper,
-  StepperIndicator,
-  StepperItem,
-  StepperList,
-  StepperTitle,
-  StepperTrigger,
-} from "@/components/ui/stepper";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formStatusDotVariant, formTimingLabel } from "@/lib/forms/display";
 import { cn } from "@/lib/utils";
 import { setFormStatusAction } from "@/server/actions/forms";
@@ -251,82 +244,79 @@ export function FormEditor(props: FormEditorProps) {
         />
       ) : null}
 
-      <Stepper value={step} onValueChange={(v) => goTo(v as Step)} className="gap-0">
-        <StepperList className="gap-1 rounded-xl border bg-muted/30 p-1">
+      <Tabs value={step} onValueChange={(v) => goTo(v as Step)}>
+        <TabsList>
           {STEPS.filter((s) => !form.isTemplate || s === "questions" || s === "settings").map((s) => {
             const meta = STEP_META[s];
             return (
-              <StepperItem key={s} value={s} className="shrink">
-                <StepperTrigger className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 data-[state=active]:bg-background data-[state=active]:shadow-xs">
-                  <StepperIndicator className="hidden" />
-                  <meta.icon className="size-4 text-muted-foreground" aria-hidden />
-                  <StepperTitle className="text-sm">{meta.label}</StepperTitle>
-                  {s === "submissions" && props.submissions.rows.length > 0 ? (
-                    <span className="text-xs tabular-nums text-muted-foreground">{props.submissions.rows.length}</span>
-                  ) : null}
-                </StepperTrigger>
-              </StepperItem>
+              <TabsTrigger key={s} value={s}>
+                <meta.icon data-icon="inline-start" />
+                {meta.label}
+                {s === "submissions" && props.submissions.rows.length > 0 ? (
+                  <span className="text-xs font-normal tabular-nums text-muted-foreground">{props.submissions.rows.length}</span>
+                ) : null}
+              </TabsTrigger>
             );
           })}
-        </StepperList>
-      </Stepper>
+        </TabsList>
 
-      {step === "questions" ? (
-        <Body>
-          {canWrite ? (
-            <FormBuilder formId={form.id} questions={props.questions} hasShredAnchor={props.hasShredAnchor} onDirtyChange={setDirty} />
-          ) : (
-            <ReadOnlyQuestions questions={props.questions} />
-          )}
-        </Body>
-      ) : null}
-      {step === "settings" ? (
-        <Body>
-          <FormSettingsPanel
-            form={form}
-            eventTitle={event?.title ?? null}
-            owners={props.owners}
-            audience={props.audience}
-            eligibleCount={props.eligibleCount}
-            canWrite={canWrite}
-            onDirtyChange={setDirty}
-          />
-        </Body>
-      ) : null}
-      {step === "submissions" ? (
-        <Body wide>
-          <FormSubmissionsTable
-            formId={form.id}
-            questions={props.submissions.questions}
-            fillerQuestions={props.fillerQuestions}
-            rows={props.submissions.rows}
-            hasEvent={event != null}
-            canWrite={canWrite}
-            shredNote={(days) => `deleted ${days} days after ${event ? "the event" : "the deadline"}`}
-          />
-        </Body>
-      ) : null}
-      {step === "summary" ? (
-        <Body wide>
-          <FormSummary
-            questions={props.submissions.questions}
-            aggregates={props.aggregates.questions}
-            submissionCount={props.aggregates.submissionCount}
-          />
-        </Body>
-      ) : null}
-      {step === "reminders" ? (
-        <Body>
-          <FormRemindersPanel
-            formId={form.id}
-            formStatus={form.status}
-            required={form.required}
-            pending={props.pending}
-            sendLog={props.sendLog}
-            canWrite={canWrite}
-          />
-        </Body>
-      ) : null}
+        <TabsContent value="questions">
+          <Body>
+            {canWrite ? (
+              <FormBuilder formId={form.id} questions={props.questions} hasShredAnchor={props.hasShredAnchor} onDirtyChange={setDirty} />
+            ) : (
+              <ReadOnlyQuestions questions={props.questions} />
+            )}
+          </Body>
+        </TabsContent>
+        <TabsContent value="settings">
+          <Body>
+            <FormSettingsPanel
+              form={form}
+              eventTitle={event?.title ?? null}
+              owners={props.owners}
+              audience={props.audience}
+              eligibleCount={props.eligibleCount}
+              canWrite={canWrite}
+              onDirtyChange={setDirty}
+            />
+          </Body>
+        </TabsContent>
+        <TabsContent value="submissions">
+          <Body wide>
+            <FormSubmissionsTable
+              formId={form.id}
+              questions={props.submissions.questions}
+              fillerQuestions={props.fillerQuestions}
+              rows={props.submissions.rows}
+              hasEvent={event != null}
+              canWrite={canWrite}
+              shredNote={(days) => `deleted ${days} days after ${event ? "the event" : "the deadline"}`}
+            />
+          </Body>
+        </TabsContent>
+        <TabsContent value="summary">
+          <Body wide>
+            <FormSummary
+              questions={props.submissions.questions}
+              aggregates={props.aggregates.questions}
+              submissionCount={props.aggregates.submissionCount}
+            />
+          </Body>
+        </TabsContent>
+        <TabsContent value="reminders">
+          <Body>
+            <FormRemindersPanel
+              formId={form.id}
+              formStatus={form.status}
+              required={form.required}
+              pending={props.pending}
+              sendLog={props.sendLog}
+              canWrite={canWrite}
+            />
+          </Body>
+        </TabsContent>
+      </Tabs>
 
       <AlertDialog open={pendingStep != null} onOpenChange={(open) => !open && setPendingStep(null)}>
         <AlertDialogContent>
