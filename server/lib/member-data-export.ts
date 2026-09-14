@@ -1,5 +1,6 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 
+import { decryptSecret } from "@/lib/crypto";
 import { getServerEnv } from "@/lib/env";
 import { db } from "@/server/db";
 import {
@@ -9,6 +10,11 @@ import {
   eventResponses,
   eventRsvpTokens,
   events,
+  formAnswers,
+  formAudience,
+  formQuestions,
+  formSubmissions,
+  forms,
   groupCategories,
   groupMemberships,
   groups,
@@ -107,6 +113,9 @@ export async function buildMemberDataExport({
     eventInvitations,
     eventAnswers,
     eventRsvpLinks,
+    formInvitations,
+    formSubmissionRows,
+    formAnswerRows,
   ] = await Promise.all([
     member.userId
       ? db
@@ -318,7 +327,65 @@ export async function buildMemberDataExport({
       .innerJoin(events, eq(events.id, eventRsvpTokens.eventId))
       .where(eq(eventRsvpTokens.memberId, memberId))
       .orderBy(desc(eventRsvpTokens.issuedAt)),
+
+    // Being named individually in a form's audience; group and category
+    // rules are about the group, as for events.
+    db
+      .select({
+        formTitle: forms.title,
+        invitedAt: formAudience.createdAt,
+      })
+      .from(formAudience)
+      .innerJoin(forms, eq(forms.id, formAudience.formId))
+      .where(eq(formAudience.memberId, memberId))
+      .orderBy(desc(formAudience.createdAt)),
+
+    db
+      .select({
+        submissionId: formSubmissions.id,
+        formTitle: forms.title,
+        submittedAt: formSubmissions.submittedAt,
+        updatedAt: formSubmissions.updatedAt,
+        submittedByUserId: formSubmissions.submittedByUserId,
+        shreddedAt: formSubmissions.shreddedAt,
+      })
+      .from(formSubmissions)
+      .innerJoin(forms, eq(forms.id, formSubmissions.formId))
+      .where(eq(formSubmissions.memberId, memberId))
+      .orderBy(desc(formSubmissions.submittedAt)),
+
+    // The member always sees their own answers, sealed or not, so
+    // special-category values are opened here for them.
+    db
+      .select({
+        submissionId: formAnswers.submissionId,
+        question: formQuestions.label,
+        sortOrder: formQuestions.sortOrder,
+        value: formAnswers.value,
+        encryptedValue: formAnswers.encryptedValue,
+      })
+      .from(formAnswers)
+      .innerJoin(formSubmissions, eq(formSubmissions.id, formAnswers.submissionId))
+      .innerJoin(formQuestions, eq(formQuestions.id, formAnswers.questionId))
+      .where(eq(formSubmissions.memberId, memberId))
+      .orderBy(asc(formQuestions.sortOrder)),
   ]);
+
+  const formAnswersBySubmission = new Map<
+    string,
+    { question: string; value: unknown }[]
+  >();
+  for (const row of formAnswerRows) {
+    const list = formAnswersBySubmission.get(row.submissionId) ?? [];
+    list.push({
+      question: row.question,
+      value:
+        row.encryptedValue !== null
+          ? (JSON.parse(decryptSecret(row.encryptedValue)) as unknown)
+          : row.value,
+    });
+    formAnswersBySubmission.set(row.submissionId, list);
+  }
 
   return {
     context: {
@@ -384,6 +451,17 @@ export async function buildMemberDataExport({
     eventInvitations,
     eventResponses: eventAnswers,
     eventRsvpLinks,
+    formInvitations,
+    formSubmissions: formSubmissionRows.map((row) => ({
+      form: row.formTitle,
+      submittedAt: row.submittedAt,
+      updatedAt: row.updatedAt,
+      // Whether a manager typed it on the member's behalf; the manager's own
+      // identity is not the member's data and stays out.
+      submittedByManager: row.submittedByUserId !== null,
+      answersDeletedAt: row.shreddedAt,
+      answers: formAnswersBySubmission.get(row.submissionId) ?? [],
+    })),
   };
 }
 
