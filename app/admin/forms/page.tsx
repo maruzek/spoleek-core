@@ -1,19 +1,40 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
-import { requireAdminAccess } from "@/server/queries/access";
+import { FormsAdmin } from "@/components/app/forms/forms-admin";
+import { listEventsForManager, listEventsForOwnerPicker } from "@/server/queries/events";
+import { listFormsForManager } from "@/server/queries/forms";
 
 export default async function AdminFormsPage() {
-  await requireAdminAccess();
+  const [{ context, owners, items }, templates, events] = await Promise.all([
+    listFormsForManager({ templates: false }),
+    listFormsForManager({ templates: true }),
+    listEventsForManager(),
+  ]);
+  const picker = await listEventsForOwnerPicker(context.organization.id);
+
+  const ownerOptions = {
+    organization: owners.organization,
+    categories: picker.categories.filter((c) => owners.categoryIds.includes(c.id)),
+    groups: picker.groups.filter((g) => owners.groupIds.includes(g.id)),
+  };
+  const canCreate =
+    ownerOptions.organization || ownerOptions.categories.length > 0 || ownerOptions.groups.length > 0;
 
   return (
     <AppPage
       eyebrow="Administration"
-      title="Forms will be managed from the admin workspace."
-      description="Internal form builders, linked event forms, and administrative workflows can now share one consistent application frame."
+      title="Forms"
+      description="Registrations, dietary sheets, evaluations — linked to an event or standing alone. Answers stay in the register and expire when you say so."
     >
-      <AppPlaceholder
-        title="Forms management scaffolded"
-        description="This page is a placeholder inside the new shell so the forms module can land on stable navigation."
+      <FormsAdmin
+        items={items}
+        templates={templates.items}
+        owners={ownerOptions}
+        canManageTemplates={context.capabilities.canManageOrganization}
+        canCreate={canCreate}
+        events={events.items
+          .filter((item) => item.event.status !== "cancelled")
+          .map((item) => ({ id: item.event.id, title: item.event.title, startsAt: item.event.startsAt }))}
+        timeZone={context.organization.timezone}
       />
     </AppPage>
   );

@@ -8,6 +8,7 @@ import {
   ArrowLeftIcon,
   BanIcon,
   CircleAlertIcon,
+  ClipboardListIcon,
   ExternalLinkIcon,
   EyeIcon,
   FileTextIcon,
@@ -28,6 +29,7 @@ import { EventAdminStats } from "@/components/app/events/event-admin-stats";
 import type { AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { EventAudiencePanel, type AudienceRow } from "@/components/app/events/event-audience-panel";
 import { EventEmailsPanel } from "@/components/app/events/event-emails-panel";
+import { EventFormsPanel, type EventFormRow } from "@/components/app/events/event-forms-panel";
 import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
 import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
@@ -53,6 +55,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEventNextStep, type EventNextStep } from "@/lib/events/next-step";
+import type { TemplateOption } from "@/components/app/forms/form-create-dialog";
 import type { EventInput, EventRecipientFilter } from "@/lib/events/schemas";
 import { cn } from "@/lib/utils";
 import {
@@ -64,7 +67,7 @@ import type { Event } from "@/server/db/schema";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
 import type { EventRecipient, EventResponseRow } from "@/server/queries/events";
 
-const VALID_TABS = ["overview", "audience", "responses", "emails"] as const;
+const VALID_TABS = ["overview", "audience", "responses", "emails", "forms"] as const;
 type TabValue = (typeof VALID_TABS)[number];
 
 function toValidTab(tab: string | undefined): TabValue {
@@ -103,6 +106,9 @@ export function EventAdminDetail({
   recipients,
   sendLog,
   publicUrl,
+  forms,
+  unlinkedForms,
+  formTemplates,
   defaultTab,
 }: {
   event: Event;
@@ -116,6 +122,9 @@ export function EventAdminDetail({
   recipients: Record<EventRecipientFilter, EventRecipient[]>;
   sendLog: EmailActivityRow[];
   publicUrl: string | null;
+  forms: EventFormRow[];
+  unlinkedForms: { id: string; title: string }[];
+  formTemplates: TemplateOption[];
   defaultTab?: string;
 }) {
   const router = useRouter();
@@ -341,6 +350,11 @@ export function EventAdminDetail({
             Emails
             <TabCount value={sendLog.length} />
           </TabsTrigger>
+          <TabsTrigger value="forms">
+            <ClipboardListIcon data-icon="inline-start" />
+            Forms
+            <TabCount value={forms.length} />
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -377,6 +391,12 @@ export function EventAdminDetail({
         <TabsContent value="emails">
           <TabBody>
             <EventEmailsPanel eventId={event.id} eventStatus={event.status} recipients={recipients} sendLog={sendLog} />
+          </TabBody>
+        </TabsContent>
+
+        <TabsContent value="forms">
+          <TabBody>
+            <EventFormsPanel eventId={event.id} forms={forms} unlinked={unlinkedForms} templates={formTemplates} owners={owners} />
           </TabBody>
         </TabsContent>
       </Tabs>

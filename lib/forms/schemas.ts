@@ -78,6 +78,8 @@ export const createFormSchema = z.object({
   settings: formSettingsSchema,
   fromTemplateId: uuid.optional(),
   eventId: uuid.optional(),
+  /** Org admins only; forces organization ownership and no event. */
+  asTemplate: z.boolean().default(false),
 });
 
 export const updateFormSettingsSchema = z.object({

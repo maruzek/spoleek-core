@@ -406,6 +406,35 @@ export async function listFormsForEvent(
   return items;
 }
 
+/** The event detail's Forms tab: every status, with submission and pending counts. */
+export async function listEventFormsForManager(orgId: string, event: Event) {
+  const items = await listFormsForEvent(orgId, event, null);
+  if (items.length === 0) return [];
+
+  const counts = await db
+    .select({ formId: formSubmissions.formId, count: sql<number>`count(*)::int` })
+    .from(formSubmissions)
+    .where(
+      and(
+        eq(formSubmissions.orgId, orgId),
+        inArray(formSubmissions.formId, items.map((item) => item.form.id)),
+      ),
+    )
+    .groupBy(formSubmissions.formId);
+  const countByForm = new Map(counts.map((row) => [row.formId, row.count]));
+
+  const out: Array<EventFormItem & { submissionCount: number; pendingCount: number }> = [];
+  for (const item of items) {
+    out.push({
+      ...item,
+      submissionCount: countByForm.get(item.form.id) ?? 0,
+      pendingCount:
+        item.form.required && item.form.status === "open" ? (await listFormPending(orgId, item.form.id)).length : 0,
+    });
+  }
+  return out;
+}
+
 // ─── Portal list ────────────────────────────────────────────────────────────
 
 export type ViewerFormItem = EventFormItem & { event: Event | null };

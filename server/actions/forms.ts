@@ -201,10 +201,16 @@ export const createFormAction = authActionClient
   .inputSchema(createFormSchema)
   .action(async ({ parsedInput, ctx }) => {
     const { settings } = parsedInput;
-    const context = await requireFormOwnerAccess(settings.ownerType, ownerIdOf(settings));
+    const context = parsedInput.asTemplate
+      ? await requireGroupAdminModuleAccess()
+      : await requireFormOwnerAccess(settings.ownerType, ownerIdOf(settings));
     const orgId = context.organization.id;
 
-    if (parsedInput.eventId) {
+    if (parsedInput.asTemplate && !context.capabilities.canManageOrganization) {
+      throw new FormError("TEMPLATE_READ_ONLY");
+    }
+
+    if (parsedInput.eventId && !parsedInput.asTemplate) {
       await requireEventManagementAccess(parsedInput.eventId);
     }
 
@@ -222,7 +228,9 @@ export const createFormAction = authActionClient
         .values({
           orgId,
           ...settingsColumns(settings),
-          eventId: parsedInput.eventId ?? null,
+          ...(parsedInput.asTemplate
+            ? { isTemplate: true, ownerType: "organization" as const, ownerCategoryId: null, ownerGroupId: null, eventId: null }
+            : { eventId: parsedInput.eventId ?? null }),
           createdByUserId: ctx.auth.user.id,
         })
         .returning({ id: forms.id });
