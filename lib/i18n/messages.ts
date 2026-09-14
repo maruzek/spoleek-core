@@ -163,6 +163,8 @@ const en = {
     patternMessage: (label: string, message: string) => `${label}: ${message}`,
     patternGeneric: (label: string) =>
       `${label} is not in the expected format.`,
+    notAnOption: (label: string) => `${label} must be one of the listed options.`,
+    unknownQuestion: "This question is not on the form.",
   },
 
   /** Group-category selection on the join form. */
@@ -607,6 +609,9 @@ const cs: Dictionary = {
       `${csField(label)}: ${message}`,
     patternGeneric: (label: string) =>
       `${csField(label)} nemá očekávaný formát.`,
+    notAnOption: (label: string) =>
+      `${csField(label)} musí být jedna z nabízených možností.`,
+    unknownQuestion: "Tato otázka ve formuláři není.",
   },
 
   groupRegistration: {

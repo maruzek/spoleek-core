@@ -6,18 +6,32 @@ import type { EventAudienceKind } from "@/server/db/schema";
  * The query layer loads the rule rows, the org's group memberships and the
  * group→category map, then calls this. Nothing is snapshotted: a member who
  * joins a targeted group tomorrow is invited tomorrow, one who leaves is not.
+ *
+ * Shared by events and forms: a form rule carries a `scope` that narrows a
+ * group or category to its admins; event rules never set it.
  */
 
-/** The slice of `event_audience` that resolves to members. */
+export type AudienceScope = "members" | "admins";
+
+/** The slice of `event_audience` / `form_audience` that resolves to members. */
 export type AudienceRule = {
   kind: EventAudienceKind;
   groupId: string | null;
   categoryId: string | null;
   memberId: string | null;
+  /** Defaults to `members`. Ignored for `member` and `external` rules. */
+  scope?: AudienceScope;
 };
 
 export type GroupMembershipRow = {
   groupId: string;
+  memberId: string;
+  /** Only needed when a rule has `scope: "admins"`. */
+  role?: "member" | "group_admin";
+};
+
+export type CategoryAdminRow = {
+  categoryId: string;
   memberId: string;
 };
 
@@ -33,6 +47,11 @@ export type GroupMembershipRow = {
  * eligible either. "Eligible" therefore always implies "active member", so
  * the copy and send lists can never reach a suspended person, and a manager
  * who wants an alumnus at a reunion adds them as an external invitee.
+ *
+ * With `scope: "admins"` a group rule reaches only its `group_admin`
+ * memberships and a category rule only the category's admins
+ * (`categoryAdmins`) — not the group admins of its groups, which is a
+ * different role and a different rule.
  */
 export function resolveEligibleMemberIds(params: {
   rules: readonly AudienceRule[];
@@ -40,31 +59,61 @@ export function resolveEligibleMemberIds(params: {
   /** groupId → categoryId, for every group in the org. */
   groupsByCategory: ReadonlyMap<string, string>;
   activeMemberIds: ReadonlySet<string>;
+  /** Only consulted by category rules scoped to `admins`. */
+  categoryAdmins?: readonly CategoryAdminRow[];
 }): Set<string> {
-  const { rules, groupMemberships, groupsByCategory, activeMemberIds } = params;
+  const {
+    rules,
+    groupMemberships,
+    groupsByCategory,
+    activeMemberIds,
+    categoryAdmins = [],
+  } = params;
 
   const targetGroupIds = new Set<string>();
+  const adminGroupIds = new Set<string>();
   const targetCategoryIds = new Set<string>();
+  const adminCategoryIds = new Set<string>();
   const eligible = new Set<string>();
 
   for (const rule of rules) {
-    if (rule.kind === "group" && rule.groupId) targetGroupIds.add(rule.groupId);
-    else if (rule.kind === "category" && rule.categoryId) {
-      targetCategoryIds.add(rule.categoryId);
+    const admins = rule.scope === "admins";
+    if (rule.kind === "group" && rule.groupId) {
+      (admins ? adminGroupIds : targetGroupIds).add(rule.groupId);
+    } else if (rule.kind === "category" && rule.categoryId) {
+      (admins ? adminCategoryIds : targetCategoryIds).add(rule.categoryId);
     } else if (rule.kind === "member" && rule.memberId) {
       if (activeMemberIds.has(rule.memberId)) eligible.add(rule.memberId);
     }
     // `external` rules are not members.
   }
 
-  if (targetGroupIds.size === 0 && targetCategoryIds.size === 0) return eligible;
+  if (adminCategoryIds.size > 0) {
+    for (const admin of categoryAdmins) {
+      if (
+        adminCategoryIds.has(admin.categoryId) &&
+        activeMemberIds.has(admin.memberId)
+      ) {
+        eligible.add(admin.memberId);
+      }
+    }
+  }
+
+  if (
+    targetGroupIds.size === 0 &&
+    targetCategoryIds.size === 0 &&
+    adminGroupIds.size === 0
+  ) {
+    return eligible;
+  }
 
   for (const membership of groupMemberships) {
     if (!activeMemberIds.has(membership.memberId)) continue;
     const categoryId = groupsByCategory.get(membership.groupId);
     if (
       targetGroupIds.has(membership.groupId) ||
-      (categoryId !== undefined && targetCategoryIds.has(categoryId))
+      (categoryId !== undefined && targetCategoryIds.has(categoryId)) ||
+      (membership.role === "group_admin" && adminGroupIds.has(membership.groupId))
     ) {
       eligible.add(membership.memberId);
     }
