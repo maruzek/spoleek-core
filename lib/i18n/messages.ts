@@ -366,6 +366,21 @@ const en = {
       keepThis: "This link is personal to you. Anyone who has it can answer in your name, so do not forward it.",
     },
 
+    formReminder: {
+      subject: (organizationName: string, formTitle: string) =>
+        `${organizationName}: please fill in ${formTitle}`,
+      heading: (formTitle: string) => `Please fill in: ${formTitle}`,
+      greeting: (name: string) => `Hello ${name},`,
+      body: (organizationName: string) =>
+        `${organizationName} is still waiting for your answers. Use the button below to fill in the form.`,
+      eventTitle: "For the event",
+      deadline: (date: string) => `Please answer by ${date}.`,
+      open: "Fill in the form",
+      fallbackIntro: "If the button does not open, paste this URL into your browser:",
+      keepThis: "This link is personal to you. Anyone who has it can answer in your name, so do not forward it.",
+      signIn: "Sign in to the member portal to fill it in.",
+    },
+
     policyPublished: {
       subject: (organizationName: string, documentTitle: string) =>
         `${organizationName}: ${documentTitle} has been updated`,
@@ -811,6 +826,21 @@ const cs: Dictionary = {
       communication: "Připojit se ke skupinovému chatu",
       fallbackIntro: "Pokud tlačítko nefunguje, vložte tuto adresu do prohlížeče:",
       keepThis: "Tento odkaz je osobní. Kdokoli, kdo jej má, může odpovědět vaším jménem, proto jej nepřeposílejte.",
+    },
+
+    formReminder: {
+      subject: (organizationName: string, formTitle: string) =>
+        `${organizationName}: prosíme o vyplnění ${formTitle}`,
+      heading: (formTitle: string) => `Prosíme o vyplnění: ${formTitle}`,
+      greeting: (name: string) => `Dobrý den, ${name},`,
+      body: (organizationName: string) =>
+        `Organizace ${organizationName} stále čeká na vaše odpovědi. Formulář vyplníte tlačítkem níže.`,
+      eventTitle: "K akci",
+      deadline: (date: string) => `Odpovězte prosím do ${date}.`,
+      open: "Vyplnit formulář",
+      fallbackIntro: "Pokud tlačítko nefunguje, vložte tuto adresu do prohlížeče:",
+      keepThis: "Tento odkaz je osobní. Kdokoli, kdo jej má, může odpovědět vaším jménem, proto jej nepřeposílejte.",
+      signIn: "Přihlaste se do členského portálu a formulář vyplňte tam.",
     },
 
     policyPublished: {

@@ -11,6 +11,10 @@
     {
       "path": "/api/internal/shred-event-guests",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/internal/shred-form-answers",
+      "schedule": "0 6 * * *"
     }
   ]
 }
