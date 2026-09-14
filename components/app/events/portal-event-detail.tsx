@@ -63,7 +63,6 @@ export function PortalEventDetail({
   response,
   rsvp,
   forms,
-  inlineForm,
   t,
 }: {
   event: Event;
@@ -73,10 +72,8 @@ export function PortalEventDetail({
   counts: { confirmedSeats: number; reserveCount: number };
   response: { answer: EventRsvpAnswer; standing: EventRsvpStanding } | null;
   rsvp: ReactNode;
-  /** The event's forms block, rendered under the description. */
+  /** The event's forms block, rendered above the description so it is not missed. */
   forms?: ReactNode;
-  /** An `after_rsvp` form, rendered under the RSVP card once answered. */
-  inlineForm?: ReactNode;
   t: Dictionary["events"];
 }) {
   const d = t.detail;
@@ -166,6 +163,7 @@ export function PortalEventDetail({
 
       <div className={cn("grid gap-8", twoColumn ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
         <section className="min-w-0">
+          {forms ? <div className="mb-8">{forms}</div> : null}
           {event.descriptionHtml ? (
             <div
               className="policy-prose"
@@ -175,10 +173,6 @@ export function PortalEventDetail({
           ) : (
             <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{d.noDescription}</p>
           )}
-          {/* With a sticky 20rem RSVP column the filler would be cramped there;
-              it takes the wide column instead and the aside keeps the answer. */}
-          {inlineForm && twoColumn ? <div className="mt-8">{inlineForm}</div> : null}
-          {forms ? <div className="mt-8">{forms}</div> : null}
         </section>
 
         <aside
@@ -188,7 +182,6 @@ export function PortalEventDetail({
           )}
         >
           <div className="rounded-xl border bg-card p-4 shadow-xs">{rsvp}</div>
-          {inlineForm && !twoColumn ? <div className="sm:col-span-2">{inlineForm}</div> : null}
 
           <dl className="divide-y rounded-xl border bg-card p-4">
             <Row icon={<CalendarIcon />} label={d.when}>

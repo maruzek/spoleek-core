@@ -256,6 +256,9 @@ const en = {
       pendingHint: (n: number) => (n === 1 ? "1 form to fill in" : `${n} forms to fill in`),
       inlineTitle: "One more thing",
       inlineHint: "The organiser needs a few more details from you.",
+      dialogRequired: "Please fill this in to complete your answer.",
+      dialogOptional: "You can also do this later from the event page.",
+      later: "Later",
     },
     home: {
       title: "Forms to fill in",
@@ -802,6 +805,9 @@ const cs: Dictionary = {
       pendingHint: (n: number) => (n === 1 ? "1 formulář k vyplnění" : `${n} formulářů k vyplnění`),
       inlineTitle: "Ještě jedna věc",
       inlineHint: "Pořadatel od vás potřebuje ještě pár údajů.",
+      dialogRequired: "Vyplňte prosím tento formulář, aby byla vaše odpověď úplná.",
+      dialogOptional: "Můžete to udělat i později ze stránky akce.",
+      later: "Později",
     },
     home: {
       title: "Formuláře k vyplnění",

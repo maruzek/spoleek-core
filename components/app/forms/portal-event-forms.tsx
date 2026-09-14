@@ -1,7 +1,6 @@
 "use client";
 
 import { PortalFormCard } from "@/components/app/forms/portal-form-card";
-import { PortalFormFiller, type PortalFillerData } from "@/components/app/forms/portal-form-filler";
 import { useDictionary } from "@/components/locale-provider";
 import type { ViewerFormItem } from "@/server/queries/forms";
 
@@ -24,20 +23,5 @@ export function PortalEventForms({ items }: { items: ViewerFormItem[] }) {
         ))}
       </ul>
     </section>
-  );
-}
-
-/** An `after_rsvp` form shown right under the RSVP card once the member has answered. */
-export function PortalInlineForm({ data }: { data: PortalFillerData }) {
-  const t = useDictionary().forms;
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-amber-500/40 bg-card p-4 shadow-xs">
-      <div className="flex flex-col gap-0.5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">{t.event.inlineTitle}</p>
-        <h3 className="font-heading text-lg font-semibold tracking-tight">{data.form.title}</h3>
-        <p className="text-sm text-muted-foreground">{data.form.description ?? t.event.inlineHint}</p>
-      </div>
-      <PortalFormFiller data={data} compact />
-    </div>
   );
 }

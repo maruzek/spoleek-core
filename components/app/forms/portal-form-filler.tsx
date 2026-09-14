@@ -29,7 +29,15 @@ export type PortalFillerData = {
  * form cannot be submitted, and keeps a submitted form readable after it
  * closes.
  */
-export function PortalFormFiller({ data, compact = false }: { data: PortalFillerData; compact?: boolean }) {
+export function PortalFormFiller({
+  data,
+  compact = false,
+  onSubmitted,
+}: {
+  data: PortalFillerData;
+  compact?: boolean;
+  onSubmitted?: () => void;
+}) {
   const t = useDictionary().forms;
   const locale = useLocale();
   const { formatDateTime } = useFormatters();
@@ -42,6 +50,7 @@ export function PortalFormFiller({ data, compact = false }: { data: PortalFiller
       toast.success(data.submittedAt ? t.detail.updated : t.detail.saved);
       setJustSaved(true);
       router.refresh();
+      onSubmitted?.();
     },
     onError({ error }) {
       const answers = (error.validationErrors as { answers?: Record<string, { _errors?: string[] }> } | undefined)?.answers;
