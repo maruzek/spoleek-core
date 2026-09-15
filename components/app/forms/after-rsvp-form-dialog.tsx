@@ -1,6 +1,8 @@
 "use client";
 
-import { PortalFormFiller, type PortalFillerData } from "@/components/app/forms/portal-form-filler";
+import type { ReactNode } from "react";
+
+import type { PortalFillerData } from "@/components/app/forms/portal-form-filler";
 import { useDictionary } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +24,14 @@ export function AfterRsvpFormDialog({
   data,
   required,
   onOpenChange,
+  filler,
 }: {
   open: boolean;
-  data: PortalFillerData;
+  data: Pick<PortalFillerData, "form">;
   required: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The bound filler for this surface (portal member, token holder). */
+  filler: (onSubmitted: () => void) => ReactNode;
 }) {
   const t = useDictionary().forms;
   const lock = required;
@@ -47,7 +52,7 @@ export function AfterRsvpFormDialog({
         {data.form.description ? (
           <p className="whitespace-pre-line text-sm text-muted-foreground">{data.form.description}</p>
         ) : null}
-        <PortalFormFiller data={data} compact onSubmitted={() => onOpenChange(false)} />
+        {filler(() => onOpenChange(false))}
         {!required ? (
           <div className="flex justify-end">
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>

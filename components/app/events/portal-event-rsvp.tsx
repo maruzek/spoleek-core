@@ -6,7 +6,7 @@ import { useAction } from "next-safe-action/hooks";
 
 import { EventRsvpControl } from "@/components/app/events/event-rsvp-control";
 import { AfterRsvpFormDialog } from "@/components/app/forms/after-rsvp-form-dialog";
-import type { PortalFillerData } from "@/components/app/forms/portal-form-filler";
+import { PortalFormFiller, type PortalFillerData } from "@/components/app/forms/portal-form-filler";
 import type { RsvpOpenResult } from "@/lib/events/rsvp";
 import { respondToEventAction } from "@/server/actions/events";
 import type { EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
@@ -69,6 +69,7 @@ export function PortalEventRsvp({
           data={afterRsvpForm}
           required={afterRsvpForm.required}
           onOpenChange={setDialogOpen}
+          filler={(onSubmitted) => <PortalFormFiller data={afterRsvpForm} compact onSubmitted={onSubmitted} />}
         />
       ) : null}
     </>
