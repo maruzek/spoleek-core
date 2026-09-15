@@ -69,10 +69,14 @@ RSVP with optional capacity and reserve list; and never email anyone unless a
 manager explicitly sends an invite. Forms (§5.6) and ticketing (§5.7) plug in
 as later projects.
 
-### 5.6. Custom Forms Module (EAV Pattern)
+### 5.6. Forms
 
-- Internal, database-native alternative to Google Forms.
-- Admins build forms with varied input types (text, selects, booleans) linked to Events or Profiles.
+Implemented — see `docs/superpowers/specs/2026-09-14-forms-design.md`. A form
+builder on the custom-field type system; forms link to an event or stand
+alone, are filled by members, token holders and public guests, can write
+answers back to member profiles, and carry the encrypted / TTL / access
+model for sensitive answers. Forms attached to profiles or registration are
+a follow-up.
 
 ### 5.7. Payments Management
 
