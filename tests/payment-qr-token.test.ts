@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildSpdString, paymentQrPayerName } from "@/lib/payments";
 import {
   buildPaymentQrUrl,
   signPaymentQrToken,
@@ -63,5 +64,46 @@ describe("the payment QR token", () => {
     const url = buildPaymentQrUrl(PAYMENT_ID, inDays(30));
 
     expect(url).toMatch(/^https?:\/\/[^/]+\/api\/payments\/qr\/[\w-]+\.[\w-]+\.[\w-]+$/);
+  });
+});
+
+describe("the payer name on a payment QR", () => {
+  const payment = {
+    bankAccount: "CZ6508000000192000145399",
+    amount: 35_000,
+    currency: "CZK",
+    periodLabel: "Summer camp",
+    variableSymbol: "123456",
+  };
+
+  it("uses the member's name when the payment has a member", () => {
+    const name = paymentQrPayerName({
+      firstName: "Alex",
+      lastName: "Member",
+      guestName: null,
+    });
+
+    expect(name).toBe("Alex Member");
+    expect(buildSpdString(payment, name)).toContain("MSG:Alex Member Summer camp");
+  });
+
+  it("falls back to the guest name from the RSVP", () => {
+    const name = paymentQrPayerName({
+      firstName: null,
+      lastName: null,
+      guestName: "Guest Person",
+    });
+
+    expect(name).toBe("Guest Person");
+    expect(buildSpdString(payment, name)).toContain("MSG:Guest Person Summer camp");
+  });
+
+  it("renders a shredded guest without a name, keeping the variable symbol", () => {
+    const name = paymentQrPayerName({ firstName: null, lastName: null, guestName: null });
+
+    expect(name).toBeUndefined();
+    const spd = buildSpdString(payment, name);
+    expect(spd).toContain("MSG:Summer camp");
+    expect(spd).toContain("X-VS:123456");
   });
 });

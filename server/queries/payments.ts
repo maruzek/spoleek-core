@@ -3,22 +3,33 @@ import { and, asc, desc, eq, inArray, sql, sum } from "drizzle-orm";
 import { PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
+  eventResponses,
+  events,
   groupMemberships,
   groups,
   memberPayments,
   tenantMembers,
   type MemberPayment,
   type MemberPaymentStatus,
+  type MemberPaymentType,
 } from "@/server/db/schema";
 
+export type PaymentStatBucket = { count: number; totalCents: number };
+
 export type PaymentStats = {
-  paid: { count: number; totalCents: number };
-  pending: { count: number; totalCents: number };
-  overdue: { count: number; totalCents: number };
+  paid: PaymentStatBucket;
+  pending: PaymentStatBucket;
+  overdue: PaymentStatBucket;
+  /** The same three buckets split by payment type. */
+  byType: Record<
+    MemberPaymentType,
+    { paid: PaymentStatBucket; pending: PaymentStatBucket; overdue: PaymentStatBucket }
+  >;
   collectionRate: number;
   projectedIncomeCents: number;
   debtAging: Array<{
-    memberId: string;
+    /** Null for a guest's event payment. */
+    memberId: string | null;
     memberName: string;
     periodLabel: string;
     amountCents: number;
@@ -34,11 +45,34 @@ export type PaymentRow = MemberPayment & {
   memberFirstName: string | null;
   memberLastName: string | null;
   memberEmail: string | null;
+  /** Member name, or the guest name from the RSVP, or "Guest" once shredded. */
   memberName: string;
+  /** Set for a guest's event payment while the RSVP still carries a name. */
+  guestName: string | null;
+  eventTitle: string | null;
+  eventSlug: string | null;
   /** Every group the payer belongs to. Drives the group filter on the
    *  dashboard; a member can sit in several, so this is a list, not a field. */
   memberGroups: PaymentMemberGroup[];
 };
+
+/** How a payer with no member row (a guest) is named once the RSVP is shredded. */
+export const GUEST_PAYER_FALLBACK_NAME = "Guest";
+
+function payerName(row: {
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  guestName: string | null;
+  memberId: string | null;
+}): string {
+  if (row.memberId) {
+    return (
+      [row.firstName, row.lastName].filter(Boolean).join(" ") || row.email || "Unknown"
+    );
+  }
+  return row.guestName || GUEST_PAYER_FALLBACK_NAME;
+}
 
 /**
  * Group membership for a set of members, as a lookup keyed by member id.
@@ -118,6 +152,7 @@ export async function listPaymentsForOrg(
   orgId: string,
   options?: {
     status?: MemberPaymentStatus[];
+    type?: MemberPaymentType;
     periodLabel?: string;
     memberIds?: string[];
   },
@@ -128,12 +163,20 @@ export async function listPaymentsForOrg(
       firstName: tenantMembers.firstName,
       lastName: tenantMembers.lastName,
       email: tenantMembers.email,
+      guestName: eventResponses.guestName,
+      eventTitle: events.title,
+      eventSlug: events.slug,
     })
     .from(memberPayments)
-    .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    // Left joins: a guest's event payment has no member, and a paid event row
+    // outlives its response (`response_id` is set null on delete).
+    .leftJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    .leftJoin(eventResponses, eq(memberPayments.responseId, eventResponses.id))
+    .leftJoin(events, eq(memberPayments.eventId, events.id))
     .where(
       and(
         eq(memberPayments.orgId, orgId),
+        options?.type ? eq(memberPayments.type, options.type) : undefined,
         options?.status?.length
           ? inArray(memberPayments.status, options.status)
           : undefined,
@@ -151,7 +194,7 @@ export async function listPaymentsForOrg(
 
   const groupsByMember = await getGroupsByMember(
     orgId,
-    [...new Set(rows.map((row) => row.payment.memberId))],
+    [...new Set(rows.flatMap((row) => row.payment.memberId ?? []))],
   );
 
   return rows.map((row) => ({
@@ -159,8 +202,13 @@ export async function listPaymentsForOrg(
     memberFirstName: row.firstName,
     memberLastName: row.lastName,
     memberEmail: row.email,
-    memberName: [row.firstName, row.lastName].filter(Boolean).join(" ") || row.email || "Unknown",
-    memberGroups: groupsByMember.get(row.payment.memberId) ?? [],
+    memberName: payerName({ ...row, memberId: row.payment.memberId }),
+    guestName: row.guestName,
+    eventTitle: row.eventTitle,
+    eventSlug: row.eventSlug,
+    memberGroups: row.payment.memberId
+      ? (groupsByMember.get(row.payment.memberId) ?? [])
+      : [],
   }));
 }
 
@@ -180,6 +228,11 @@ export async function listPaymentsForMember(
     .orderBy(desc(memberPayments.createdAt));
 }
 
+/**
+ * What the member currently owes — membership fees and event fees alike.
+ * Deliberately not filtered by type: the portal strip answers "what do I owe",
+ * and an unpaid camp fee is as much a debt as an unpaid membership fee.
+ */
 export async function getPendingPaymentsForMember(
   orgId: string,
   memberId: string,
@@ -201,6 +254,7 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
   const statRows = await db
     .select({
       status: memberPayments.status,
+      type: memberPayments.type,
       count: sql<number>`cast(count(*) as int)`,
       total: sum(memberPayments.amount),
     })
@@ -211,15 +265,26 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
         inArray(memberPayments.status, ["paid", "pending", "overdue"]),
       ),
     )
-    .groupBy(memberPayments.status);
+    .groupBy(memberPayments.status, memberPayments.type);
 
-  const byStatus = Object.fromEntries(
-    statRows.map((r) => [r.status, { count: r.count, totalCents: Number(r.total ?? 0) }]),
-  ) as Partial<Record<MemberPaymentStatus, { count: number; totalCents: number }>>;
-
-  const paid = byStatus.paid ?? { count: 0, totalCents: 0 };
-  const pending = byStatus.pending ?? { count: 0, totalCents: 0 };
-  const overdue = byStatus.overdue ?? { count: 0, totalCents: 0 };
+  const emptyBuckets = () => ({
+    paid: { count: 0, totalCents: 0 },
+    pending: { count: 0, totalCents: 0 },
+    overdue: { count: 0, totalCents: 0 },
+  });
+  const byType: PaymentStats["byType"] = {
+    membership_fee: emptyBuckets(),
+    event: emptyBuckets(),
+  };
+  const totals = emptyBuckets();
+  for (const r of statRows) {
+    if (r.status !== "paid" && r.status !== "pending" && r.status !== "overdue") continue;
+    const bucket = { count: r.count, totalCents: Number(r.total ?? 0) };
+    byType[r.type][r.status] = bucket;
+    totals[r.status].count += bucket.count;
+    totals[r.status].totalCents += bucket.totalCents;
+  }
+  const { paid, pending, overdue } = totals;
 
   const eligible = paid.totalCents + pending.totalCents + overdue.totalCents;
   const collectionRate = eligible > 0 ? Math.round((paid.totalCents / eligible) * 100) : 0;
@@ -232,19 +297,21 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
       firstName: tenantMembers.firstName,
       lastName: tenantMembers.lastName,
       email: tenantMembers.email,
+      guestName: eventResponses.guestName,
       periodLabel: memberPayments.periodLabel,
       amount: memberPayments.amount,
       currency: memberPayments.currency,
       dueAt: memberPayments.dueAt,
     })
     .from(memberPayments)
-    .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    .leftJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    .leftJoin(eventResponses, eq(memberPayments.responseId, eventResponses.id))
     .where(and(eq(memberPayments.orgId, orgId), eq(memberPayments.status, "overdue")))
     .orderBy(asc(memberPayments.dueAt));
 
   const debtAging = overdueRows.map((r) => ({
     memberId: r.memberId,
-    memberName: [r.firstName, r.lastName].filter(Boolean).join(" ") || r.email || "Unknown",
+    memberName: payerName(r),
     periodLabel: r.periodLabel,
     amountCents: r.amount,
     currency: r.currency,
@@ -252,7 +319,7 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
     daysOverdue: Math.floor((now.getTime() - r.dueAt.getTime()) / (1000 * 60 * 60 * 24)),
   }));
 
-  return { paid, pending, overdue, collectionRate, projectedIncomeCents, debtAging };
+  return { paid, pending, overdue, byType, collectionRate, projectedIncomeCents, debtAging };
 }
 
 export type MemberOverdueFees = {
@@ -285,7 +352,8 @@ export async function getOverdueFeesByMember(
 
   const rows = await db
     .select({
-      memberId: memberPayments.memberId,
+      // Never null here: membership-fee rows always carry a member.
+      memberId: sql<string>`${memberPayments.memberId}`,
       count: sql<number>`cast(count(*) as int)`,
       total: sum(memberPayments.amount),
       // One currency per organization — groups cannot override it — so every
@@ -297,6 +365,9 @@ export async function getOverdueFeesByMember(
     .where(
       and(
         eq(memberPayments.orgId, orgId),
+        // "Behind on their fees" means membership fees; an unpaid camp fee
+        // does not put the membership itself in question.
+        eq(memberPayments.type, "membership_fee"),
         eq(memberPayments.status, "overdue"),
         memberIds?.length ? inArray(memberPayments.memberId, memberIds) : undefined,
       ),
@@ -324,4 +395,15 @@ export async function getOverdueFeesByMember(
       ];
     }),
   );
+}
+
+export type RefundDueRow = PaymentRow;
+
+/**
+ * Paid event payments whose RSVP is no longer a confirmed yes. Nothing moves
+ * them on automatically; the dashboard pins them until an admin marks the
+ * refund settled.
+ */
+export async function listRefundsDue(orgId: string): Promise<RefundDueRow[]> {
+  return listPaymentsForOrg(orgId, { status: ["refund_due"] });
 }

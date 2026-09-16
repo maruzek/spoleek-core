@@ -5,27 +5,21 @@ import { and, eq, inArray } from "drizzle-orm";
 import { forbidden } from "next/navigation";
 import { z } from "zod";
 
-import { PaymentConfirmedEmail } from "@/emails/payment-confirmed-email";
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
-import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
-import { memberPayments, organizations, tenantMembers, users } from "@/server/db/schema";
+import { memberPayments, users } from "@/server/db/schema";
 import { requireAdminAccess, listScopedGroupIds } from "@/server/queries/access";
 import { listMemberIdsInGroups } from "@/server/queries/payments";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
-import { syncReportMemberForPayment } from "@/server/lib/membership-report";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
-import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
-import { formatLongDate } from "@/lib/format";
+import {
+  CANCELLATION_REASONS,
+  cancelPayments,
+  markPaymentRefunded,
+  markPaymentsPaid,
+  sendPaymentConfirmedEmail,
+} from "@/server/lib/payment-status";
 
-const CANCELLATION_REASONS = [
-  "duplicate",
-  "waived",
-  "admin_error",
-  "other",
-] as const;
-
-export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
+export type { CancellationReason } from "@/server/lib/payment-status";
 
 /**
  * Resolves what this admin may touch.
@@ -60,12 +54,22 @@ async function resolvePaymentScope(userId: string) {
   return { orgId, allowedMemberIds };
 }
 
-/** Narrows `paymentIds` to those this admin may act on, in one round trip. */
+/**
+ * Narrows `paymentIds` to those this admin may act on, in one round trip.
+ *
+ * A scoped group admin sees their members' membership fees only: event
+ * payments (including guest rows, which have no member) are managed through
+ * the event's response list by whoever manages the event.
+ */
 async function authorizePaymentIds(userId: string, paymentIds: string[]) {
   const { orgId, allowedMemberIds } = await resolvePaymentScope(userId);
 
   const rows = await db
-    .select({ id: memberPayments.id, memberId: memberPayments.memberId })
+    .select({
+      id: memberPayments.id,
+      memberId: memberPayments.memberId,
+      type: memberPayments.type,
+    })
     .from(memberPayments)
     .where(
       and(inArray(memberPayments.id, paymentIds), eq(memberPayments.orgId, orgId)),
@@ -74,7 +78,12 @@ async function authorizePaymentIds(userId: string, paymentIds: string[]) {
   const permitted =
     allowedMemberIds === null
       ? rows
-      : rows.filter((row) => allowedMemberIds.includes(row.memberId));
+      : rows.filter(
+          (row) =>
+            row.type === "membership_fee" &&
+            row.memberId !== null &&
+            allowedMemberIds.includes(row.memberId),
+        );
 
   if (permitted.length === 0) {
     forbidden();
@@ -86,72 +95,6 @@ async function authorizePaymentIds(userId: string, paymentIds: string[]) {
 async function resolvePaymentAccess(userId: string, paymentId: string) {
   const { orgId } = await authorizePaymentIds(userId, [paymentId]);
   return { orgId };
-}
-
-async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date) {
-  try {
-    const [row] = await db
-      .select({
-        memberEmail: tenantMembers.email,
-        memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
-        memberPreferredEmail: tenantMembers.preferredEmail,
-        memberFirstName: tenantMembers.firstName,
-        memberLastName: tenantMembers.lastName,
-        orgName: organizations.name,
-        emailNotifyPaymentConfirmed: organizations.emailNotifyPaymentConfirmed,
-        defaultEmailPreference: organizations.defaultEmailPreference,
-        workspaceModuleEnabled: organizations.workspaceModuleEnabled,
-        workspaceConnectedAt: organizations.workspaceConnectedAt,
-        workspaceDomain: organizations.workspaceDomain,
-        amount: memberPayments.amount,
-        currency: memberPayments.currency,
-        periodLabel: memberPayments.periodLabel,
-        type: memberPayments.type,
-      })
-      .from(memberPayments)
-      .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
-      .innerJoin(organizations, eq(memberPayments.orgId, organizations.id))
-      .where(eq(memberPayments.id, paymentId))
-      .limit(1);
-
-    if (!row || !row.emailNotifyPaymentConfirmed) return;
-
-    const toEmail = resolveMemberEmailForOrg({
-      member: {
-        email: row.memberEmail,
-        workspaceUserEmail: row.memberWorkspaceEmail,
-        preferredEmail: row.memberPreferredEmail,
-      },
-      organization: {
-        defaultEmailPreference: row.defaultEmailPreference,
-        workspaceModuleEnabled: row.workspaceModuleEnabled,
-        workspaceConnectedAt: row.workspaceConnectedAt,
-        workspaceDomain: row.workspaceDomain,
-      },
-    });
-
-    if (!toEmail) return;
-
-    const memberName = [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || toEmail;
-    const resend = getResendClient();
-    const from = getResendFromEmail();
-
-    await resend.emails.send({
-      from,
-      to: [toEmail],
-      subject: `Payment confirmed — ${row.periodLabel}`,
-      react: PaymentConfirmedEmail({
-        organizationName: row.orgName,
-        memberName,
-        periodLabel: row.periodLabel,
-        amount: feeAmountToDecimal(row.amount),
-        currency: row.currency,
-        paidAt: formatLongDate(paidAt),
-      }),
-    });
-  } catch {
-    // Email failure must not surface as an action error
-  }
 }
 
 export const generatePaymentsAction = orgAdminActionClient
@@ -177,29 +120,17 @@ export const markPaymentPaidAction = authActionClient
 
     const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
 
-    await db
-      .update(memberPayments)
-      .set({
-        status: "paid",
-        paidAt,
-        confirmedByUserId: ctx.auth.user.id,
-        adminNote: parsedInput.adminNote ?? null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(memberPayments.id, parsedInput.paymentId),
-          eq(memberPayments.orgId, orgId),
-          inArray(memberPayments.status, ["pending", "overdue"]),
-        ),
-      );
+    const paidIds = await markPaymentsPaid(db, {
+      orgId,
+      paymentIds: [parsedInput.paymentId],
+      userId: ctx.auth.user.id,
+      paidAt,
+      adminNote: parsedInput.adminNote,
+    });
 
-    // Awaited, not deferred: the report entry is a consequence of this
-    // decision, and a gap between the two would let the group submit a roster
-    // that disagrees with the payments it was built from.
-    await syncReportMemberForPayment(parsedInput.paymentId);
-
-    after(() => sendPaymentConfirmedEmail(parsedInput.paymentId, paidAt));
+    after(async () => {
+      for (const id of paidIds) await sendPaymentConfirmedEmail(id, paidAt);
+    });
 
     return { success: true };
   });
@@ -216,26 +147,12 @@ export const cancelPaymentAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const { orgId } = await resolvePaymentAccess(ctx.auth.user.id, parsedInput.paymentId);
 
-    await db
-      .update(memberPayments)
-      .set({
-        status: "cancelled",
-        cancellationReason: parsedInput.cancellationReason,
-        adminNote: parsedInput.adminNote ?? null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(memberPayments.id, parsedInput.paymentId),
-          eq(memberPayments.orgId, orgId),
-          inArray(memberPayments.status, ["pending", "overdue"]),
-        ),
-      );
-
-    // A fee waived by an admin still confirms membership; every other
-    // cancellation reason means the payment should not have existed, and the
-    // sync removes any report row it had created.
-    await syncReportMemberForPayment(parsedInput.paymentId);
+    await cancelPayments(db, {
+      orgId,
+      paymentIds: [parsedInput.paymentId],
+      reason: parsedInput.cancellationReason,
+      adminNote: parsedInput.adminNote,
+    });
 
     return { success: true };
   });
@@ -258,37 +175,42 @@ export const bulkMarkPaymentsPaidAction = authActionClient
 
     const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
 
-    const result = await db
-      .update(memberPayments)
-      .set({
-        status: "paid",
-        paidAt,
-        confirmedByUserId: ctx.auth.user.id,
-        adminNote: parsedInput.adminNote ?? null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          inArray(memberPayments.id, permittedIds),
-          eq(memberPayments.orgId, orgId),
-          inArray(memberPayments.status, ["pending", "overdue"]),
-        ),
-      )
-      .returning({ id: memberPayments.id, memberId: memberPayments.memberId });
-
-    for (const { id } of result) {
-      await syncReportMemberForPayment(id);
-    }
+    const paidIds = await markPaymentsPaid(db, {
+      orgId,
+      paymentIds: permittedIds,
+      userId: ctx.auth.user.id,
+      paidAt,
+      adminNote: parsedInput.adminNote,
+    });
 
     after(async () => {
-      for (const { id } of result) {
+      for (const id of paidIds) {
         await sendPaymentConfirmedEmail(id, paidAt);
       }
     });
 
     return {
-      updated: result.length,
+      updated: paidIds.length,
       // Ids outside the caller's scope, already paid, or cancelled.
-      skipped: parsedInput.paymentIds.length - result.length,
+      skipped: parsedInput.paymentIds.length - paidIds.length,
     };
+  });
+
+/**
+ * Closes a `refund_due` event payment once the money has gone back. Only full
+ * org admins reach event rows through this door (see `authorizePaymentIds`).
+ */
+export const markPaymentRefundedAction = authActionClient
+  .metadata({ actionName: "markPaymentRefunded" })
+  .inputSchema(z.object({ paymentId: z.string() }))
+  .action(async ({ parsedInput, ctx }) => {
+    const { orgId } = await resolvePaymentAccess(ctx.auth.user.id, parsedInput.paymentId);
+
+    const updated = await markPaymentRefunded(db, {
+      orgId,
+      paymentId: parsedInput.paymentId,
+      userId: ctx.auth.user.id,
+    });
+
+    return { success: updated };
   });

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { db, pool } from "@/server/db";
 import {
+  events,
   groupCategories,
   groupMemberships,
   groups,
@@ -207,6 +208,48 @@ suite("the freeze, through both write paths", () => {
 
     expect(reportGroup.memberCount).toBe(1);
     expect(reportGroup.status).toBe("submitted");
+  });
+
+  it("ignores an event payment that happens to carry the period label", async () => {
+    // An event fee is not a membership fee even when its title is "2026":
+    // neither the payment sync nor the backfill may confirm membership from it.
+    const camper = await makeMember("Camper");
+
+    const [event] = await db
+      .insert(events)
+      .values({
+        orgId,
+        slug: `camp-${Date.now()}`,
+        title: PERIOD,
+        ownerType: "organization",
+        status: "published",
+        priceAmount: 25_000,
+        priceCurrency: "CZK",
+      })
+      .returning({ id: events.id });
+
+    const [payment] = await db
+      .insert(memberPayments)
+      .values({
+        orgId,
+        memberId: camper,
+        eventId: event.id,
+        type: "event",
+        amount: 25_000,
+        currency: "CZK",
+        periodLabel: PERIOD,
+        periodKey: `event:${event.id}`,
+        dueAt: new Date(),
+        status: "paid",
+        paidAt: new Date(),
+      })
+      .returning({ id: memberPayments.id });
+
+    await syncReportMemberForPayment(payment.id);
+    expect(await rosterRow(camper)).toBeNull();
+
+    await openMembershipReport({ orgId, userId });
+    expect(await rosterRow(camper)).toBeNull();
   });
 
   it("snapshots the organization's currency onto the report", async () => {

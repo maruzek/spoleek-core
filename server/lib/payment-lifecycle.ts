@@ -7,6 +7,7 @@ import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import { listAgedOutMemberIds } from "@/server/lib/member-age";
 import {
+  eventResponses,
   groupCategories,
   groupMemberships,
   groups,
@@ -21,10 +22,20 @@ import { formatLongDate } from "@/lib/format";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
-async function generateVariableSymbol(orgId: string): Promise<string> {
+type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * A six-digit variable symbol unused by any payment of the organization.
+ * Shared by membership fees and event payments so one VS never names two
+ * different debts within an organization.
+ */
+export async function generateVariableSymbol(
+  orgId: string,
+  executor: DbExecutor = db,
+): Promise<string> {
   for (let attempt = 0; attempt < 10; attempt++) {
     const vs = String(Math.floor(100000 + Math.random() * 900000));
-    const existing = await db
+    const existing = await executor
       .select({ id: memberPayments.id })
       .from(memberPayments)
       .where(and(eq(memberPayments.orgId, orgId), eq(memberPayments.variableSymbol, vs)))
@@ -170,16 +181,20 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
   try {
     const rows = await db
       .select({
+        memberId: memberPayments.memberId,
         memberEmail: tenantMembers.email,
         memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
         memberPreferredEmail: tenantMembers.preferredEmail,
         memberFirstName: tenantMembers.firstName,
         memberLastName: tenantMembers.lastName,
+        guestEmail: eventResponses.guestEmail,
+        guestName: eventResponses.guestName,
         orgName: organizations.name,
         defaultEmailPreference: organizations.defaultEmailPreference,
         workspaceModuleEnabled: organizations.workspaceModuleEnabled,
         workspaceConnectedAt: organizations.workspaceConnectedAt,
         workspaceDomain: organizations.workspaceDomain,
+        type: memberPayments.type,
         amount: memberPayments.amount,
         currency: memberPayments.currency,
         periodLabel: memberPayments.periodLabel,
@@ -188,7 +203,10 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
         dueAt: memberPayments.dueAt,
       })
       .from(memberPayments)
-      .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+      // Guest event payments have no member; their identity lives on the RSVP
+      // and is gone once the retention shred has run (then nothing is sent).
+      .leftJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+      .leftJoin(eventResponses, eq(memberPayments.responseId, eventResponses.id))
       .innerJoin(organizations, eq(memberPayments.orgId, organizations.id))
       .where(inArray(memberPayments.id, overdueIds));
 
@@ -196,23 +214,27 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
     const from = getResendFromEmail();
 
     for (const row of rows) {
-      const toEmail = resolveMemberEmailForOrg({
-        member: {
-          email: row.memberEmail,
-          workspaceUserEmail: row.memberWorkspaceEmail,
-          preferredEmail: row.memberPreferredEmail,
-        },
-        organization: {
-          defaultEmailPreference: row.defaultEmailPreference,
-          workspaceModuleEnabled: row.workspaceModuleEnabled,
-          workspaceConnectedAt: row.workspaceConnectedAt,
-          workspaceDomain: row.workspaceDomain,
-        },
-      });
+      const toEmail = row.memberId
+        ? resolveMemberEmailForOrg({
+            member: {
+              email: row.memberEmail,
+              workspaceUserEmail: row.memberWorkspaceEmail,
+              preferredEmail: row.memberPreferredEmail,
+            },
+            organization: {
+              defaultEmailPreference: row.defaultEmailPreference,
+              workspaceModuleEnabled: row.workspaceModuleEnabled,
+              workspaceConnectedAt: row.workspaceConnectedAt,
+              workspaceDomain: row.workspaceDomain,
+            },
+          })
+        : row.guestEmail;
 
       if (!toEmail) continue;
       const memberName =
-        [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") || toEmail;
+        [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") ||
+        row.guestName ||
+        toEmail;
       try {
         await resend.emails.send({
           from,
@@ -254,6 +276,7 @@ async function sendRenewalHeadsupEmails(
       .where(
         and(
           eq(memberPayments.orgId, org.id),
+          eq(memberPayments.type, "membership_fee"),
           eq(memberPayments.periodLabel, periodLabel),
         ),
       );
@@ -455,6 +478,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
   const nowOverdue = await db
     .update(memberPayments)
     .set({ status: "overdue", updatedAt: new Date() })
+    // Both types: an unpaid event fee turns overdue exactly like a membership fee.
     .where(and(eq(memberPayments.status, "pending"), lt(memberPayments.dueAt, today)))
     .returning({ id: memberPayments.id, memberId: memberPayments.memberId, orgId: memberPayments.orgId });
 

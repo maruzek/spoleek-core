@@ -16,6 +16,22 @@ export function getPaymentTitle(
   }
 }
 
+/**
+ * The name written into a payment QR's message: the member's, else the guest
+ * name from the RSVP, else nothing (a shredded guest — the VS still matches).
+ */
+export function paymentQrPayerName(row: {
+  firstName: string | null;
+  lastName: string | null;
+  guestName: string | null;
+}): string | undefined {
+  return (
+    [row.firstName, row.lastName].filter(Boolean).join(" ") ||
+    row.guestName ||
+    undefined
+  );
+}
+
 export function buildSpdString(
   payment: Pick<
     MemberPayment,
@@ -74,13 +90,15 @@ export function formatFeeAmount(minor: number, currency: string): string {
  * client-side re-sort agree on one definition.
  */
 export const PAYMENT_STATUS_SORT_ORDER: Record<MemberPaymentStatus, number> = {
-  overdue: 0,
-  pending: 1,
+  // Money the organization owes back is the most urgent thing on the page.
+  refund_due: 0,
+  overdue: 1,
+  pending: 2,
   // Settled records — paid and cancelled alike — are closed business, so they
   // share a rank and fall through to the due-date tiebreaker instead of being
   // split into two blocks.
-  paid: 2,
-  cancelled: 2,
+  paid: 3,
+  cancelled: 3,
 };
 
 /** Comparator for TanStack Table / Array#sort over payment statuses. */
@@ -108,6 +126,11 @@ export const PAYMENT_STATUS_COLORS: Record<
     chart: "#ef4444",
     badge:
       "border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200",
+  },
+  refund_due: {
+    chart: "#a855f7",
+    badge:
+      "border-purple-300 bg-purple-100 text-purple-900 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200",
   },
   pending: {
     chart: "#3b82f6",

@@ -171,10 +171,19 @@ async function getReportGroupIdByMember(
   return byMember;
 }
 
+/**
+ * `member_payments.member_id` is nullable since event payments (guests have
+ * no member), but every query here inner-joins `tenant_members` and filters
+ * `type = 'membership_fee'`, so the column is never null in these rows.
+ */
+const paymentMemberId = sql<string>`${memberPayments.memberId}`;
+
 /** The payments that confirm membership for one period. */
 function confirmedPaymentsFilter(orgId: string, periodLabel: string) {
   return and(
     eq(memberPayments.orgId, orgId),
+    // An event fee whose `periodLabel` happens to match never confirms membership.
+    eq(memberPayments.type, "membership_fee"),
     eq(memberPayments.periodLabel, periodLabel),
     or(
       eq(memberPayments.status, "paid"),
@@ -212,7 +221,7 @@ export async function listUnassignedConfirmedMembers(
 
   const rows = await db
     .select({
-      memberId: memberPayments.memberId,
+      memberId: paymentMemberId,
       status: memberPayments.status,
       cancellationReason: memberPayments.cancellationReason,
       firstName: tenantMembers.firstName,
@@ -355,7 +364,7 @@ export async function syncReportMemberForPayment(paymentId: string) {
   const [row] = await db
     .select({
       orgId: memberPayments.orgId,
-      memberId: memberPayments.memberId,
+      memberId: paymentMemberId,
       periodLabel: memberPayments.periodLabel,
       status: memberPayments.status,
       cancellationReason: memberPayments.cancellationReason,
@@ -369,9 +378,15 @@ export async function syncReportMemberForPayment(paymentId: string) {
     .from(memberPayments)
     .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
     .innerJoin(organizations, eq(memberPayments.orgId, organizations.id))
-    .where(eq(memberPayments.id, paymentId))
+    .where(
+      and(
+        eq(memberPayments.id, paymentId),
+        eq(memberPayments.type, "membership_fee"),
+      ),
+    )
     .limit(1);
 
+  // Event payments never touch the yearly report.
   if (!row || !row.reportEnabled) return;
 
   const report = await getOpenReport(row.orgId, row.periodLabel);
@@ -657,7 +672,7 @@ async function backfillReportMembers(params: {
 
   const confirmed = await db
     .select({
-      memberId: memberPayments.memberId,
+      memberId: paymentMemberId,
       paymentId: memberPayments.id,
       status: memberPayments.status,
       cancellationReason: memberPayments.cancellationReason,

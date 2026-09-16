@@ -91,10 +91,11 @@ export function MemberPaymentsTab({
    */
   const rows: PaymentWithMember[] = useMemo(() => {
     const urgency: Record<PaymentWithMember["status"], number> = {
-      overdue: 0,
-      pending: 1,
-      paid: 2,
-      cancelled: 3,
+      refund_due: 0,
+      overdue: 1,
+      pending: 2,
+      paid: 3,
+      cancelled: 4,
     };
 
     return payments
