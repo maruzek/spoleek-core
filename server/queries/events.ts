@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { resolveEligibleMemberIds } from "@/lib/events/eligibility";
+import { isLivePayment, type EventPaymentView } from "@/lib/events/payment-plan";
 import { eventEndInstant, seatsTaken } from "@/lib/events/rsvp";
 import type { EventRecipientFilter } from "@/lib/events/schemas";
 import { db } from "@/server/db";
@@ -11,6 +12,7 @@ import {
   groupCategories,
   groupMemberships,
   groups,
+  memberPayments,
   organizations,
   tenantMembers,
   type Event,
@@ -120,15 +122,69 @@ export async function listEligibleMembers(orgId: string, eventId: string) {
 
 // ─── Counts and responses ───────────────────────────────────────────────────
 
-export async function getEventCounts(orgId: string, eventId: string) {
+/** The payment columns the portal card and the response list render. */
+export const eventPaymentViewColumns = {
+  id: memberPayments.id,
+  status: memberPayments.status,
+  amount: memberPayments.amount,
+  currency: memberPayments.currency,
+  bankAccount: memberPayments.bankAccount,
+  variableSymbol: memberPayments.variableSymbol,
+  periodLabel: memberPayments.periodLabel,
+  dueAt: memberPayments.dueAt,
+  paidAt: memberPayments.paidAt,
+};
+
+/** Join condition for "the live payment of this response" (at most one). */
+const livePaymentJoin = and(
+  eq(memberPayments.responseId, eventResponses.id),
+  ne(memberPayments.status, "cancelled"),
+);
+
+export type EventCounts = {
+  confirmedSeats: number;
+  reserveCount: number;
+  yesCount: number;
+  noCount: number;
+  maybeCount: number;
+  /** Responses that owe a payment (live, not refund_due). */
+  chargedCount: number;
+  paidCount: number;
+  collectedMinor: number;
+  outstandingMinor: number;
+  currency: string | null;
+};
+
+export async function getEventCounts(orgId: string, eventId: string): Promise<EventCounts> {
   const rows = await db
     .select({
       answer: eventResponses.answer,
       standing: eventResponses.standing,
       guestCount: eventResponses.guestCount,
+      paymentStatus: memberPayments.status,
+      paymentAmount: memberPayments.amount,
+      paymentCurrency: memberPayments.currency,
     })
     .from(eventResponses)
+    .leftJoin(memberPayments, livePaymentJoin)
     .where(and(eq(eventResponses.orgId, orgId), eq(eventResponses.eventId, eventId)));
+
+  let chargedCount = 0;
+  let paidCount = 0;
+  let collectedMinor = 0;
+  let outstandingMinor = 0;
+  let currency: string | null = null;
+  for (const row of rows) {
+    if (!row.paymentStatus || row.paymentStatus === "refund_due") continue;
+    chargedCount += 1;
+    currency ??= row.paymentCurrency;
+    if (row.paymentStatus === "paid") {
+      paidCount += 1;
+      collectedMinor += row.paymentAmount ?? 0;
+    } else {
+      outstandingMinor += row.paymentAmount ?? 0;
+    }
+  }
 
   return {
     confirmedSeats: seatsTaken(rows),
@@ -136,6 +192,11 @@ export async function getEventCounts(orgId: string, eventId: string) {
     yesCount: rows.filter((row) => row.answer === "yes").length,
     noCount: rows.filter((row) => row.answer === "no").length,
     maybeCount: rows.filter((row) => row.answer === "maybe").length,
+    chargedCount,
+    paidCount,
+    collectedMinor,
+    outstandingMinor,
+    currency,
   };
 }
 
@@ -149,17 +210,44 @@ export type EventResponseRow = EventResponse & {
     preferredEmail: "personal" | "workspace" | null;
     userId: string | null;
   } | null;
+  /** The live payment, when the event charged this response. */
+  payment: EventPaymentView | null;
 };
 
 export async function listEventResponses(orgId: string, eventId: string): Promise<EventResponseRow[]> {
   const rows = await db
-    .select({ response: eventResponses, member: memberColumns })
+    .select({ response: eventResponses, member: memberColumns, payment: eventPaymentViewColumns })
     .from(eventResponses)
     .leftJoin(tenantMembers, eq(tenantMembers.id, eventResponses.memberId))
+    .leftJoin(memberPayments, livePaymentJoin)
     .where(and(eq(eventResponses.orgId, orgId), eq(eventResponses.eventId, eventId)))
     .orderBy(asc(eventResponses.respondedAt));
 
-  return rows.map((row) => ({ ...row.response, member: row.member?.id ? row.member : null }));
+  return rows.map((row) => ({
+    ...row.response,
+    member: row.member?.id ? row.member : null,
+    payment: row.payment?.id ? (row.payment as EventPaymentView) : null,
+  }));
+}
+
+/** The live payment for one response, for the portal and token pages. */
+export async function getLivePaymentForResponse(
+  orgId: string,
+  responseId: string,
+): Promise<EventPaymentView | null> {
+  const [row] = await db
+    .select(eventPaymentViewColumns)
+    .from(memberPayments)
+    .where(
+      and(
+        eq(memberPayments.orgId, orgId),
+        eq(memberPayments.responseId, responseId),
+        ne(memberPayments.status, "cancelled"),
+      ),
+    )
+    .limit(1);
+
+  return row && isLivePayment(row.status) ? row : null;
 }
 
 export async function getMemberResponse(orgId: string, eventId: string, memberId: string) {

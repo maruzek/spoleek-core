@@ -34,6 +34,20 @@ export type PlanResponse = Pick<
 /** The live payment row for the response, or `null` when there is none. */
 export type LivePayment = Pick<MemberPayment, "status" | "amount"> | null;
 
+/** What the portal card and the response list need of a live payment. */
+export type EventPaymentView = Pick<
+  MemberPayment,
+  | "id"
+  | "status"
+  | "amount"
+  | "currency"
+  | "bankAccount"
+  | "variableSymbol"
+  | "periodLabel"
+  | "dueAt"
+  | "paidAt"
+>;
+
 export type PaymentPlan =
   | { kind: "create"; amount: number }
   | { kind: "reprice"; amount: number }

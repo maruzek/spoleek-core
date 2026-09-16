@@ -2,14 +2,20 @@
 
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
+import { after } from "next/server";
 import { z } from "zod";
 
+import { resolveEventPaymentDetails, type EventPaymentView } from "@/lib/events/payment-plan";
 import { canPromote, isTokenValid, seatsTaken } from "@/lib/events/rsvp";
 import {
   addExternalInviteesSchema,
+  bulkMarkEventPaymentsPaidSchema,
+  cancelEventPaymentSchema,
   eventIdSchema,
   eventIdsSchema,
   eventInputSchema,
+  markEventPaymentPaidSchema,
+  markEventPaymentRefundedSchema,
   removeExternalInviteeSchema,
   removeResponseSchema,
   respondAsGuestSchema,
@@ -20,12 +26,27 @@ import {
   setResponseStandingSchema,
   type EventInput,
 } from "@/lib/events/schemas";
+import { feeToMinorUnits } from "@/lib/payments";
 import { actionClient } from "@/lib/safe-action";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { slugify } from "@/lib/slugify";
 import { db } from "@/server/db";
-import { eventAudience, eventResponses, eventRsvpTokens, events } from "@/server/db/schema";
+import {
+  eventAudience,
+  eventResponses,
+  eventRsvpTokens,
+  events,
+  memberPayments,
+} from "@/server/db/schema";
+import { sendEventPaymentEmail } from "@/server/lib/events/payment-emails";
+import { syncEventPayment, syncEventPaymentsForEvent, type SyncResult } from "@/server/lib/events/payments";
 import { EventError, upsertResponse } from "@/server/lib/events/responses";
+import {
+  cancelPayments,
+  markPaymentRefunded,
+  markPaymentsPaid,
+  sendPaymentConfirmedEmail,
+} from "@/server/lib/payment-status";
 import {
   findTokenHolder,
   issueRsvpToken,
@@ -37,11 +58,13 @@ import { sendEventInvites } from "@/server/notifications/events";
 import {
   requireCurrentMember,
   requireEventManagementAccess,
+  requireEventPaymentAccess,
   requireGroupAdminModuleAccess,
   requireEventOwnerAccess,
   requireOrganization,
 } from "@/server/queries/access";
 import {
+  eventPaymentViewColumns,
   getEventBySlug,
   getEventRecipients,
   isMemberEligibleForEvent,
@@ -95,7 +118,57 @@ function eventColumns(input: EventInput) {
     locationName: input.locationName ?? null,
     locationAddress: input.locationAddress ?? null,
     communicationLink: input.communicationLink ?? null,
+    ...priceColumns(input),
   };
+}
+
+/**
+ * The switch off means "free", whatever the other fields say — the form keeps
+ * them so flipping back does not lose the price. Major units in, minor out,
+ * like membership fees.
+ */
+function priceColumns(input: EventInput) {
+  if (!input.paid || input.priceAmount == null || !input.priceCurrency) {
+    return {
+      priceAmount: null,
+      priceCurrency: null,
+      priceBankAccount: null,
+      paymentDueAt: null,
+    };
+  }
+  return {
+    priceAmount: feeToMinorUnits(input.priceAmount),
+    priceCurrency: input.priceCurrency,
+    priceBankAccount: input.priceBankAccount ?? null,
+    paymentDueAt: input.paymentDueAt ?? null,
+  };
+}
+
+/** Queues the "here is your payment" email for a create / reprice plan. */
+function notifyPaymentSync(payment: SyncResult | undefined, rsvpToken?: string | null) {
+  if (!payment?.paymentId) return;
+  if (payment.plan.kind !== "create" && payment.plan.kind !== "reprice") return;
+  const paymentId = payment.paymentId;
+  const updated = payment.plan.kind === "reprice";
+  after(() => sendEventPaymentEmail(paymentId, { updated, rsvpToken }));
+}
+
+/**
+ * A priced event must have somewhere for the money to go. Checked when
+ * publishing (a draft may be saved without) and again by the sync, which
+ * throws the same code if the account disappears later.
+ */
+function assertBankAccountForPricedEvent(
+  organization: { membershipFeeBankAccount: string | null },
+  event: { priceAmount: number | null; priceBankAccount: string | null },
+) {
+  if (event.priceAmount === null) return;
+  const { bankAccount } = resolveEventPaymentDetails({
+    event: { ...event, paymentDueAt: null, rsvpDeadlineAt: null, startsAt: null },
+    orgBankAccount: organization.membershipFeeBankAccount,
+    now: new Date(),
+  });
+  if (!bankAccount) throw new EventError("PAYMENT_BANK_ACCOUNT_MISSING");
 }
 
 /** "Name <email>" or bare email, one per line / comma. */
@@ -179,10 +252,40 @@ export const updateEventAction = authActionClient
       }
     }
 
-    await db
-      .update(events)
-      .set({ slug, ...eventColumns(parsedInput) })
-      .where(eq(events.id, event.id));
+    const columns = eventColumns(parsedInput);
+    const priceChanged =
+      columns.priceAmount !== event.priceAmount ||
+      columns.priceCurrency !== event.priceCurrency ||
+      columns.priceBankAccount !== event.priceBankAccount;
+
+    // A published event may not be priced without an account to pay into.
+    if (priceChanged && event.status === "published") {
+      assertBankAccountForPricedEvent(context.organization, columns);
+    }
+
+    const notifyPaymentIds = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(events)
+        .set({ slug, ...columns })
+        .where(eq(events.id, event.id))
+        .returning();
+
+      if (!priceChanged) return [];
+
+      // Every yes follows the new price in the same transaction: pending rows
+      // re-priced, missing ones created, paid ones untouched.
+      const summary = await syncEventPaymentsForEvent(tx, {
+        orgId: context.organization.id,
+        event: updated!,
+      });
+      return summary.notifyPaymentIds;
+    });
+
+    after(async () => {
+      for (const paymentId of notifyPaymentIds) {
+        await sendEventPaymentEmail(paymentId, { updated: true });
+      }
+    });
 
     return { success: true as const, eventId: event.id, slug };
   });
@@ -191,7 +294,8 @@ export const publishEventAction = authActionClient
   .metadata({ actionName: "publishEvent" })
   .inputSchema(eventIdSchema)
   .action(async ({ parsedInput }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+    const { context, event } = await requireEventManagementAccess(parsedInput.eventId);
+    assertBankAccountForPricedEvent(context.organization, event);
     await db.update(events).set({ status: "published" }).where(eq(events.id, event.id));
     return { success: true as const };
   });
@@ -360,7 +464,7 @@ export const setResponseStandingAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const { event } = await requireEventManagementAccess(parsedInput.eventId);
 
-    await db.transaction(async (tx) => {
+    const payment = await db.transaction(async (tx) => {
       // Same lock as the RSVP path, so a promotion cannot race a new yes.
       await tx.select({ id: events.id }).from(events).where(eq(events.id, event.id)).for("update");
 
@@ -387,14 +491,25 @@ export const setResponseStandingAction = authActionClient
         }
       }
 
-      await tx
+      const [updated] = await tx
         .update(eventResponses)
         .set({
           standing: parsedInput.standing,
           confirmedByUserId: parsedInput.standing === "confirmed" ? ctx.auth.user.id : null,
         })
-        .where(eq(eventResponses.id, response.id));
+        .where(eq(eventResponses.id, response.id))
+        .returning();
+
+      // Promotion charges, demotion cancels (or flags a paid row for refund).
+      return syncEventPayment(tx, {
+        orgId: event.orgId,
+        event,
+        response: updated!,
+        responseId: updated!.id,
+      });
     });
+
+    notifyPaymentSync(payment);
 
     return { success: true as const };
   });
@@ -405,9 +520,115 @@ export const removeResponseAction = authActionClient
   .action(async ({ parsedInput }) => {
     const { event } = await requireEventManagementAccess(parsedInput.eventId);
 
-    await db
-      .delete(eventResponses)
-      .where(and(eq(eventResponses.eventId, event.id), eq(eventResponses.id, parsedInput.responseId)));
+    await db.transaction(async (tx) => {
+      // Sync before the delete: the FK sets `response_id` null afterwards and
+      // the live row could no longer be found. A pending payment is cancelled,
+      // a paid one becomes refund_due and survives the delete.
+      await syncEventPayment(tx, {
+        orgId: event.orgId,
+        event,
+        response: null,
+        responseId: parsedInput.responseId,
+      });
+
+      await tx
+        .delete(eventResponses)
+        .where(and(eq(eventResponses.eventId, event.id), eq(eventResponses.id, parsedInput.responseId)));
+    });
+
+    return { success: true as const };
+  });
+
+// ─── Event payment actions (event managers, no canManagePayments needed) ────
+
+export const markEventPaymentPaidAction = authActionClient
+  .metadata({ actionName: "markEventPaymentPaid" })
+  .inputSchema(markEventPaymentPaidSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
+    const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
+
+    const paidIds = await markPaymentsPaid(db, {
+      orgId: payment.orgId,
+      paymentIds: [payment.id],
+      userId: ctx.auth.user.id,
+      paidAt,
+      adminNote: parsedInput.adminNote,
+    });
+    if (paidIds.length === 0) throw new EventError("PAYMENT_NOT_PENDING");
+
+    after(() => sendPaymentConfirmedEmail(payment.id, paidAt));
+
+    return { success: true as const };
+  });
+
+export const bulkMarkEventPaymentsPaidAction = authActionClient
+  .metadata({ actionName: "bulkMarkEventPaymentsPaid" })
+  .inputSchema(bulkMarkEventPaymentsPaidSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+    const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
+
+    // Only this event's rows: an id from another event is dropped, not acted on.
+    const own = await db
+      .select({ id: memberPayments.id })
+      .from(memberPayments)
+      .where(
+        and(
+          eq(memberPayments.orgId, event.orgId),
+          eq(memberPayments.eventId, event.id),
+          eq(memberPayments.type, "event"),
+          inArray(memberPayments.id, parsedInput.paymentIds),
+        ),
+      );
+
+    const paidIds = await markPaymentsPaid(db, {
+      orgId: event.orgId,
+      paymentIds: own.map((row) => row.id),
+      userId: ctx.auth.user.id,
+      paidAt,
+    });
+
+    after(async () => {
+      for (const id of paidIds) await sendPaymentConfirmedEmail(id, paidAt);
+    });
+
+    return {
+      success: true as const,
+      updated: paidIds.length,
+      skipped: parsedInput.paymentIds.length - paidIds.length,
+    };
+  });
+
+export const cancelEventPaymentAction = authActionClient
+  .metadata({ actionName: "cancelEventPayment" })
+  .inputSchema(cancelEventPaymentSchema)
+  .action(async ({ parsedInput }) => {
+    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
+
+    const cancelled = await cancelPayments(db, {
+      orgId: payment.orgId,
+      paymentIds: [payment.id],
+      reason: parsedInput.reason,
+      adminNote: parsedInput.adminNote,
+    });
+    if (cancelled.length === 0) throw new EventError("PAYMENT_NOT_PENDING");
+
+    return { success: true as const };
+  });
+
+export const markEventPaymentRefundedAction = authActionClient
+  .metadata({ actionName: "markEventPaymentRefunded" })
+  .inputSchema(markEventPaymentRefundedSchema)
+  .action(async ({ parsedInput, ctx }) => {
+    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
+
+    const updated = await markPaymentRefunded(db, {
+      orgId: payment.orgId,
+      paymentId: payment.id,
+      userId: ctx.auth.user.id,
+    });
+    if (!updated) throw new EventError("PAYMENT_NOT_PAID");
 
     return { success: true as const };
   });
@@ -469,7 +690,13 @@ export const respondToEventAction = authActionClient
       }),
     );
 
-    return { success: true as const, standing: result.response.standing };
+    notifyPaymentSync(result.payment);
+
+    return {
+      success: true as const,
+      standing: result.response.standing,
+      payment: await livePaymentFor(result.payment),
+    };
   });
 
 /** Token link: shadow members, non-activated members, external invitees. */
@@ -508,8 +735,31 @@ export const respondWithTokenAction = actionClient
       return upserted;
     });
 
-    return { success: true as const, standing: result.response.standing };
+    notifyPaymentSync(result.payment, parsedInput.token);
+
+    return {
+      success: true as const,
+      standing: result.response.standing,
+      payment: await livePaymentFor(result.payment),
+    };
   });
+
+/**
+ * The payment card's data straight after an RSVP, so the portal and token
+ * pages can show it without a reload. Null when the plan left nothing live.
+ */
+async function livePaymentFor(sync: SyncResult | undefined): Promise<EventPaymentView | null> {
+  if (!sync?.paymentId) return null;
+  if (sync.plan.kind === "cancel") return null;
+
+  const [row] = await db
+    .select(eventPaymentViewColumns)
+    .from(memberPayments)
+    .where(eq(memberPayments.id, sync.paymentId))
+    .limit(1);
+
+  return row ?? null;
+}
 
 async function externalNameFor(eventId: string, email: string) {
   const [rule] = await db
@@ -584,5 +834,12 @@ export const respondAsGuestAction = actionClient
       return { result: upserted, token: issued };
     });
 
-    return { success: true as const, standing: result.response.standing, token };
+    notifyPaymentSync(result.payment, token);
+
+    return {
+      success: true as const,
+      standing: result.response.standing,
+      token,
+      payment: await livePaymentFor(result.payment),
+    };
   });

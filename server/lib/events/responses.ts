@@ -3,29 +3,12 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { isRsvpOpen, resolveStanding, seatsTaken } from "@/lib/events/rsvp";
 import { db } from "@/server/db";
 import { eventResponses, events, type EventRsvpAnswer } from "@/server/db/schema";
+import { EventError } from "@/server/lib/events/errors";
+import { syncEventPayment, type SyncResult } from "@/server/lib/events/payments";
+
+export { EventError, type EventErrorCode } from "@/server/lib/events/errors";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * Error codes surfaced to the UI as the thrown message. The safe-action client
- * forwards `error.message`, so the client switches on these strings.
- */
-export type EventErrorCode =
-  | "RSVP_CLOSED"
-  | "NOT_ELIGIBLE"
-  | "TOO_MANY_GUESTS"
-  | "TOKEN_INVALID"
-  | "CAPACITY_EXCEEDED"
-  | "RATE_LIMITED"
-  | "SLUG_TAKEN"
-  | "NOT_FOUND";
-
-export class EventError extends Error {
-  constructor(public readonly code: EventErrorCode) {
-    super(code);
-    this.name = "EventError";
-  }
-}
 
 export type Responder =
   | { memberId: string; guestEmail?: null; guestName?: null }
@@ -38,6 +21,10 @@ export type Responder =
  * serialized: the second reads the first's committed row and lands on the
  * reserve list. Seats are counted excluding the responder's own current row —
  * they compete against everyone else, not their previous self.
+ *
+ * On a priced event the payment follows in the same transaction (see
+ * `syncEventPayment`); the sync also runs when the event is free so a price
+ * that was removed still cancels what is pending.
  */
 export async function upsertResponse(
   tx: Tx,
@@ -122,7 +109,15 @@ export async function upsertResponse(
       .where(eq(eventResponses.id, existing.id))
       .returning();
 
-    return { event, response: updated!, created: false as const };
+    const payment = await syncEventPayment(tx, {
+      orgId: params.orgId,
+      event,
+      response: updated!,
+      responseId: updated!.id,
+      now,
+    });
+
+    return { event, response: updated!, created: false as const, payment };
   }
 
   const [created] = await tx
@@ -140,5 +135,13 @@ export async function upsertResponse(
     })
     .returning();
 
-  return { event, response: created!, created: true as const };
+  const payment: SyncResult = await syncEventPayment(tx, {
+    orgId: params.orgId,
+    event,
+    response: created!,
+    responseId: created!.id,
+    now,
+  });
+
+  return { event, response: created!, created: true as const, payment };
 }

@@ -333,6 +333,10 @@ const en = {
       TOKEN_INVALID: "This link is no longer valid.",
       RATE_LIMITED: "Too many attempts. Please try again later.",
       NOT_FOUND: "This event could not be found.",
+      PAYMENT_BANK_ACCOUNT_MISSING:
+        "This event has a price but no bank account to pay into. Add one on the event or in the organization's fee settings.",
+      PAYMENT_NOT_PENDING: "Only a pending or overdue payment can be changed this way.",
+      PAYMENT_NOT_PAID: "Only a payment marked as refund due can be settled.",
       generic: "Something went wrong. Please try again.",
     },
     list: {
@@ -886,6 +890,10 @@ const cs: Dictionary = {
       TOKEN_INVALID: "Tento odkaz už není platný.",
       RATE_LIMITED: "Příliš mnoho pokusů. Zkuste to prosím později.",
       NOT_FOUND: "Akce nebyla nalezena.",
+      PAYMENT_BANK_ACCOUNT_MISSING:
+        "Akce má cenu, ale není kam platit. Doplňte bankovní účet u akce nebo v nastavení příspěvků organizace.",
+      PAYMENT_NOT_PENDING: "Takto lze změnit jen čekající nebo zpožděnou platbu.",
+      PAYMENT_NOT_PAID: "Vypořádat lze jen platbu označenou k vrácení.",
       generic: "Něco se pokazilo. Zkuste to prosím znovu.",
     },
     list: {
