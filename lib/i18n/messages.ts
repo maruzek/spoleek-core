@@ -382,6 +382,10 @@ const en = {
       goingCount: (n: number) => (n === 1 ? "1 person going" : `${n} people going`),
       chat: "Chat",
       openChat: "Open the event chat",
+      price: "Price",
+      pricePerPerson: (amount: string) => `${amount} per person`,
+      priceGuestsToo: "Guests pay the same.",
+      free: "Free",
       noDescription: "The organiser has not added any details yet.",
       yourStatus: {
         going: "You're going",
@@ -399,6 +403,11 @@ const en = {
       fewer: "Fewer guests",
       more: "More guests",
       party: (n: number) => (n === 1 ? "Just you" : `You + ${n - 1}`),
+      payment: {
+        reserveTitle: "No payment needed yet",
+        reserveBody: "You are on the reserve list. Payment details appear here once the organiser confirms your place.",
+        guestPrompt: "Payment details are on the page behind your link, and in the email we sent you.",
+      },
     },
     public: {
       yourName: "Your name",
@@ -941,6 +950,10 @@ const cs: Dictionary = {
       goingCount: (n: number) => (n === 1 ? "1 člověk přijde" : n < 5 ? `${n} lidé přijdou` : `${n} lidí přijde`),
       chat: "Chat",
       openChat: "Otevřít chat akce",
+      price: "Cena",
+      pricePerPerson: (amount: string) => `${amount} za osobu`,
+      priceGuestsToo: "Hosté platí stejně.",
+      free: "Zdarma",
       noDescription: "Pořadatel zatím nepřidal žádné podrobnosti.",
       yourStatus: {
         going: "Přijdete",
@@ -958,6 +971,11 @@ const cs: Dictionary = {
       fewer: "Méně hostů",
       more: "Více hostů",
       party: (n: number) => (n === 1 ? "Jen vy" : `Vy + ${n - 1}`),
+      payment: {
+        reserveTitle: "Zatím není co platit",
+        reserveBody: "Jste mezi náhradníky. Platební údaje se tu objeví, jakmile vám pořadatel potvrdí místo.",
+        guestPrompt: "Platební údaje najdete na stránce za svým odkazem a v e-mailu, který jsme vám poslali.",
+      },
     },
     public: {
       yourName: "Vaše jméno",

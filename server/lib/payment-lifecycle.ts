@@ -1,6 +1,6 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 
-import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
+import { PaymentOverdueEmail, paymentOverdueEmailSubject } from "@/emails/payment-overdue-email";
 import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
 import { resolveMembershipPeriod } from "@/lib/membership-period";
 import { feeAmountToDecimal } from "@/lib/payments";
@@ -239,7 +239,7 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
         await resend.emails.send({
           from,
           to: [toEmail],
-          subject: `Action required: membership fee overdue — ${row.periodLabel}`,
+          subject: paymentOverdueEmailSubject({ periodLabel: row.periodLabel, feeKind: row.type }),
           react: PaymentOverdueEmail({
             organizationName: row.orgName,
             memberName,
@@ -249,6 +249,7 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
             dueAt: formatLongDate(row.dueAt),
             bankAccount: row.bankAccount,
             variableSymbol: row.variableSymbol,
+            feeKind: row.type,
           }),
         });
       } catch {

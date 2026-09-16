@@ -212,13 +212,20 @@ export async function listPaymentsForOrg(
   }));
 }
 
+export type MemberPaymentRow = MemberPayment & {
+  /** Set for event payments; the portal links the row to the event. */
+  eventTitle: string | null;
+  eventSlug: string | null;
+};
+
 export async function listPaymentsForMember(
   orgId: string,
   memberId: string,
-): Promise<MemberPayment[]> {
-  return db
-    .select()
+): Promise<MemberPaymentRow[]> {
+  const rows = await db
+    .select({ payment: memberPayments, eventTitle: events.title, eventSlug: events.slug })
     .from(memberPayments)
+    .leftJoin(events, eq(memberPayments.eventId, events.id))
     .where(
       and(
         eq(memberPayments.orgId, orgId),
@@ -226,6 +233,8 @@ export async function listPaymentsForMember(
       ),
     )
     .orderBy(desc(memberPayments.createdAt));
+
+  return rows.map((row) => ({ ...row.payment, eventTitle: row.eventTitle, eventSlug: row.eventSlug }));
 }
 
 /**

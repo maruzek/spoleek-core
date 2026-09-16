@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFormatters } from "@/components/locale-provider";
 import QRCode from "react-qr-code";
-import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
+import { CheckIcon, CircleCheckIcon, CopyIcon, TriangleAlertIcon, UndoIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,31 +15,52 @@ import {
   getPaymentTitle,
 } from "@/lib/payments";
 import { cn } from "@/lib/utils";
-import type { MemberPayment } from "@/server/db/schema";
+import type { MemberPayment, MemberPaymentType } from "@/server/db/schema";
+
+/** What the card renders: a full `MemberPayment`, or the live-payment slice an event page loads. */
+export type PaymentCardPayment = Pick<
+  MemberPayment,
+  | "id"
+  | "status"
+  | "amount"
+  | "currency"
+  | "bankAccount"
+  | "variableSymbol"
+  | "periodLabel"
+  | "dueAt"
+  | "paidAt"
+> & { type?: MemberPaymentType };
 
 export function PaymentQrCard({
   payment,
   payerName,
+  eventTitle,
 }: {
-  payment: MemberPayment;
+  payment: PaymentCardPayment;
   /**
    * Who owes this payment. Taken as a prop rather than read from the app shell
    * so an admin viewing someone else's record does not end up in the SPD
    * string as the payer.
    */
   payerName?: string;
+  /** For event payments rendered under the RSVP: names the event in the header. */
+  eventTitle?: string;
 }) {
   const { formatDateTime, locale } = useFormatters();
 
   const [copied, setCopied] = useState(false);
 
+  const type = payment.type ?? (eventTitle ? "event" : "membership_fee");
   const memberName = payerName?.trim() || undefined;
-  const spdString = buildSpdString(payment, memberName);
+  const isOverdue = payment.status === "overdue";
+  const isPending = payment.status === "pending";
+  const isPaid = payment.status === "paid";
+  const isRefundDue = payment.status === "refund_due";
+  // Only worth scanning while the money is still owed.
+  const spdString = isPending || isOverdue ? buildSpdString(payment, memberName) : null;
   const account = payment.bankAccount
     ? formatBankAccount(payment.bankAccount)
     : null;
-  const isOverdue = payment.status === "overdue";
-  const isPending = payment.status === "pending";
 
   // todo: remove handleCopy, implement the general copy button, use DropdownMenu for multiple data fields
   function handleCopy() {
@@ -65,7 +86,7 @@ export function PaymentQrCard({
       <div
         className={cn(
           "h-1 w-full",
-          isOverdue ? "bg-destructive" : "bg-primary",
+          isOverdue ? "bg-destructive" : isRefundDue ? "bg-purple-500" : "bg-primary",
         )}
       />
 
@@ -73,20 +94,23 @@ export function PaymentQrCard({
       <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-3">
         <div className="flex flex-col gap-0.5">
           <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            {payment.type === "membership_fee" ? "Membership fee" : "Event fee"}{" "}
-            · {payment.periodLabel}
+            {type === "membership_fee" ? "Membership fee" : "Event fee"}{" "}
+            · {eventTitle ?? payment.periodLabel}
           </p>
           <h2 className="font-heading text-lg font-medium leading-tight text-foreground">
-            {getPaymentTitle(payment.type, payment.periodLabel)}
+            {eventTitle ? "Your payment" : getPaymentTitle(type, payment.periodLabel)}
           </h2>
         </div>
         <Badge
           variant={
             isOverdue ? "destructive" : isPending ? "secondary" : "outline"
           }
-          className="mt-0.5 shrink-0 capitalize"
+          className={cn(
+            "mt-0.5 shrink-0 capitalize",
+            isRefundDue && "border-purple-300 bg-purple-100 text-purple-900 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200",
+          )}
         >
-          {payment.status}
+          {isRefundDue ? "Refund due" : payment.status}
         </Badge>
       </div>
 
@@ -98,7 +122,7 @@ export function PaymentQrCard({
         )}
       >
         <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          Amount due
+          {isPaid ? "Amount paid" : isRefundDue ? "Amount to be refunded" : "Amount due"}
         </p>
         <div className="flex items-baseline gap-2">
           <span
@@ -117,17 +141,31 @@ export function PaymentQrCard({
           </span>
         </div>
         <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-          {isOverdue ? (
+          {isPaid ? (
             <>
-              <TriangleAlertIcon className="mr-1 inline size-3 align-[-1px]" />
-              Overdue since
+              <CircleCheckIcon className="mr-1 inline size-3 align-[-1px] text-green-600" />
+              Paid{payment.paidAt ? ` on ${formatDateTime(payment.paidAt)}` : ""}
+            </>
+          ) : isRefundDue ? (
+            <>
+              <UndoIcon className="mr-1 inline size-3 align-[-1px]" />
+              We owe you a refund — the organiser will contact you.
             </>
           ) : (
-            "Due by"
-          )}{" "}
-          <span className={cn("font-medium", isOverdue && "text-destructive")}>
-            {formatDateTime(payment.dueAt)}
-          </span>
+            <>
+              {isOverdue ? (
+                <>
+                  <TriangleAlertIcon className="mr-1 inline size-3 align-[-1px]" />
+                  Overdue since
+                </>
+              ) : (
+                "Due by"
+              )}{" "}
+              <span className={cn("font-medium", isOverdue && "text-destructive")}>
+                {formatDateTime(payment.dueAt)}
+              </span>
+            </>
+          )}
         </p>
       </div>
 
@@ -215,7 +253,7 @@ export function PaymentQrCard({
         </>
       )}
 
-      {!spdString && payment.bankAccount == null && (
+      {!spdString && (isPending || isOverdue) && payment.bankAccount == null && (
         <p className="px-5 pb-5 text-sm italic text-muted-foreground">
           Bank account not configured. Contact your organization.
         </p>

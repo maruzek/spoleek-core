@@ -13,7 +13,7 @@ import { eventAudience, eventResponses, tenantMembers } from "@/server/db/schema
 import { findTokenHolder } from "@/server/lib/events/tokens";
 import { getAppOrganization } from "@/server/queries/app";
 import { getViewerSession } from "@/server/queries/auth";
-import { getEventById, getEventCounts, getMemberResponse } from "@/server/queries/events";
+import { getEventById, getEventCounts, getLivePaymentForResponse, getMemberResponse } from "@/server/queries/events";
 import { getFormForFiller, listFormsForEvent } from "@/server/queries/forms";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +100,7 @@ export default async function TokenRsvpPage({ params }: { params: Promise<{ toke
   ]);
 
   const open = isRsvpOpen(holder.event, now);
+  const payment = current ? await getLivePaymentForResponse(organization.id, current.id) : null;
 
   const identity = {
     kind: "token" as const,
@@ -129,6 +130,11 @@ export default async function TokenRsvpPage({ params }: { params: Promise<{ toke
             open={open}
             maxGuests={holder.event.maxGuestsPerResponse}
             current={current ? { answer: current.answer, guestCount: current.guestCount, standing: current.standing } : null}
+            payment={payment}
+            priced={holder.event.priceAmount !== null}
+            eventTitle={holder.event.title}
+            payerName={holderName ?? undefined}
+            paymentLabels={t.detail.payment}
             afterRsvpForm={
               afterRsvpData
                 ? {

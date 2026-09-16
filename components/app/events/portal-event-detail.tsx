@@ -4,6 +4,7 @@ import {
   ArrowLeftIcon,
   BanIcon,
   CalendarIcon,
+  CoinsIcon,
   ExternalLinkIcon,
   HourglassIcon,
   MapPinIcon,
@@ -17,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatEventWhen, isLongDescription } from "@/lib/events/display";
+import { formatFeeAmount } from "@/lib/payments";
 import type { Dictionary } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 import type { Event, EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
@@ -221,6 +223,14 @@ export function PortalEventDetail({
                 {event.maxGuestsPerResponse > 0 ? ` · ${d.guestsAllowed(event.maxGuestsPerResponse)}` : ""}
               </span>
             </Row>
+            {event.priceAmount !== null && event.priceCurrency ? (
+              <Row icon={<CoinsIcon />} label={d.price}>
+                {d.pricePerPerson(formatFeeAmount(event.priceAmount, event.priceCurrency))}
+                {event.maxGuestsPerResponse > 0 ? (
+                  <span className="block text-xs text-muted-foreground">{d.priceGuestsToo}</span>
+                ) : null}
+              </Row>
+            ) : null}
             {event.communicationLink ? (
               <Row icon={<MessageSquareIcon />} label={d.chat}>
                 <a

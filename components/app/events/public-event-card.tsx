@@ -1,9 +1,18 @@
 import type { ReactNode } from "react";
-import { CalendarIcon, ExternalLinkIcon, HourglassIcon, MapPinIcon, MessageSquareIcon, UsersIcon } from "lucide-react";
+import {
+  CalendarIcon,
+  CoinsIcon,
+  ExternalLinkIcon,
+  HourglassIcon,
+  MapPinIcon,
+  MessageSquareIcon,
+  UsersIcon,
+} from "lucide-react";
 
 import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatEventWhen, isLongDescription } from "@/lib/events/display";
+import { formatFeeAmount } from "@/lib/payments";
 import type { Dictionary } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/server/db/schema";
@@ -154,6 +163,14 @@ export function PublicEventCard({
                 )}
                 {event.maxGuestsPerResponse > 0 ? (
                   <span className="block text-xs text-muted-foreground">{d.guestsAllowed(event.maxGuestsPerResponse)}</span>
+                ) : null}
+              </Row>
+            ) : null}
+            {event.priceAmount !== null && event.priceCurrency ? (
+              <Row icon={<CoinsIcon />} label={d.price}>
+                {d.pricePerPerson(formatFeeAmount(event.priceAmount, event.priceCurrency))}
+                {event.maxGuestsPerResponse > 0 ? (
+                  <span className="block text-xs text-muted-foreground">{d.priceGuestsToo}</span>
                 ) : null}
               </Row>
             ) : null}

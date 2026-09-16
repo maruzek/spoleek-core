@@ -13,29 +13,53 @@ export default async function PortalPaymentsPage() {
 
   const payments = await listPaymentsForMember(organization.id, member.id);
 
-  // Overdue shown first so urgent items are immediately visible
+  // Refunds owed to the member lead, then overdue, so what needs attention is
+  // immediately visible.
+  const refundDuePayments = payments.filter((p) => p.status === "refund_due");
   const overduePayments = payments.filter((p) => p.status === "overdue");
   const pendingPayments = payments.filter((p) => p.status === "pending");
-  const activePendingPayments = [...overduePayments, ...pendingPayments];
+  const activePendingPayments = [...refundDuePayments, ...overduePayments, ...pendingPayments];
   const historicalPayments = payments.filter(
     (p) => p.status === "paid" || p.status === "cancelled",
   );
+  const payerName = [member.firstName, member.lastName].filter(Boolean).join(" ");
 
   return (
     <AppPage
       eyebrow="Member portal"
       title="Your payments."
-      description="Membership fee payment details and payment instructions."
+      description="Membership fees and event fees, with payment instructions."
     >
       {activePendingPayments.length === 0 && historicalPayments.length === 0 ? (
         <AppPlaceholder
           title="No payments yet"
-          description="Payment records will appear here when your membership fee is due."
+          description="Payment records will appear here when a membership fee is due or you sign up for a paid event."
         />
       ) : null}
 
-      {overduePayments.length > 0 ? (
+      {refundDuePayments.length > 0 ? (
         <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-bold tracking-tight">Refunds due to you</h2>
+            <p className="text-sm text-muted-foreground">
+              You paid for an event you are no longer confirmed for. The organiser will return the money and contact you.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+            {refundDuePayments.map((payment) => (
+              <PaymentQrCard
+                key={payment.id}
+                payment={payment}
+                payerName={payerName}
+                eventTitle={payment.eventTitle ?? undefined}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {overduePayments.length > 0 ? (
+        <div className={refundDuePayments.length > 0 ? "mt-8 flex flex-col gap-6" : "flex flex-col gap-6"}>
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-bold tracking-tight text-destructive">Overdue payments</h2>
             <p className="text-sm text-muted-foreground">
@@ -47,9 +71,8 @@ export default async function PortalPaymentsPage() {
               <PaymentQrCard
                 key={payment.id}
                 payment={payment}
-                payerName={[member.firstName, member.lastName]
-                  .filter(Boolean)
-                  .join(" ")}
+                payerName={payerName}
+                eventTitle={payment.eventTitle ?? undefined}
               />
             ))}
           </div>
@@ -57,7 +80,7 @@ export default async function PortalPaymentsPage() {
       ) : null}
 
       {pendingPayments.length > 0 ? (
-        <div className={overduePayments.length > 0 ? "mt-8 flex flex-col gap-6" : "flex flex-col gap-6"}>
+        <div className={overduePayments.length > 0 || refundDuePayments.length > 0 ? "mt-8 flex flex-col gap-6" : "flex flex-col gap-6"}>
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-bold tracking-tight">Pending payments</h2>
             <p className="text-sm text-muted-foreground">
@@ -69,9 +92,8 @@ export default async function PortalPaymentsPage() {
               <PaymentQrCard
                 key={payment.id}
                 payment={payment}
-                payerName={[member.firstName, member.lastName]
-                  .filter(Boolean)
-                  .join(" ")}
+                payerName={payerName}
+                eventTitle={payment.eventTitle ?? undefined}
               />
             ))}
           </div>
