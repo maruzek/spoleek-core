@@ -56,7 +56,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEventNextStep, type EventNextStep } from "@/lib/events/next-step";
 import type { TemplateOption } from "@/components/app/forms/form-create-dialog";
-import type { EventInput, EventRecipientFilter } from "@/lib/events/schemas";
+import { eventPriceToInput, type EventInput, type EventRecipientFilter } from "@/lib/events/schemas";
 import { cn } from "@/lib/utils";
 import {
   cancelEventAction,
@@ -169,7 +169,11 @@ export function EventAdminDetail({
     },
   });
 
-  const formValues: EventInput = { ...event, descriptionHtml: event.descriptionHtml };
+  const formValues: EventInput = {
+    ...event,
+    descriptionHtml: event.descriptionHtml,
+    ...eventPriceToInput(event),
+  };
   const memberRules = audience.flatMap((r): AudienceDraft[] => {
     if (r.kind === "group" && r.groupId) return [{ kind: "group", groupId: r.groupId, label: r.label }];
     if (r.kind === "category" && r.categoryId) return [{ kind: "category", categoryId: r.categoryId, label: r.label }];

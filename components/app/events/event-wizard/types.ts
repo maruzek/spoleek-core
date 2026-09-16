@@ -53,5 +53,10 @@ export function emptyDraft(): EventDraft {
     locationName: null,
     locationAddress: null,
     communicationLink: null,
+    paid: false,
+    priceAmount: null,
+    priceCurrency: null,
+    priceBankAccount: null,
+    paymentDueAt: null,
   };
 }

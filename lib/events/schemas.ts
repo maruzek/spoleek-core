@@ -125,6 +125,25 @@ export const eventInputSchema = z
 
 export type EventInput = z.infer<typeof eventInputSchema>;
 
+/**
+ * The price fields of an `events` row as the form edits them: the switch is
+ * derived from `priceAmount`, and the amount goes out in major units.
+ */
+export function eventPriceToInput(event: {
+  priceAmount: number | null;
+  priceCurrency: string | null;
+  priceBankAccount: string | null;
+  paymentDueAt: Date | null;
+}): Pick<EventInput, "paid" | "priceAmount" | "priceCurrency" | "priceBankAccount" | "paymentDueAt"> {
+  return {
+    paid: event.priceAmount !== null,
+    priceAmount: event.priceAmount === null ? null : event.priceAmount / 100,
+    priceCurrency: event.priceCurrency,
+    priceBankAccount: event.priceBankAccount,
+    paymentDueAt: event.paymentDueAt,
+  };
+}
+
 export const audienceRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: z.string().uuid() }),
   z.object({ kind: z.literal("category"), categoryId: z.string().uuid() }),
