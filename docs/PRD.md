@@ -82,6 +82,14 @@ a follow-up.
 
 - **QR Payments:** Automated generation of QR codes for frictionless mobile banking.
 - **Dynamic Membership Fees:** Subscription fee routing that dynamically adjusts amounts or destination bank accounts based on a member's region or group assignment.
+- **Event payments:** Implemented — see
+  `docs/superpowers/specs/2026-09-16-event-payments-design.md`. An event may
+  carry a price per person; a confirmed yes creates a tracked payment with a
+  variable symbol, bank details and QR code for members and guests alike,
+  pending payments follow the RSVP while paid ones freeze into a refund-due
+  state, and whoever manages the event marks its payments paid from the
+  response list. Ticket types, automatic seat release, a payment gateway and
+  partial payments are follow-ups.
 
 ### 5.8. Administration & Documentation
 

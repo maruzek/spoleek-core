@@ -185,7 +185,9 @@ statutory period. Write the decision into `docs/legal-policies.md` §11's retent
 
 `MEMBER_SOFT_DELETE_RETENTION_DAYS = 30`, `organizations.event_guest_retention_days`
 (default 30, enforced by `/api/internal/shred-event-guests`, which removes event RSVP tokens,
-external invitees and guest names/emails after an event) and the per-question
+external invitees and guest names/emails after an event — a guest's event payment in
+`member_payments` carries no PII of its own and reads name and email through the response, so
+the same shred covers it and the payment survives anonymised for the accounts) and the per-question
 `form_questions.shred_after_event_days` (enforced by `/api/internal/shred-form-answers`, which
 nulls form answers past their TTL — mandatory for special-category questions — and anonymises
 guest form submissions on the event guest schedule) are the only retention rules in the
