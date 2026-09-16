@@ -8,6 +8,16 @@ import { toast } from "sonner";
 import type { AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { WizardFooter } from "@/components/app/wizard/wizard-footer";
 import type { StepGate } from "@/components/app/wizard/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Stepper,
@@ -23,6 +33,7 @@ import { createEventAction, setEventAudienceAction, updateEventAction } from "@/
 
 import { StepAudience } from "./step-audience";
 import { StepBasics } from "./step-basics";
+import { StepPayment } from "./step-payment";
 import { StepReview } from "./step-review";
 import { StepSchedule } from "./step-schedule";
 import {
@@ -49,6 +60,7 @@ const STEP_FIELDS: Record<WizardStep, (keyof EventDraft)[]> = {
   basics: ["title", "slug", "ownerCategoryId", "ownerGroupId"],
   schedule: ["startsAt", "endsAt", "rsvpDeadlineAt", "communicationLink"],
   audience: ["capacity", "maxGuestsPerResponse"],
+  payment: ["priceAmount", "priceCurrency", "priceBankAccount", "paymentDueAt"],
   review: [],
 };
 
@@ -70,7 +82,16 @@ function toRule(d: AudienceDraft): AudienceRuleInput {
  * leaves the wizard ready to publish. External invitees stay on the event
  * page because each one mints a token.
  */
-export function EventWizardDialog({ open, onOpenChange, owners, event, audience, onSaved }: EventWizardProps) {
+export function EventWizardDialog({
+  open,
+  onOpenChange,
+  owners,
+  event,
+  audience,
+  paymentDefaults,
+  chargedCount = 0,
+  onSaved,
+}: EventWizardProps) {
   const isEdit = Boolean(event?.id);
 
   const [activeStep, setActiveStep] = useState<WizardStep>("basics");
@@ -80,6 +101,8 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   // Errors only show for steps the user has tried to leave.
   const [visited, setVisited] = useState<Set<WizardStep>>(() => new Set());
   const [saving, setSaving] = useState(false);
+  // Turning the price off with charged responses asks first.
+  const [confirmUnpaid, setConfirmUnpaid] = useState(false);
 
   // Reset when (re)opened, during render so the first frame is already fresh.
   const [wasOpen, setWasOpen] = useState(open);
@@ -92,6 +115,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
       setSlugTouched(isEdit);
       setVisited(new Set());
       setSaving(false);
+      setConfirmUnpaid(false);
     }
   }
 
@@ -107,11 +131,15 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   const updateAction = useAction(updateEventAction);
   const audienceAction = useAction(setEventAudienceAction);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (options?: { confirmedUnpaid?: boolean }) => {
     const parsed = eventInputSchema.safeParse(draft);
     if (!parsed.success) {
       setVisited(new Set(STEPS));
       setActiveStep("basics");
+      return;
+    }
+    if (isEdit && event?.paid && !parsed.data.paid && chargedCount > 0 && !options?.confirmedUnpaid) {
+      setConfirmUnpaid(true);
       return;
     }
     setSaving(true);
@@ -147,7 +175,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
     } finally {
       setSaving(false);
     }
-  }, [draft, event?.id, isEdit, rules, createAction, updateAction, audienceAction, onOpenChange, onSaved]);
+  }, [draft, event?.id, event?.paid, chargedCount, isEdit, rules, createAction, updateAction, audienceAction, onOpenChange, onSaved]);
 
   const gates = useMemo<Record<WizardStep, StepGate>>(() => {
     const blockedBy = (step: WizardStep) =>
@@ -166,6 +194,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
             }
           : {}),
       },
+      payment: visited.has("payment") ? blockedBy("payment") : {},
       review: { busy: saving },
     };
   }, [stepErrors, visited, draft.visibility, rules.length, saving]);
@@ -191,7 +220,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   };
 
   const nextLabel =
-    activeStep === "review" ? (isEdit ? "Save changes" : "Create draft") : activeStep === "audience" ? "Review" : "Continue";
+    activeStep === "review" ? (isEdit ? "Save changes" : "Create draft") : activeStep === "payment" ? "Review" : "Continue";
 
   return (
     <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
@@ -255,8 +284,18 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
                 onRulesChange={setRules}
               />
             )}
+            {activeStep === "payment" && (
+              <StepPayment draft={draft} errors={shownErrors("payment")} defaults={paymentDefaults} onChange={patch} />
+            )}
             {activeStep === "review" && (
-              <StepReview draft={draft} rules={rules} owners={owners} isEdit={isEdit} onEdit={setActiveStep} />
+              <StepReview
+                draft={draft}
+                rules={rules}
+                owners={owners}
+                paymentDefaults={paymentDefaults}
+                isEdit={isEdit}
+                onEdit={setActiveStep}
+              />
             )}
           </div>
         </div>
@@ -278,6 +317,29 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
           onNext={goNext}
         />
       </DialogContent>
+
+      <AlertDialog open={confirmUnpaid} onOpenChange={setConfirmUnpaid}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Make this event free?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {chargedCount === 1 ? "One person has" : `${chargedCount} people have`} been charged for it.
+              Pending payments will be cancelled; paid ones are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep the price</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmUnpaid(false);
+                void save({ confirmedUnpaid: true });
+              }}
+            >
+              Make it free
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

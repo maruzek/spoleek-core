@@ -24,6 +24,10 @@ export default async function AdminEventsPage() {
       <EventsAdmin
         items={items}
         owners={ownerOptions}
+        paymentDefaults={{
+          currency: context.organization.membershipFeeCurrency,
+          bankAccount: context.organization.membershipFeeBankAccount,
+        }}
         canCreate={canCreate}
         timeZone={context.organization.timezone}
         now={now}

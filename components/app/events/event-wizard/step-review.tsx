@@ -8,8 +8,9 @@ import { useFormatters } from "@/components/locale-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { eventVisibilityLabel, formatEventWhen } from "@/lib/events/display";
+import { formatBankAccount } from "@/lib/iban";
 
-import type { EventDraft, OwnerOptions, WizardStep } from "./types";
+import type { EventDraft, OwnerOptions, PaymentDefaults, WizardStep } from "./types";
 
 function Section({
   title,
@@ -49,16 +50,19 @@ export function StepReview({
   draft,
   rules,
   owners,
+  paymentDefaults,
   isEdit,
   onEdit,
 }: {
   draft: EventDraft;
   rules: AudienceDraft[];
   owners: OwnerOptions;
+  paymentDefaults: PaymentDefaults;
   isEdit: boolean;
   onEdit: (step: WizardStep) => void;
 }) {
-  const { locale, formatDateTime } = useFormatters();
+  const { locale, formatDateTime, formatDate } = useFormatters();
+  const bankAccount = draft.priceBankAccount ?? paymentDefaults.bankAccount;
   const when = formatEventWhen(
     { startsAt: draft.startsAt ?? null, endsAt: draft.endsAt ?? null, allDay: draft.allDay },
     locale,
@@ -129,6 +133,36 @@ export function StepReview({
             ? ` · up to ${draft.maxGuestsPerResponse} guest${draft.maxGuestsPerResponse === 1 ? "" : "s"} per person`
             : " · no guests"}
         </Row>
+      </Section>
+
+      <Section title="Payment" step="payment" onEdit={onEdit}>
+        {draft.paid && draft.priceAmount != null ? (
+          <>
+            <Row label="Price">
+              {draft.priceAmount} {draft.priceCurrency ?? paymentDefaults.currency} per person
+            </Row>
+            <Row label="Bank account" muted={!bankAccount}>
+              {bankAccount ? (
+                formatBankAccount(bankAccount).primary
+              ) : (
+                <span className="text-amber-700 dark:text-amber-500">None — needed before publishing.</span>
+              )}
+            </Row>
+            <Row label="Pay by" muted={!draft.paymentDueAt}>
+              {draft.paymentDueAt
+                ? formatDate(draft.paymentDueAt)
+                : draft.rsvpDeadlineAt
+                  ? "RSVP deadline"
+                  : draft.startsAt
+                    ? "Start of the event"
+                    : "14 days after answering"}
+            </Row>
+          </>
+        ) : (
+          <Row label="Price" muted>
+            Free
+          </Row>
+        )}
       </Section>
     </div>
   );

@@ -85,6 +85,10 @@ export default async function AdminEventPage({
           categories: picker.categories.filter((c) => owners.categoryIds.includes(c.id)),
           groups: picker.groups.filter((g) => owners.groupIds.includes(g.id)),
         }}
+        paymentDefaults={{
+          currency: context.organization.membershipFeeCurrency,
+          bankAccount: context.organization.membershipFeeBankAccount,
+        }}
         audience={audienceRows}
         eligibleCount={eligibleIds.size}
         responses={responses}

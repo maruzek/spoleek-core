@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
-import { CheckIcon, XIcon } from "lucide-react";
+import { CheckIcon, UndoIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { PaymentWithMember } from "@/components/app/payments/types";
@@ -27,22 +27,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import type { EventPaymentCancellationReason } from "@/lib/events/schemas";
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
+import {
+  cancelEventPaymentAction,
+  markEventPaymentPaidAction,
+  markEventPaymentRefundedAction,
+} from "@/server/actions/events";
 import {
   cancelPaymentAction,
   markPaymentPaidAction,
+  markPaymentRefundedAction,
   type CancellationReason,
 } from "@/server/actions/payments";
 
-const CANCELLATION_REASON_LABELS: Record<CancellationReason, string> = {
+const CANCELLATION_REASON_LABELS: Record<EventPaymentCancellationReason, string> = {
   duplicate: "Duplicate payment",
   waived: "Fee waived",
   admin_error: "Admin error",
   other: "Other",
+  rsvp_withdrawn: "RSVP withdrawn",
 };
 
-/** A payment can only be acted on while it is still owed. */
-export function isPaymentActionable(payment: PaymentWithMember) {
+/**
+ * Which door the action goes through. `admin` is the payments dashboard
+ * (`canManagePayments`); `event` is the event's response list, open to
+ * whoever manages the event. Both end in the same status helpers.
+ */
+export type PaymentActionScope = "admin" | "event";
+
+/** The slice of a payment the dialogs need; event rows are not full `MemberPayment`s. */
+export type ActionablePayment = Pick<
+  PaymentWithMember,
+  "id" | "status" | "amount" | "currency" | "type" | "periodLabel" | "memberName"
+>;
+
+/** A payment can be acted on while it is owed, or while a refund is owed back. */
+export function isPaymentActionable(payment: Pick<ActionablePayment, "status">) {
   return payment.status !== "paid" && payment.status !== "cancelled";
 }
 
@@ -50,18 +71,20 @@ export function MarkPaidDialog({
   open,
   onOpenChange,
   payment,
+  scope = "admin",
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  payment: PaymentWithMember;
+  payment: ActionablePayment;
+  scope?: PaymentActionScope;
   onSuccess: () => void;
 }) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [paidDate, setPaidDate] = useState(todayIso);
   const [adminNote, setAdminNote] = useState("");
 
-  const markPaid = useAction(markPaymentPaidAction, {
+  const markPaid = useAction(scope === "event" ? markEventPaymentPaidAction : markPaymentPaidAction, {
     onSuccess() {
       toast.success("Payment marked as paid.");
       onOpenChange(false);
@@ -129,26 +152,35 @@ export function CancelPaymentDialog({
   open,
   onOpenChange,
   payment,
+  scope = "admin",
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  payment: PaymentWithMember;
+  payment: ActionablePayment;
+  scope?: PaymentActionScope;
   onSuccess: () => void;
 }) {
-  const [reason, setReason] = useState<CancellationReason | "">("");
+  const [reason, setReason] = useState<EventPaymentCancellationReason | "">("");
   const [adminNote, setAdminNote] = useState("");
 
-  const cancel = useAction(cancelPaymentAction, {
+  const done = {
     onSuccess() {
       toast.success("Payment cancelled.");
       onOpenChange(false);
       onSuccess();
     },
-    onError({ error }) {
+    onError({ error }: { error: { serverError?: string } }) {
       toast.error(error.serverError ?? "Could not cancel payment.");
     },
-  });
+  };
+  const cancelAdmin = useAction(cancelPaymentAction, done);
+  const cancelEvent = useAction(cancelEventPaymentAction, done);
+  const cancel = scope === "event" ? cancelEvent : cancelAdmin;
+  // "RSVP withdrawn" only makes sense for an event payment.
+  const reasons = Object.entries(CANCELLATION_REASON_LABELS).filter(
+    ([value]) => payment.type === "event" || value !== "rsvp_withdrawn",
+  );
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -165,19 +197,17 @@ export function CancelPaymentDialog({
             <FieldLabel>Reason</FieldLabel>
             <Select
               value={reason}
-              onValueChange={(value) => setReason(value as CancellationReason)}
+              onValueChange={(value) => setReason(value as EventPaymentCancellationReason)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a reason..." />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(CANCELLATION_REASON_LABELS).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ),
-                )}
+                {reasons.map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
@@ -195,13 +225,19 @@ export function CancelPaymentDialog({
           <AlertDialogCancel>Go back</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={() =>
-              cancel.execute({
-                paymentId: payment.id,
-                cancellationReason: reason as CancellationReason,
-                adminNote: adminNote.trim() || undefined,
-              })
-            }
+            onClick={() => {
+              if (!reason) return;
+              const adminNoteValue = adminNote.trim() || undefined;
+              if (scope === "event") {
+                cancelEvent.execute({ paymentId: payment.id, reason, adminNote: adminNoteValue });
+              } else if (reason !== "rsvp_withdrawn") {
+                cancelAdmin.execute({
+                  paymentId: payment.id,
+                  cancellationReason: reason as CancellationReason,
+                  adminNote: adminNoteValue,
+                });
+              }
+            }}
             disabled={!reason || cancel.isPending}
           >
             <XIcon data-icon="inline-start" />
@@ -214,24 +250,102 @@ export function CancelPaymentDialog({
 }
 
 /**
- * Mark paid / Cancel, with their dialogs. Used by the payments dashboard rows,
- * the member payments tab, and the payment detail dialog, so an admin gets the
- * same two controls wherever a payment is shown.
+ * `refund_due → cancelled (refunded)`: the organiser has paid the money back.
+ */
+export function MarkRefundedDialog({
+  open,
+  onOpenChange,
+  payment,
+  scope = "admin",
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  payment: ActionablePayment;
+  scope?: PaymentActionScope;
+  onSuccess: () => void;
+}) {
+  const refund = useAction(
+    scope === "event" ? markEventPaymentRefundedAction : markPaymentRefundedAction,
+    {
+      onSuccess() {
+        toast.success("Refund recorded.");
+        onOpenChange(false);
+        onSuccess();
+      },
+      onError({ error }) {
+        toast.error(error.serverError ?? "Could not record the refund.");
+      },
+    },
+  );
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Mark as refunded</AlertDialogTitle>
+          <AlertDialogDescription>
+            Confirm that <strong>{formatFeeAmount(payment.amount, payment.currency)}</strong> has been
+            returned to <strong>{payment.memberName}</strong> for{" "}
+            {getPaymentTitle(payment.type, payment.periodLabel)}. The record closes as refunded.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Not yet</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => refund.execute({ paymentId: payment.id })}
+            disabled={refund.isPending}
+          >
+            <UndoIcon data-icon="inline-start" />
+            Mark refunded
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Mark paid / Cancel (or Mark refunded for a refund-due row), with their
+ * dialogs. Used by the payments dashboard rows, the member payments tab, the
+ * payment detail dialog and the event response list, so an admin gets the
+ * same controls wherever a payment is shown.
  */
 export function PaymentActions({
   payment,
   onSuccess,
+  scope = "admin",
   size = "sm",
 }: {
-  payment: PaymentWithMember;
+  payment: ActionablePayment;
   onSuccess: () => void;
+  scope?: PaymentActionScope;
   size?: "sm" | "default";
 }) {
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
 
   if (!isPaymentActionable(payment)) {
     return null;
+  }
+
+  if (payment.status === "refund_due") {
+    return (
+      <>
+        <Button size={size} variant="outline" onClick={() => setRefundOpen(true)}>
+          <UndoIcon data-icon="inline-start" />
+          Mark refunded
+        </Button>
+        <MarkRefundedDialog
+          open={refundOpen}
+          onOpenChange={setRefundOpen}
+          payment={payment}
+          scope={scope}
+          onSuccess={onSuccess}
+        />
+      </>
+    );
   }
 
   return (
@@ -254,12 +368,14 @@ export function PaymentActions({
         open={markPaidOpen}
         onOpenChange={setMarkPaidOpen}
         payment={payment}
+        scope={scope}
         onSuccess={onSuccess}
       />
       <CancelPaymentDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         payment={payment}
+        scope={scope}
         onSuccess={onSuccess}
       />
     </>

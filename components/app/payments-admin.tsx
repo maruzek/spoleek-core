@@ -1,18 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CheckIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
+import { CheckIcon, RefreshCwIcon, UndoIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
 import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-dialog";
 import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
+import { MarkRefundedDialog } from "@/components/app/payments/payment-actions";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
 import {
   Select,
@@ -26,7 +30,7 @@ import {
   bulkMarkPaymentsPaidAction,
   generatePaymentsAction,
 } from "@/server/actions/payments";
-import type { MemberPaymentStatus } from "@/server/db/schema";
+import type { MemberPaymentStatus, MemberPaymentType } from "@/server/db/schema";
 import type { PaymentRow } from "@/server/queries/payments";
 
 const columnHelper = createColumnHelper<PaymentRow>();
@@ -60,6 +64,11 @@ function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
           <span className="font-medium">{counts.overdue}</span> overdue
         </div>
       ) : null}
+      {counts.refund_due ? (
+        <div className="flex items-center gap-1.5 text-sm text-purple-700 dark:text-purple-300">
+          <span className="font-medium">{counts.refund_due}</span> refund due
+        </div>
+      ) : null}
       {counts.cancelled ? (
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{counts.cancelled}</span> cancelled
@@ -72,12 +81,84 @@ function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
 /** Sentinel for "no group filter" — Radix Select cannot hold an empty value. */
 const ALL_GROUPS = "__all__";
 
+type TypeFilter = "all" | MemberPaymentType;
+
+/**
+ * Paid event payments whose RSVP was withdrawn. Pinned above the table until
+ * an admin settles each one by hand; nothing moves them on automatically.
+ */
+function RefundsDue({
+  refunds,
+  onSuccess,
+}: {
+  refunds: PaymentRow[];
+  onSuccess: () => void;
+}) {
+  const { formatDateTime } = useFormatters();
+  const [refunding, setRefunding] = useState<PaymentRow | null>(null);
+
+  if (refunds.length === 0) return null;
+
+  return (
+    <Card className="border-purple-300 dark:border-purple-800">
+      <CardHeader>
+        <CardTitle className="text-base">Refunds due</CardTitle>
+        <CardDescription>
+          These people paid for an event and then withdrew, were demoted to the reserve list or had
+          their answer removed. Return the money, then mark it here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        <ul className="divide-y">
+          {refunds.map((payment) => (
+            <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {payment.memberName}
+                  {!payment.memberId ? <span className="text-muted-foreground"> · guest</span> : null}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {payment.eventTitle ?? payment.periodLabel}
+                  {payment.paidAt ? ` · paid ${formatDateTime(payment.paidAt)}` : ""}
+                  {payment.variableSymbol ? ` · VS ${payment.variableSymbol}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-medium tabular-nums">{formatFeeAmount(payment.amount, payment.currency)}</span>
+                <Button size="sm" variant="outline" onClick={() => setRefunding(payment)}>
+                  <UndoIcon data-icon="inline-start" />
+                  Mark refunded
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+      {refunding ? (
+        <MarkRefundedDialog
+          open
+          onOpenChange={(open) => !open && setRefunding(null)}
+          payment={refunding}
+          onSuccess={() => {
+            setRefunding(null);
+            onSuccess();
+          }}
+        />
+      ) : null}
+    </Card>
+  );
+}
+
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
   const { formatDateTime } = useFormatters();
 
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
   const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
+  const [type, setType] = useState<TypeFilter>("all");
+
+  const refunds = useMemo(() => payments.filter((p) => p.status === "refund_due"), [payments]);
+  const hasEventPayments = useMemo(() => payments.some((p) => p.type === "event"), [payments]);
 
   // Options come from the rows on screen rather than from every group in the
   // org, so the dropdown can never offer a group that would filter to nothing.
@@ -91,10 +172,12 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   const visiblePayments = useMemo(
     () =>
-      groupId === ALL_GROUPS
-        ? payments
-        : payments.filter((payment) => payment.memberGroups.some((g) => g.id === groupId)),
-    [payments, groupId],
+      payments
+        .filter((payment) => type === "all" || payment.type === type)
+        .filter(
+          (payment) => groupId === ALL_GROUPS || payment.memberGroups.some((g) => g.id === groupId),
+        ),
+    [payments, groupId, type],
   );
 
   const generate = useAction(generatePaymentsAction, {
@@ -143,11 +226,31 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.accessor("memberName", {
       header: ({ column }) => <SortableHeader column={column}>Member</SortableHeader>,
       meta: { label: "Member" },
+      cell: ({ row }) =>
+        row.original.memberId ? (
+          row.original.memberName
+        ) : (
+          <span>
+            {row.original.memberName}
+            <span className="ml-1 text-xs text-muted-foreground">guest</span>
+          </span>
+        ),
     }),
     columnHelper.accessor("periodLabel", {
       header: ({ column }) => <SortableHeader column={column}>Payment</SortableHeader>,
       meta: { label: "Payment" },
-      cell: ({ row }) => getPaymentTitle(row.original.type, row.original.periodLabel),
+      cell: ({ row }) =>
+        row.original.type === "event" && row.original.eventId ? (
+          <Link
+            href={`/admin/events/${row.original.eventId}`}
+            className="underline-offset-4 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {getPaymentTitle(row.original.type, row.original.eventTitle ?? row.original.periodLabel)}
+          </Link>
+        ) : (
+          getPaymentTitle(row.original.type, row.original.periodLabel)
+        ),
     }),
     columnHelper.accessor("amount", {
       header: ({ column }) => <SortableHeader column={column}>Amount</SortableHeader>,
@@ -205,6 +308,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   return (
     <div className="flex flex-col gap-4">
+      <RefundsDue refunds={refunds} onSuccess={() => router.refresh()} />
       <PaymentSummary payments={visiblePayments} />
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -222,6 +326,20 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
           return (
             <>
+              {hasEventPayments && (
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={type}
+                  onValueChange={(value) => value && setType(value as TypeFilter)}
+                  aria-label="Filter by payment type"
+                >
+                  <ToggleGroupItem value="all">All</ToggleGroupItem>
+                  <ToggleGroupItem value="membership_fee">Membership fees</ToggleGroupItem>
+                  <ToggleGroupItem value="event">Events</ToggleGroupItem>
+                </ToggleGroup>
+              )}
               {groupOptions.length > 0 && (
                 <Select value={groupId} onValueChange={setGroupId}>
                   <SelectTrigger className="w-[200px]" aria-label="Filter by group">

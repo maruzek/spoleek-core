@@ -26,8 +26,8 @@ export default async function AdminPaymentsPage() {
   return (
     <AppPage
       eyebrow="Administration"
-      title="Membership payments."
-      description="Track and manage fee payment records for all active members."
+      title="Payments."
+      description="Membership fees and event fees: who owes what, who has paid, and what is owed back."
     >
       {stats && <PaymentsFinancialHealth stats={stats} currency={currency} />}
       <PaymentsAdmin payments={payments} isFullAdmin={isFullAdmin} />

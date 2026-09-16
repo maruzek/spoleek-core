@@ -21,7 +21,7 @@ import { toast } from "sonner";
 
 import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
 import { EventsMonthCalendar, type CalendarTone } from "@/components/app/events/events-month-calendar";
-import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
+import type { OwnerOptions, PaymentDefaults } from "@/components/app/events/event-wizard/types";
 import { StatusFilter } from "@/components/app/status-filter";
 import { useFormatters } from "@/components/locale-provider";
 import {
@@ -103,12 +103,14 @@ function isPast(item: EventListItem, now: number) {
 export function EventsAdmin({
   items,
   owners,
+  paymentDefaults,
   canCreate,
   timeZone,
   now,
 }: {
   items: EventListItem[];
   owners: OwnerOptions;
+  paymentDefaults: PaymentDefaults;
   canCreate: boolean;
   timeZone: string;
   /** Server time at render, so "upcoming" is decided once and hydrates identically. */
@@ -538,6 +540,7 @@ export function EventsAdmin({
       <EventWizardDialog
         open={sheetOpen}
         owners={owners}
+        paymentDefaults={paymentDefaults}
         onOpenChange={setSheetOpen}
         onSaved={(eventId) => router.push(`/admin/events/${eventId}`)}
       />
