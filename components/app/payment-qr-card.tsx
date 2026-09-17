@@ -1,225 +1,221 @@
 "use client";
 
 import { useState } from "react";
-import { useFormatters } from "@/components/locale-provider";
+import { useDictionary, useFormatters } from "@/components/locale-provider";
 import QRCode from "react-qr-code";
-import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
+import { ChevronDownIcon, CircleCheckIcon, TriangleAlertIcon, UndoIcon } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/code-block/copy-button";
 import { formatBankAccount } from "@/lib/iban";
-import {
-  buildSpdString,
-  feeToMajorUnits,
-  formatFeeAmount,
-  getPaymentTitle,
-} from "@/lib/payments";
+import { buildSpdString, formatMoney } from "@/lib/payments";
 import { cn } from "@/lib/utils";
-import type { MemberPayment } from "@/server/db/schema";
+import type { MemberPayment, MemberPaymentType } from "@/server/db/schema";
 
+/** What the card renders: a full `MemberPayment`, or the live-payment slice an event page loads. */
+export type PaymentCardPayment = Pick<
+  MemberPayment,
+  | "id"
+  | "status"
+  | "amount"
+  | "currency"
+  | "bankAccount"
+  | "variableSymbol"
+  | "periodLabel"
+  | "dueAt"
+  | "paidAt"
+> & { type?: MemberPaymentType };
+
+/**
+ * One payment as the member sees it. The heading is the state — waiting,
+ * overdue, paid, refund — so the card reads at a glance; the QR leads while
+ * money is owed, and a settled payment folds its bank details away.
+ */
 export function PaymentQrCard({
   payment,
   payerName,
+  eventTitle,
+  showEventTitle = true,
 }: {
-  payment: MemberPayment;
+  payment: PaymentCardPayment;
   /**
    * Who owes this payment. Taken as a prop rather than read from the app shell
    * so an admin viewing someone else's record does not end up in the SPD
    * string as the payer.
    */
   payerName?: string;
+  /** For event payments: names the event in the eyebrow. */
+  eventTitle?: string;
+  /** Off when the card sits on the event's own page, where the title is right above it. */
+  showEventTitle?: boolean;
 }) {
-  const { formatDateTime, locale } = useFormatters();
+  const { formatDate, locale } = useFormatters();
+  const t = useDictionary().payments.card;
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const [copied, setCopied] = useState(false);
-
+  const type = payment.type ?? (eventTitle ? "event" : "membership_fee");
   const memberName = payerName?.trim() || undefined;
-  const spdString = buildSpdString(payment, memberName);
-  const account = payment.bankAccount
-    ? formatBankAccount(payment.bankAccount)
-    : null;
   const isOverdue = payment.status === "overdue";
   const isPending = payment.status === "pending";
+  const isPaid = payment.status === "paid";
+  const isRefundDue = payment.status === "refund_due";
+  const owed = isPending || isOverdue;
+  // Only worth scanning while the money is still owed.
+  const spdString = owed ? buildSpdString(payment, memberName) : null;
+  const account = payment.bankAccount ? formatBankAccount(payment.bankAccount) : null;
+  // A Czech account splits into number/code so each can be copied into its own field.
+  const local = account?.primary.match(/^(.+)\/(\d{4})$/);
+  const amount = formatMoney(payment.amount, payment.currency, locale);
 
-  // todo: remove handleCopy, implement the general copy button, use DropdownMenu for multiple data fields
-  function handleCopy() {
-    const parts = [
-      account ? `Account: ${account.primary}` : null,
-      payment.variableSymbol ? `VS: ${payment.variableSymbol}` : null,
-      `Amount: ${formatFeeAmount(payment.amount, payment.currency)}`,
-    ].filter(Boolean);
-    navigator.clipboard.writeText(parts.join(" | ")).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
+  const eyebrow =
+    type === "membership_fee"
+      ? `${t.membershipFee} · ${payment.periodLabel}`
+      : showEventTitle && eventTitle
+        ? `${t.eventFee} · ${eventTitle}`
+        : t.eventFee;
+
+  const heading = isPaid
+    ? t.statePaid
+    : isOverdue
+      ? t.stateOverdue
+      : isRefundDue
+        ? t.stateRefundDue
+        : isPending
+          ? t.statePending
+          : t.stateCancelled;
+
+  const tone = isOverdue ? "error" : isRefundDue ? "warning" : isPaid ? "success" : "default";
+
+  const details = (
+    <dl className="flex flex-col gap-2.5 text-sm">
+      {account && local ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4">
+          <DetailRow label={t.bankAccount} copyLabel={t.copy(t.bankAccount)} value={local[1]} />
+          <DetailRow label={t.bankCode} copyLabel={t.copy(t.bankCode)} value={local[2]} />
+        </div>
+      ) : account ? (
+        <DetailRow label={t.bankAccount} copyLabel={t.copy(t.bankAccount)} value={account.primary} />
+      ) : null}
+      {payment.variableSymbol ? (
+        <DetailRow
+          label={t.variableSymbol}
+          copyLabel={t.copy(t.variableSymbol)}
+          value={payment.variableSymbol}
+          emphasize
+        />
+      ) : null}
+      {memberName ? <DetailRow label={t.payer} value={memberName} /> : null}
+    </dl>
+  );
 
   return (
     <div
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/8",
-        isOverdue && "ring-destructive/30",
+        "relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs",
+        tone === "error" && "border-destructive/40",
+        tone === "warning" && "border-orange-500/40",
       )}
     >
-      {/* Top accent bar */}
       <div
         className={cn(
           "h-1 w-full",
-          isOverdue ? "bg-destructive" : "bg-primary",
+          tone === "error" && "bg-destructive",
+          tone === "warning" && "bg-orange-500",
+          tone === "success" && "bg-green-600 dark:bg-green-500",
+          tone === "default" && "bg-primary",
         )}
       />
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 px-5 pt-4 pb-3">
-        <div className="flex flex-col gap-0.5">
-          <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            {payment.type === "membership_fee" ? "Membership fee" : "Event fee"}{" "}
-            · {payment.periodLabel}
-          </p>
-          <h2 className="font-heading text-lg font-medium leading-tight text-foreground">
-            {getPaymentTitle(payment.type, payment.periodLabel)}
-          </h2>
-        </div>
-        <Badge
-          variant={
-            isOverdue ? "destructive" : isPending ? "secondary" : "outline"
-          }
-          className="mt-0.5 shrink-0 capitalize"
-        >
-          {payment.status}
-        </Badge>
-      </div>
-
-      {/* Amount */}
-      <div
-        className={cn(
-          "mx-5 rounded-xl px-4 py-3",
-          isOverdue ? "bg-destructive/5" : "bg-primary/5",
-        )}
-      >
-        <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          Amount due
-        </p>
-        <div className="flex items-baseline gap-2">
-          <span
+      {/* Header: eyebrow, state as the title, amount on the right. */}
+      <div className="flex items-start justify-between gap-4 p-4 pb-3">
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{eyebrow}</p>
+          <h2
             className={cn(
-              "font-heading text-3xl font-medium tabular-nums tracking-tight",
-              isOverdue ? "text-destructive" : "text-foreground",
+              "mt-0.5 flex items-center gap-1.5 font-heading text-lg leading-tight",
+              tone === "error" && "text-destructive",
+              tone === "success" && "text-green-700 dark:text-green-400",
             )}
           >
-            {(feeToMajorUnits(payment.amount) ?? 0).toLocaleString(locale, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
-          <span className="font-mono text-sm font-medium text-muted-foreground">
-            {payment.currency}
-          </span>
+            {isPaid ? <CircleCheckIcon className="size-4 shrink-0" aria-hidden /> : null}
+            {isOverdue ? <TriangleAlertIcon className="size-4 shrink-0" aria-hidden /> : null}
+            {isRefundDue ? <UndoIcon className="size-4 shrink-0" aria-hidden /> : null}
+            {heading}
+          </h2>
+          <p className={cn("mt-1 text-xs", isOverdue ? "text-destructive" : "text-muted-foreground")}>
+            {isPaid
+              ? payment.paidAt
+                ? t.paidOn(formatDate(payment.paidAt))
+                : null
+              : isOverdue
+                ? t.overdueSince(formatDate(payment.dueAt))
+                : isPending
+                  ? t.dueBy(formatDate(payment.dueAt))
+                  : null}
+          </p>
         </div>
-        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-          {isOverdue ? (
-            <>
-              <TriangleAlertIcon className="mr-1 inline size-3 align-[-1px]" />
-              Overdue since
-            </>
-          ) : (
-            "Due by"
-          )}{" "}
-          <span className={cn("font-medium", isOverdue && "text-destructive")}>
-            {formatDateTime(payment.dueAt)}
-          </span>
+        <p
+          className={cn(
+            "shrink-0 font-heading text-2xl tabular-nums tracking-tight",
+            isOverdue ? "text-destructive" : "text-foreground",
+          )}
+        >
+          {amount}
         </p>
       </div>
 
-      {/* Dashed receipt divider */}
-      <div className="my-3 border-t border-dashed border-foreground/10" />
+      {isRefundDue ? <p className="px-4 pb-4 text-sm text-muted-foreground">{t.refundBody}</p> : null}
 
-      {/* Payment details */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 px-5">
-        {account && (
-          <div className="col-span-2">
-            <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Bank account
-            </p>
-            <p className="font-mono text-sm tracking-wide text-foreground">
-              {account.primary}
-            </p>
-            {account.secondary ? (
-              <p className="mt-0.5 font-mono text-xs tracking-wide text-muted-foreground">
-                {account.secondary}
-              </p>
-            ) : null}
-          </div>
-        )}
+      {owed ? (
+        <div className="flex flex-col gap-4 border-t border-dashed p-4">
+          {spdString ? (
+            <div className="flex justify-center">
+              <div className="rounded-lg bg-white p-2">
+                <QRCode value={spdString} size={144} />
+              </div>
+            </div>
+          ) : null}
+          {account ? details : <p className="text-sm text-muted-foreground">{t.noAccount}</p>}
+        </div>
+      ) : null}
 
-        {payment.variableSymbol && (
-          <div>
-            <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Variable symbol
-            </p>
-            <p className="font-mono text-sm font-semibold tracking-widest text-foreground">
-              {payment.variableSymbol}
-            </p>
-          </div>
-        )}
+      {isPaid && (account || payment.variableSymbol) ? (
+        <div className="border-t border-dashed">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((o) => !o)}
+          >
+            {t.showDetails}
+            <ChevronDownIcon className={cn("size-3.5 transition-transform", detailsOpen && "rotate-180")} aria-hidden />
+          </button>
+          {detailsOpen ? <div className="px-4 pb-4">{details}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
-        {memberName && (
-          <div>
-            <p className="mb-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Payer
-            </p>
-            <p className="text-sm font-medium text-foreground">{memberName}</p>
-          </div>
-        )}
+function DetailRow({
+  label,
+  value,
+  copyLabel,
+  emphasize,
+}: {
+  label: string;
+  value: string;
+  copyLabel?: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</dt>
+        <dd className={cn("truncate font-mono text-sm tabular-nums", emphasize && "font-semibold tracking-wider")}>
+          {value}
+        </dd>
       </div>
-
-      {/* QR code */}
-      {spdString && (
-        <>
-          {/* Perforated tear line */}
-          <div className="relative my-3 flex items-center">
-            <div className="absolute -left-3 size-6 rounded-full bg-background ring-1 ring-foreground/8" />
-            <div className="absolute -right-3 size-6 rounded-full bg-background ring-1 ring-foreground/8" />
-            <div className="w-full border-t border-dashed border-foreground/15" />
-          </div>
-
-          <div className="flex items-center gap-4 px-5 pb-4">
-            <div className="rounded-xl border border-foreground/8 bg-white p-3 shadow-sm">
-              <QRCode value={spdString} size={112} />
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                Scan to pay
-              </p>
-              <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
-                Open your banking app and scan this code to complete the payment
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-1 w-fit"
-                onClick={handleCopy}
-              >
-                {copied ? (
-                  <CheckIcon
-                    data-icon="inline-start"
-                    className="text-green-600"
-                  />
-                ) : (
-                  <CopyIcon data-icon="inline-start" />
-                )}
-                {copied ? "Copied!" : "Copy details"}
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {!spdString && payment.bankAccount == null && (
-        <p className="px-5 pb-5 text-sm italic text-muted-foreground">
-          Bank account not configured. Contact your organization.
-        </p>
-      )}
+      {copyLabel ? <CopyButton content={value} aria-label={copyLabel} title={copyLabel} className="shrink-0" /> : null}
     </div>
   );
 }

@@ -22,7 +22,15 @@ type PaymentOverdueEmailProps = {
   dueAt: string;
   bankAccount: string | null;
   variableSymbol: string | null;
+  /** Event fees name the event instead of a membership period. */
+  feeKind?: "membership_fee" | "event";
 };
+
+export function paymentOverdueEmailSubject(props: Pick<PaymentOverdueEmailProps, "periodLabel" | "feeKind">) {
+  return props.feeKind === "event"
+    ? `Action required: payment overdue — ${props.periodLabel}`
+    : `Action required: membership fee overdue — ${props.periodLabel}`;
+}
 
 export function PaymentOverdueEmail({
   organizationName,
@@ -33,10 +41,12 @@ export function PaymentOverdueEmail({
   dueAt,
   bankAccount,
   variableSymbol,
+  feeKind = "membership_fee",
 }: PaymentOverdueEmailProps) {
   const account = bankAccount ? formatBankAccount(bankAccount) : null;
+  const isEvent = feeKind === "event";
 
-  const subject = `Action required: membership fee overdue — ${periodLabel}`;
+  const subject = paymentOverdueEmailSubject({ periodLabel, feeKind });
 
   return (
     <Html lang="en">
@@ -63,15 +73,24 @@ export function PaymentOverdueEmail({
                 {organizationName}
               </Text>
               <Heading className="mb-[16px] mt-[12px] text-[30px] leading-[36px] font-semibold text-ink">
-                Membership fee overdue
+                {isEvent ? "Payment overdue" : "Membership fee overdue"}
               </Heading>
               <Text className="m-0 text-[16px] leading-[28px] text-ink">
                 Hello {memberName},
               </Text>
               <Text className="m-0 mt-[16px] text-[16px] leading-[28px] text-ink">
-                Your membership fee payment for the <strong>{periodLabel}</strong> period was due on{" "}
-                <strong>{dueAt}</strong> and has not been received yet. Please settle it as soon as
-                possible.
+                {isEvent ? (
+                  <>
+                    Your payment for <strong>{periodLabel}</strong> was due on <strong>{dueAt}</strong>{" "}
+                    and has not been received yet. Please settle it as soon as possible.
+                  </>
+                ) : (
+                  <>
+                    Your membership fee payment for the <strong>{periodLabel}</strong> period was due on{" "}
+                    <strong>{dueAt}</strong> and has not been received yet. Please settle it as soon as
+                    possible.
+                  </>
+                )}
               </Text>
             </Section>
 

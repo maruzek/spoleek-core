@@ -1,100 +1,188 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CheckIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
+import { CalendarIcon, CheckIcon, IdCardIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
 import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-dialog";
-import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
+import {
+  PaymentStatusBadge,
+  paymentStatusDotVariant,
+  paymentStatusLabel,
+} from "@/components/app/payments/payment-status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable, SortableHeader } from "@/components/ui/data-table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { comparePaymentStatus, formatFeeAmount, getPaymentTitle } from "@/lib/payments";
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxSeparator,
+} from "@/components/ui/combobox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { DataTable, SortableHeader } from "@/components/ui/data-table";
+import { InputGroupAddon } from "@/components/ui/input-group";
+import { comparePaymentStatus, formatFeeAmount, PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
+import { STATUS_DOT_CLASSES, STATUS_TEXT_CLASSES } from "@/lib/status-dot";
+import { cn } from "@/lib/utils";
 import {
   bulkMarkPaymentsPaidAction,
   generatePaymentsAction,
 } from "@/server/actions/payments";
-import type { MemberPaymentStatus } from "@/server/db/schema";
+import type { MemberPaymentStatus, MemberPaymentType } from "@/server/db/schema";
 import type { PaymentRow } from "@/server/queries/payments";
 
 const columnHelper = createColumnHelper<PaymentRow>();
 
-function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
+type StatusFilter = MemberPaymentStatus | null;
+
+const STATUSES = (Object.keys(paymentStatusLabel) as MemberPaymentStatus[]).sort(
+  (a, b) => PAYMENT_STATUS_SORT_ORDER[a] - PAYMENT_STATUS_SORT_ORDER[b] || a.localeCompare(b),
+);
+
+/**
+ * One chip per status, coloured from the same map as the badges, and each one
+ * a filter. Counts come from the rows before the status filter is applied, so
+ * the numbers do not collapse to one the moment a chip is picked.
+ */
+function PaymentSummary({
+  payments,
+  status,
+  onStatusChange,
+}: {
+  payments: PaymentRow[];
+  status: StatusFilter;
+  onStatusChange: (status: StatusFilter) => void;
+}) {
   const counts = payments.reduce(
     (acc, p) => {
       acc[p.status] = (acc[p.status] ?? 0) + 1;
       return acc;
     },
-    {} as Record<MemberPaymentStatus, number>,
+    {} as Partial<Record<MemberPaymentStatus, number>>,
   );
 
+  const chip = "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors";
+
   return (
-    <div className="flex flex-wrap gap-3">
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{payments.length}</span> total
-      </div>
-      {counts.paid ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.paid}</span> paid
-        </div>
-      ) : null}
-      {counts.pending ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.pending}</span> pending
-        </div>
-      ) : null}
-      {counts.overdue ? (
-        <div className="flex items-center gap-1.5 text-sm text-destructive">
-          <span className="font-medium">{counts.overdue}</span> overdue
-        </div>
-      ) : null}
-      {counts.cancelled ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.cancelled}</span> cancelled
-        </div>
-      ) : null}
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+      <button
+        type="button"
+        onClick={() => onStatusChange(null)}
+        aria-pressed={status === null}
+        className={cn(chip, status === null ? "border-foreground/30 bg-muted" : "border-transparent hover:bg-muted/60")}
+      >
+        <span className="font-medium tabular-nums">{payments.length}</span>
+        <span className="text-muted-foreground">total</span>
+      </button>
+      {STATUSES.map((s) => {
+        const count = counts[s];
+        if (!count) return null;
+        const variant = paymentStatusDotVariant[s];
+        const active = status === s;
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onStatusChange(active ? null : s)}
+            aria-pressed={active}
+            className={cn(
+              chip,
+              STATUS_TEXT_CLASSES[variant],
+              active ? "border-current/40 bg-current/10" : "border-transparent hover:bg-muted/60",
+            )}
+          >
+            <span className={cn("size-1.5 rounded-full", STATUS_DOT_CLASSES[variant])} aria-hidden />
+            <span className="font-medium tabular-nums">{count}</span>
+            <span className={variant === "default" ? "text-muted-foreground" : "opacity-80"}>
+              {paymentStatusLabel[s].toLowerCase()}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-/** Sentinel for "no group filter" — Radix Select cannot hold an empty value. */
-const ALL_GROUPS = "__all__";
+type GroupOption = { id: string; name: string };
+type GroupSection = { id: string; name: string; sortOrder: number; items: GroupOption[] };
+
+type TypeFilter = "all" | MemberPaymentType;
 
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
-  const { formatDateTime } = useFormatters();
+  const { formatDate, formatDateTime } = useFormatters();
+  const formatDue = (date: Date) =>
+    date.getHours() === 0 && date.getMinutes() === 0 ? formatDate(date) : formatDateTime(date);
+
+  // One haystack per row so a single box finds a payment by anything shown in
+  // it. Dates go in formatted, so "30. 9." matches what the user reads.
+  const paymentSearchText = (p: PaymentRow) =>
+    [
+      p.memberName,
+      p.memberId ? "" : "guest",
+      p.type === "event" ? "event" : "membership fee",
+      p.eventTitle,
+      p.periodLabel,
+      p.memberGroups.map((g) => g.name).join(" "),
+      p.variableSymbol,
+      formatFeeAmount(p.amount, p.currency),
+      formatDue(p.dueAt),
+      p.paidAt ? formatDate(p.paidAt) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
-  const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
+  const [group, setGroup] = useState<GroupOption | null>(null);
+  const [type, setType] = useState<TypeFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>(null);
+
+  const hasEventPayments = useMemo(() => payments.some((p) => p.type === "event"), [payments]);
 
   // Options come from the rows on screen rather than from every group in the
   // org, so the dropdown can never offer a group that would filter to nothing.
-  const groupOptions = useMemo(() => {
-    const byId = new Map<string, string>();
+  // Sectioned by category, in the admin's category order.
+  const groupSections = useMemo<GroupSection[]>(() => {
+    const sections = new Map<string, GroupSection>();
     for (const payment of payments) {
-      for (const group of payment.memberGroups) byId.set(group.id, group.name);
+      for (const g of payment.memberGroups) {
+        const section =
+          sections.get(g.categoryId) ??
+          { id: g.categoryId, name: g.categoryName, sortOrder: g.categorySortOrder, items: [] };
+        if (!section.items.some((item) => item.id === g.id)) section.items.push({ id: g.id, name: g.name });
+        sections.set(g.categoryId, section);
+      }
     }
-    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    return [...sections.values()]
+      .map((section) => ({ ...section, items: section.items.sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   }, [payments]);
+  const groupCount = groupSections.reduce((n, s) => n + s.items.length, 0);
 
-  const visiblePayments = useMemo(
+  // Type and group narrow the set the chips count; the status chip then
+  // narrows the table only.
+  const scopedPayments = useMemo(
     () =>
-      groupId === ALL_GROUPS
-        ? payments
-        : payments.filter((payment) => payment.memberGroups.some((g) => g.id === groupId)),
-    [payments, groupId],
+      payments
+        .filter((payment) => type === "all" || payment.type === type)
+        .filter((payment) => !group || payment.memberGroups.some((g) => g.id === group.id)),
+    [payments, group, type],
+  );
+  const visiblePayments = useMemo(
+    () => (status ? scopedPayments.filter((p) => p.status === status) : scopedPayments),
+    [scopedPayments, status],
   );
 
   const generate = useAction(generatePaymentsAction, {
@@ -143,11 +231,47 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.accessor("memberName", {
       header: ({ column }) => <SortableHeader column={column}>Member</SortableHeader>,
       meta: { label: "Member" },
+      cell: ({ row }) =>
+        row.original.memberId ? (
+          row.original.memberName
+        ) : (
+          <span>
+            {row.original.memberName}
+            <span className="ml-1 text-xs text-muted-foreground">guest</span>
+          </span>
+        ),
     }),
     columnHelper.accessor("periodLabel", {
       header: ({ column }) => <SortableHeader column={column}>Payment</SortableHeader>,
       meta: { label: "Payment" },
-      cell: ({ row }) => getPaymentTitle(row.original.type, row.original.periodLabel),
+      // Same naming as the member's card: the kind, then what it is for.
+      cell: ({ row }) => {
+        const isEvent = row.original.type === "event";
+        const label = (
+          <span className="flex items-center gap-2">
+            {isEvent ? (
+              <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            ) : (
+              <IdCardIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="truncate">
+              <span className="text-muted-foreground">{isEvent ? "Event" : "Membership"} · </span>
+              {isEvent ? (row.original.eventTitle ?? row.original.periodLabel) : row.original.periodLabel}
+            </span>
+          </span>
+        );
+        return isEvent && row.original.eventId ? (
+          <Link
+            href={`/admin/events/${row.original.eventId}?tab=responses`}
+            className="underline-offset-4 hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {label}
+          </Link>
+        ) : (
+          label
+        );
+      },
     }),
     columnHelper.accessor("amount", {
       header: ({ column }) => <SortableHeader column={column}>Amount</SortableHeader>,
@@ -175,7 +299,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       meta: { label: "Variable symbol" },
       cell: ({ row }) =>
         row.original.variableSymbol ? (
-          <span className="font-mono text-xs">{row.original.variableSymbol}</span>
+          <span className="font-mono text-xs tabular-nums">{row.original.variableSymbol}</span>
         ) : (
           "—"
         ),
@@ -183,13 +307,14 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.accessor("dueAt", {
       header: ({ column }) => <SortableHeader column={column}>Due</SortableHeader>,
       meta: { label: "Due" },
-      cell: ({ row }) => formatDateTime(row.original.dueAt),
+      // A midnight deadline is a day, not a moment — showing "0:00" on every
+      // membership fee just adds noise.
+      cell: ({ row }) => formatDue(row.original.dueAt),
     }),
     columnHelper.accessor("paidAt", {
       header: ({ column }) => <SortableHeader column={column}>Paid at</SortableHeader>,
       meta: { label: "Paid at" },
-      cell: ({ row }) =>
-        row.original.paidAt ? formatDateTime(row.original.paidAt) : "—",
+      cell: ({ row }) => (row.original.paidAt ? formatDate(row.original.paidAt) : null),
     }),
     columnHelper.display({
       id: "actions",
@@ -205,16 +330,19 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentSummary payments={visiblePayments} />
+      <PaymentSummary payments={scopedPayments} status={status} onStatusChange={setStatus} />
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         data={visiblePayments}
-        searchKey="memberName"
-        searchPlaceholder="Filter by member..."
+        searchText={paymentSearchText}
+        searchPlaceholder="Search member, event, group, VS, date…"
         emptyStateTitle="No payment records"
         emptyStateDescription="Generate payment records for the current renewal period or wait for the nightly cron."
         onRowClick={(payment) => setDetailPayment(payment)}
+        rowClassName={(payment) =>
+          payment.status === "refund_due" ? "bg-orange-500/5 hover:bg-orange-500/10" : undefined
+        }
         toolbarActions={(table) => {
           const selected = table
             .getFilteredSelectedRowModel()
@@ -222,21 +350,56 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
           return (
             <>
-              {groupOptions.length > 0 && (
-                <Select value={groupId} onValueChange={setGroupId}>
-                  <SelectTrigger className="w-[200px]" aria-label="Filter by group">
-                    <UsersIcon data-icon="inline-start" />
-                    <SelectValue placeholder="All groups" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_GROUPS}>All groups</SelectItem>
-                    {groupOptions.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {hasEventPayments && (
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={type}
+                  onValueChange={(value) => value && setType(value as TypeFilter)}
+                  aria-label="Filter by payment type"
+                >
+                  <ToggleGroupItem value="all">All</ToggleGroupItem>
+                  <ToggleGroupItem value="membership_fee">Membership fees</ToggleGroupItem>
+                  <ToggleGroupItem value="event">Events</ToggleGroupItem>
+                </ToggleGroup>
+              )}
+              {groupCount > 0 && (
+                <Combobox
+                  items={groupSections}
+                  value={group}
+                  onValueChange={(next: GroupOption | null) => setGroup(next)}
+                  itemToStringLabel={(item: GroupOption) => item.name}
+                >
+                  <ComboboxInput
+                    className="w-52"
+                    placeholder="All groups"
+                    aria-label="Filter by group"
+                    showClear={group != null}
+                  >
+                    <InputGroupAddon>
+                      <UsersIcon />
+                    </InputGroupAddon>
+                  </ComboboxInput>
+                  <ComboboxContent alignOffset={-28} className="w-60">
+                    <ComboboxEmpty>No group matches.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(section: GroupSection, index: number) => (
+                        <ComboboxGroup key={section.id} items={section.items}>
+                          <ComboboxLabel>{section.name}</ComboboxLabel>
+                          <ComboboxCollection>
+                            {(item: GroupOption) => (
+                              <ComboboxItem key={item.id} value={item}>
+                                {item.name}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxCollection>
+                          {index < groupSections.length - 1 && <ComboboxSeparator />}
+                        </ComboboxGroup>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
               )}
               {selected.length > 0 && (
                 <Button

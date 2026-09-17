@@ -11,6 +11,7 @@ import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-di
 import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
 import type { PaymentWithMember } from "@/components/app/payments/types";
 import { DataTable } from "@/components/ui/data-table";
+import { Stat, StatDescription, StatGroup, StatLabel, StatValue } from "@/components/ui/stat";
 import {
   Empty,
   EmptyDescription,
@@ -30,37 +31,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function daysBetween(from: Date, to: Date) {
   return Math.floor((to.getTime() - new Date(from).getTime()) / DAY_MS);
-}
-
-function StatTile({
-  label,
-  value,
-  hint,
-  tone = "default",
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "default" | "destructive";
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span
-        className={cn(
-          "truncate text-lg font-semibold tabular-nums",
-          tone === "destructive" ? "text-destructive" : "text-foreground",
-        )}
-      >
-        {value}
-      </span>
-      <span className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </span>
-      {hint ? (
-        <span className="truncate text-xs text-muted-foreground">{hint}</span>
-      ) : null}
-    </div>
-  );
 }
 
 export function MemberPaymentsTab({
@@ -91,10 +61,11 @@ export function MemberPaymentsTab({
    */
   const rows: PaymentWithMember[] = useMemo(() => {
     const urgency: Record<PaymentWithMember["status"], number> = {
-      overdue: 0,
-      pending: 1,
-      paid: 2,
-      cancelled: 3,
+      refund_due: 0,
+      overdue: 1,
+      pending: 2,
+      paid: 3,
+      cancelled: 4,
     };
 
     return payments
@@ -290,38 +261,38 @@ export function MemberPaymentsTab({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 rounded-xl border bg-muted/20 px-5 py-4 sm:grid-cols-4">
-        <StatTile
-          label="Unpaid"
-          value={formatFeeAmount(summary.outstandingCents, currency)}
-          hint={
-            summary.nextDueAt
-              ? `Next due ${formatDate(summary.nextDueAt)}`
-              : undefined
-          }
-          tone={summary.outstandingCents > 0 ? "destructive" : "default"}
-        />
-        <StatTile
-          label="Overdue"
-          value={String(summary.overdueCount)}
-          hint={
-            stats.oldestOverdueDays > 0
-              ? `Oldest ${stats.oldestOverdueDays} days`
-              : undefined
-          }
-          tone={summary.overdueCount > 0 ? "destructive" : "default"}
-        />
-        <StatTile
-          label={`Paid in ${now.getFullYear()}`}
-          value={formatFeeAmount(stats.paidThisYearCents, currency)}
-          hint={`${formatFeeAmount(summary.paidCents, currency)} all time`}
-        />
-        <StatTile
-          label="Paid on time"
-          value={stats.onTimeRate === null ? "—" : `${stats.onTimeRate}%`}
-          hint={stats.onTimeRate === null ? "No payments settled yet" : undefined}
-        />
-      </div>
+      <StatGroup variant="strip" columns={4}>
+        <Stat>
+          <StatLabel>Unpaid</StatLabel>
+          <StatValue tone={summary.outstandingCents > 0 ? "danger" : "default"}>
+            {formatFeeAmount(summary.outstandingCents, currency)}
+          </StatValue>
+          {summary.nextDueAt ? (
+            <StatDescription>Next due {formatDate(summary.nextDueAt)}</StatDescription>
+          ) : null}
+        </Stat>
+        <Stat>
+          <StatLabel>Overdue</StatLabel>
+          <StatValue tone={summary.overdueCount > 0 ? "danger" : "default"}>
+            {summary.overdueCount}
+          </StatValue>
+          {stats.oldestOverdueDays > 0 ? (
+            <StatDescription>Oldest {stats.oldestOverdueDays} days</StatDescription>
+          ) : null}
+        </Stat>
+        <Stat>
+          <StatLabel>Paid in {now.getFullYear()}</StatLabel>
+          <StatValue>{formatFeeAmount(stats.paidThisYearCents, currency)}</StatValue>
+          <StatDescription>{formatFeeAmount(summary.paidCents, currency)} all time</StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Paid on time</StatLabel>
+          <StatValue>{stats.onTimeRate === null ? "—" : `${stats.onTimeRate}%`}</StatValue>
+          {stats.onTimeRate === null ? (
+            <StatDescription>No payments settled yet</StatDescription>
+          ) : null}
+        </Stat>
+      </StatGroup>
 
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

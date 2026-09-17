@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import QRCode from "react-qr-code";
 import { useFormatters } from "@/components/locale-provider";
 
@@ -26,7 +27,12 @@ const CANCELLATION_REASON_LABELS: Record<string, string> = {
   waived: "Fee waived",
   admin_error: "Admin error",
   other: "Other",
+  rsvp_withdrawn: "RSVP withdrawn",
+  refunded: "Refunded",
 };
+
+/** Event context, when the dashboard row carries it. */
+type EventContext = { eventTitle?: string | null; guestName?: string | null };
 
 /**
  * The single place a payment is shown in full — amount, bank details, variable
@@ -40,7 +46,7 @@ export function PaymentDetailDialog({
   onOpenChange,
   onSuccess,
 }: {
-  payment: PaymentWithMember | null;
+  payment: (PaymentWithMember & EventContext) | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -52,14 +58,15 @@ export function PaymentDetailDialog({
   }
 
   const isOverdue = payment.status === "overdue";
+  const isRefundDue = payment.status === "refund_due";
   const account = payment.bankAccount
     ? formatBankAccount(payment.bankAccount)
     : null;
   // Only worth scanning while the money is still owed.
   const spdString =
-    payment.status === "paid" || payment.status === "cancelled"
-      ? null
-      : buildSpdString(payment, payment.memberName);
+    payment.status === "pending" || payment.status === "overdue"
+      ? buildSpdString(payment, payment.memberName)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,7 +76,10 @@ export function PaymentDetailDialog({
             {getPaymentTitle(payment.type, payment.periodLabel)}
             <PaymentStatusBadge status={payment.status} />
           </DialogTitle>
-          <DialogDescription>{payment.memberName}</DialogDescription>
+          <DialogDescription>
+            {payment.memberName}
+            {payment.type === "event" && !payment.memberId ? " · guest" : null}
+          </DialogDescription>
         </DialogHeader>
 
         <div
@@ -90,10 +100,16 @@ export function PaymentDetailDialog({
             {formatFeeAmount(payment.amount, payment.currency)}
           </p>
           <p className="text-sm text-muted-foreground">
-            {isOverdue ? "Overdue since " : "Due "}
-            <span className={cn(isOverdue && "font-medium text-destructive")}>
-              {formatDateTime(payment.dueAt)}
-            </span>
+            {isRefundDue ? (
+              "Paid, but the RSVP is no longer a confirmed yes — the money is owed back."
+            ) : (
+              <>
+                {isOverdue ? "Overdue since " : "Due "}
+                <span className={cn(isOverdue && "font-medium text-destructive")}>
+                  {formatDateTime(payment.dueAt)}
+                </span>
+              </>
+            )}
           </p>
         </div>
 
@@ -136,7 +152,22 @@ export function PaymentDetailDialog({
                 }
               />
             ) : null}
-            <DefinitionRow label="Period" value={payment.periodLabel} />
+            {payment.type === "event" ? (
+              <DefinitionRow
+                label="Event"
+                value={
+                  payment.eventId ? (
+                    <Link href={`/admin/events/${payment.eventId}`} className="underline underline-offset-4">
+                      {payment.eventTitle ?? payment.periodLabel}
+                    </Link>
+                  ) : (
+                    (payment.eventTitle ?? payment.periodLabel)
+                  )
+                }
+              />
+            ) : (
+              <DefinitionRow label="Period" value={payment.periodLabel} />
+            )}
             <DefinitionRow
               label="Paid at"
               value={payment.paidAt ? formatDateTime(payment.paidAt) : "Not paid"}

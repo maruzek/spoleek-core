@@ -1,5 +1,5 @@
 import { and, eq, isNull, ne, or } from "drizzle-orm";
-import { forbidden, redirect } from "next/navigation";
+import { forbidden, notFound, redirect } from "next/navigation";
 
 import type {
   AppCapabilities,
@@ -14,6 +14,7 @@ import {
   groupCategories,
   groupMemberships,
   groups,
+  memberPayments,
   tenantMembers,
   users,
   type EventOwnerType,
@@ -147,6 +148,8 @@ export async function getViewerAppContext(): Promise<
   AppShellContext & {
     memberRecordId: string | null;
     organizationId: string;
+    /** Platform operator, not just an org admin. Gates provider-wide data. */
+    isSystemAdmin: boolean;
     session: Awaited<ReturnType<typeof requireViewerSession>>;
   }
 > {
@@ -200,6 +203,7 @@ export async function getViewerAppContext(): Promise<
     session,
     organizationId: organization.id,
     memberRecordId: member?.id ?? null,
+    isSystemAdmin: user?.systemRole === "system_admin",
     organization: {
       name: organization.name,
       slug: organization.slug,
@@ -750,6 +754,34 @@ export async function requireEventManagementAccess(eventId: string) {
   );
 
   return { context, event };
+}
+
+/**
+ * Whoever manages the event manages its payments: mark paid, cancel, mark
+ * refunded from the response list need no `canManagePayments`. Resolves the
+ * payment to its event and dispatches to `requireEventManagementAccess`.
+ */
+export async function requireEventPaymentAccess(paymentId: string) {
+  const organization = await requireOrganization();
+
+  const [payment] = await db
+    .select()
+    .from(memberPayments)
+    .where(
+      and(
+        eq(memberPayments.orgId, organization.id),
+        eq(memberPayments.id, paymentId),
+        eq(memberPayments.type, "event"),
+      ),
+    )
+    .limit(1);
+
+  if (!payment || !payment.eventId) {
+    notFound();
+  }
+
+  const access = await requireEventManagementAccess(payment.eventId);
+  return { ...access, payment };
 }
 
 // ─── Forms ──────────────────────────────────────────────────────────────────

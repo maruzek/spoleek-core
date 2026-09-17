@@ -6,7 +6,13 @@ import { PortalEventForms } from "@/components/app/forms/portal-event-forms";
 import { isRsvpOpen } from "@/lib/events/rsvp";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
-import { getEventCounts, getEventDetail, getMemberResponse } from "@/server/queries/events";
+import { getMemberDisplayName } from "@/lib/member-custom-fields";
+import {
+  getEventCounts,
+  getEventDetail,
+  getLivePaymentForResponse,
+  getMemberResponse,
+} from "@/server/queries/events";
 import { getFormForFiller, listFormsForEvent } from "@/server/queries/forms";
 
 export default async function PortalEventPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -24,6 +30,7 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
     getMemberResponse(organization.id, row.event.id, member.id),
     getEventCounts(organization.id, row.event.id),
   ]);
+  const payment = response ? await getLivePaymentForResponse(organization.id, response.id) : null;
 
   // The member can see the event, so they are eligible for its forms.
   const identity = {
@@ -66,6 +73,11 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
             current={
               response ? { answer: response.answer, guestCount: response.guestCount, standing: response.standing } : null
             }
+            payment={payment}
+            priced={row.event.priceAmount !== null}
+            eventTitle={row.event.title}
+            payerName={getMemberDisplayName(member)}
+            paymentLabels={t.detail.payment}
             afterRsvpForm={
               afterRsvpData
                 ? {

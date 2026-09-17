@@ -48,6 +48,7 @@ export default async function PublicEventPage({ params }: { params: Promise<{ sl
             eventSlug={row.event.slug}
             open={isRsvpOpen(row.event, new Date())}
             maxGuests={row.event.maxGuestsPerResponse}
+            priced={row.event.priceAmount !== null}
             rsvpBaseUrl={buildAbsoluteAppUrl("/events/rsvp/")}
             afterRsvpForm={afterRsvp ? { id: afterRsvp.form.id, title: afterRsvp.form.title, required: afterRsvp.form.required } : null}
           />

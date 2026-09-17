@@ -4,10 +4,13 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 
+import { EventPaymentCard } from "@/components/app/events/event-payment-card";
 import { EventRsvpControl } from "@/components/app/events/event-rsvp-control";
 import { AfterRsvpFormDialog } from "@/components/app/forms/after-rsvp-form-dialog";
 import { PortalFormFiller, type PortalFillerData } from "@/components/app/forms/portal-form-filler";
+import type { EventPaymentView } from "@/lib/events/payment-plan";
 import type { RsvpOpenResult } from "@/lib/events/rsvp";
+import type { Dictionary } from "@/lib/i18n/messages";
 import { respondToEventAction } from "@/server/actions/events";
 import type { EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
 
@@ -22,12 +25,23 @@ export function PortalEventRsvp({
   open,
   maxGuests,
   current,
+  payment,
+  priced,
+  eventTitle,
+  payerName,
+  paymentLabels,
   afterRsvpForm,
 }: {
   eventId: string;
   open: RsvpOpenResult;
   maxGuests: number;
   current: { answer: EventRsvpAnswer; guestCount: number; standing: EventRsvpStanding } | null;
+  /** The live payment for the current answer, when the event charges. */
+  payment: EventPaymentView | null;
+  priced: boolean;
+  eventTitle: string;
+  payerName?: string;
+  paymentLabels: Dictionary["events"]["detail"]["payment"];
   /** The pending `after_rsvp` form, or null when there is none / it is done. */
   afterRsvpForm: (PortalFillerData & { required: boolean }) | null;
 }) {
@@ -35,6 +49,20 @@ export function PortalEventRsvp({
   const respond = useAction(respondToEventAction);
   const [refreshing, startRefresh] = useTransition();
   const [justAnswered, setJustAnswered] = useState(false);
+  // The action returns the payment so the card appears without waiting for
+  // the refresh; the server prop takes over on the next render.
+  const [livePayment, setLivePayment] = useState(payment);
+  const [lastServerPayment, setLastServerPayment] = useState(payment);
+  if (payment !== lastServerPayment) {
+    setLastServerPayment(payment);
+    setLivePayment(payment);
+  }
+  const [answered, setAnswered] = useState(current);
+  const [lastServerCurrent, setLastServerCurrent] = useState(current);
+  if (current !== lastServerCurrent) {
+    setLastServerCurrent(current);
+    setAnswered(current);
+  }
   const [dialogOpen, setDialogOpen] = useState(
     () => current != null && afterRsvpForm != null && afterRsvpForm.required && afterRsvpForm.canSubmit.ok,
   );
@@ -49,19 +77,31 @@ export function PortalEventRsvp({
 
   return (
     <>
-      <EventRsvpControl
-        open={open}
-        maxGuests={maxGuests}
-        current={current}
-        onSubmit={async (input) => {
-          const result = await respond.executeAsync({ eventId, ...input });
-          if (result?.data?.success) {
-            startRefresh(() => router.refresh());
-            if (afterRsvpForm) setJustAnswered(true);
-            return { ok: true, standing: result.data.standing };
-          }
-          return { ok: false, error: result?.serverError ?? "generic" };
-        }}
+      <div className="rounded-xl border bg-card p-4 shadow-xs">
+        <EventRsvpControl
+          open={open}
+          maxGuests={maxGuests}
+          current={current}
+          onSubmit={async (input) => {
+            const result = await respond.executeAsync({ eventId, ...input });
+            if (result?.data?.success) {
+              setLivePayment(result.data.payment);
+              setAnswered({ ...input, standing: result.data.standing });
+              startRefresh(() => router.refresh());
+              if (afterRsvpForm) setJustAnswered(true);
+              return { ok: true, standing: result.data.standing };
+            }
+            return { ok: false, error: result?.serverError ?? "generic" };
+          }}
+        />
+      </div>
+      <EventPaymentCard
+        payment={livePayment}
+        current={answered}
+        priced={priced}
+        eventTitle={eventTitle}
+        payerName={payerName}
+        t={paymentLabels}
       />
       {afterRsvpForm ? (
         <AfterRsvpFormDialog

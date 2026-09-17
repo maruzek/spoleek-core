@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   Table as TanStackTable,
   Column,
@@ -65,7 +66,14 @@ import {
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  /** Column the search box filters on. Ignored when `searchText` is given. */
   searchKey?: string;
+  /**
+   * Search across the whole row instead of one column: return everything a
+   * user might type to find this row (name, reference, labels, formatted
+   * dates…). Matching is case-insensitive substring on the joined text.
+   */
+  searchText?: (row: TData) => string;
   searchPlaceholder?: string;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
@@ -87,6 +95,8 @@ interface DataTableProps<TData, TValue> {
    * per-row actions keep working.
    */
   onRowClick?: (row: TData) => void;
+  /** Extra classes per row, e.g. a tint for rows that need attention. */
+  rowClassName?: (row: TData) => string | undefined;
 }
 
 /**
@@ -160,6 +170,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   searchKey,
+  searchText,
   searchPlaceholder = "Filter...",
   emptyStateTitle = "No results found",
   emptyStateDescription = "Try adjusting your filters.",
@@ -169,12 +180,14 @@ export function DataTable<TData, TValue>({
   enableRowSelection,
   toolbarActions,
   onRowClick,
+  rowClassName,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] =
     useState<ColumnFiltersState>(initialColumnFilters);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = useState({});
+  const [globalFilter, setGlobalFilter] = useState("");
 
   const table = useReactTable({
     data,
@@ -188,11 +201,17 @@ export function DataTable<TData, TValue>({
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
     enableRowSelection,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: searchText
+      ? (row, _columnId, value: string) =>
+          searchText(row.original).toLowerCase().includes(value.trim().toLowerCase())
+      : undefined,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       rowSelection,
+      globalFilter,
     },
   });
 
@@ -200,14 +219,20 @@ export function DataTable<TData, TValue>({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-1 items-center gap-2">
-          {searchKey && (
+          {(searchText || searchKey) && (
             <div className="relative w-full md:max-w-xs">
               <FilterIcon className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
                 placeholder={searchPlaceholder}
-                value={(table.getColumn(searchKey)?.getFilterValue() as string) ?? ""}
+                value={
+                  searchText
+                    ? globalFilter
+                    : ((table.getColumn(searchKey!)?.getFilterValue() as string) ?? "")
+                }
                 onChange={(event) =>
-                  table.getColumn(searchKey)?.setFilterValue(event.target.value)
+                  searchText
+                    ? setGlobalFilter(event.target.value)
+                    : table.getColumn(searchKey!)?.setFilterValue(event.target.value)
                 }
                 className="pl-9"
               />
@@ -267,7 +292,7 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  className={cn(onRowClick && "cursor-pointer", rowClassName?.(row.original))}
                   onClick={
                     onRowClick
                       ? (event) => {

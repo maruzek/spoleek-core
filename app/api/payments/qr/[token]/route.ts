@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import QRCode from "qrcode";
 
-import { buildSpdString } from "@/lib/payments";
+import { buildSpdString, paymentQrPayerName } from "@/lib/payments";
 import { db } from "@/server/db";
-import { memberPayments, tenantMembers } from "@/server/db/schema";
+import { eventResponses, memberPayments, tenantMembers } from "@/server/db/schema";
 import { verifyPaymentQrToken } from "@/server/lib/payment-qr";
 
 /**
@@ -27,9 +27,13 @@ export async function GET(
       payment: memberPayments,
       firstName: tenantMembers.firstName,
       lastName: tenantMembers.lastName,
+      guestName: eventResponses.guestName,
     })
     .from(memberPayments)
-    .innerJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    // A guest's event payment has no member; its name sits on the RSVP and is
+    // gone after the retention shred, in which case the QR carries no name.
+    .leftJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
+    .leftJoin(eventResponses, eq(memberPayments.responseId, eventResponses.id))
     .where(eq(memberPayments.id, paymentId))
     .limit(1);
 
@@ -37,9 +41,7 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   }
 
-  const memberName =
-    [row.firstName, row.lastName].filter(Boolean).join(" ") || undefined;
-  const spd = buildSpdString(row.payment, memberName);
+  const spd = buildSpdString(row.payment, paymentQrPayerName(row));
 
   if (!spd) {
     return new Response("Not found", { status: 404 });

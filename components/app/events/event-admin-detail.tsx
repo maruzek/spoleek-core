@@ -30,7 +30,7 @@ import type { AudienceDraft } from "@/components/app/events/event-audience-dialo
 import { EventAudiencePanel, type AudienceRow } from "@/components/app/events/event-audience-panel";
 import { EventEmailsPanel } from "@/components/app/events/event-emails-panel";
 import { EventFormsPanel, type EventFormRow } from "@/components/app/events/event-forms-panel";
-import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
+import type { OwnerOptions, PaymentDefaults } from "@/components/app/events/event-wizard/types";
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
 import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
 import { useFormatters } from "@/components/locale-provider";
@@ -56,7 +56,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEventNextStep, type EventNextStep } from "@/lib/events/next-step";
 import type { TemplateOption } from "@/components/app/forms/form-create-dialog";
-import type { EventInput, EventRecipientFilter } from "@/lib/events/schemas";
+import { eventPriceToInput, type EventInput, type EventRecipientFilter } from "@/lib/events/schemas";
+import { formatMoney } from "@/lib/payments";
 import { cn } from "@/lib/utils";
 import {
   cancelEventAction,
@@ -65,7 +66,7 @@ import {
 } from "@/server/actions/events";
 import type { Event } from "@/server/db/schema";
 import type { EmailActivityRow } from "@/server/queries/email-activity";
-import type { EventRecipient, EventResponseRow } from "@/server/queries/events";
+import type { EventCounts, EventRecipient, EventResponseRow } from "@/server/queries/events";
 
 const VALID_TABS = ["overview", "audience", "responses", "emails", "forms"] as const;
 type TabValue = (typeof VALID_TABS)[number];
@@ -99,8 +100,10 @@ export function EventAdminDetail({
   ownerName,
   timeZone,
   owners,
+  paymentDefaults,
   audience,
   eligibleCount,
+  notRespondedCount: notResponded,
   responses,
   counts,
   recipients,
@@ -115,10 +118,13 @@ export function EventAdminDetail({
   ownerName: string | null;
   timeZone: string;
   owners: OwnerOptions;
+  paymentDefaults: PaymentDefaults;
   audience: AudienceRow[];
   eligibleCount: number;
+  /** Invited people who have not answered — see `countNoAnswer`. */
+  notRespondedCount: number;
   responses: EventResponseRow[];
-  counts: { confirmedSeats: number; reserveCount: number };
+  counts: EventCounts;
   recipients: Record<EventRecipientFilter, EventRecipient[]>;
   sendLog: EmailActivityRow[];
   publicUrl: string | null;
@@ -169,7 +175,11 @@ export function EventAdminDetail({
     },
   });
 
-  const formValues: EventInput = { ...event, descriptionHtml: event.descriptionHtml };
+  const formValues: EventInput = {
+    ...event,
+    descriptionHtml: event.descriptionHtml,
+    ...eventPriceToInput(event),
+  };
   const memberRules = audience.flatMap((r): AudienceDraft[] => {
     if (r.kind === "group" && r.groupId) return [{ kind: "group", groupId: r.groupId, label: r.label }];
     if (r.kind === "category" && r.categoryId) return [{ kind: "category", categoryId: r.categoryId, label: r.label }];
@@ -179,7 +189,6 @@ export function EventAdminDetail({
 
   const externalCount = audience.filter((r) => r.kind === "external").length;
   const audienceRuleCount = audience.length;
-  const notResponded = recipients.not_responded.length;
 
   const nextStep = getEventNextStep({
     event,
@@ -326,6 +335,20 @@ export function EventAdminDetail({
             hint: sendLog.length > 0 ? `${sendLog.length} invite email${sendLog.length === 1 ? "" : "s"} sent` : "no invites sent yet",
             onClick: () => handleTabChange("emails"),
           },
+          ...(event.priceAmount !== null || counts.chargedCount > 0
+            ? [
+                {
+                  key: "paid",
+                  label: "Paid",
+                  value: counts.paidCount,
+                  of: counts.chargedCount,
+                  hint: counts.currency
+                    ? `${formatMoney(counts.collectedMinor, counts.currency, locale)} collected · ${formatMoney(counts.outstandingMinor, counts.currency, locale)} outstanding`
+                    : "charged once someone confirms",
+                  onClick: () => handleTabChange("responses"),
+                },
+              ]
+            : []),
         ]}
       />
 
@@ -384,7 +407,13 @@ export function EventAdminDetail({
 
         <TabsContent value="responses">
           <TabBody wide>
-            <EventResponsesPanel eventId={event.id} capacity={event.capacity} responses={responses} counts={counts} />
+            <EventResponsesPanel
+              eventId={event.id}
+              capacity={event.capacity}
+              priced={event.priceAmount !== null}
+              responses={responses}
+              counts={counts}
+            />
           </TabBody>
         </TabsContent>
 
@@ -406,6 +435,8 @@ export function EventAdminDetail({
         event={formValues}
         audience={memberRules}
         owners={owners}
+        paymentDefaults={paymentDefaults}
+        chargedCount={counts.chargedCount}
         onOpenChange={setEditOpen}
         onSaved={() => router.refresh()}
       />

@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Stat, StatDescription, StatGroup, StatLabel, StatValue } from "@/components/ui/stat";
 import { Status, StatusLabel } from "@/components/ui/status";
 import {
   Table,
@@ -91,43 +92,6 @@ function memberName(row: { firstName: string | null; lastName: string | null; em
     [row.firstName, row.lastName].filter(Boolean).join(" ") ||
     row.email ||
     "Unknown member"
-  );
-}
-
-/**
- * One cell of the strip along the bottom of the status card.
- *
- * `caption` names the number and `label` qualifies it — "5 / Members counted /
- * 4 paid · 1 waived" — so the strip reads the same way in all three columns.
- */
-function HeroStat({
-  value,
-  caption,
-  label,
-  tone,
-}: {
-  value: string;
-  caption: string;
-  label?: string;
-  tone?: "attention";
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 px-5 py-3">
-      <span className="font-semibold text-lg tabular-nums">{value}</span>
-      <span className="text-muted-foreground text-xs">{caption}</span>
-      {label ? (
-        <span
-          className={cn(
-            "text-xs",
-            tone === "attention"
-              ? "font-medium text-orange-600 dark:text-orange-400"
-              : "text-muted-foreground",
-          )}
-        >
-          {label}
-        </span>
-      ) : null}
-    </div>
   );
 }
 
@@ -370,35 +334,41 @@ function GroupReportRoster({
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 divide-x border-t bg-muted/30 sm:grid-cols-3">
-          <HeroStat
-            value={String(reportGroup.memberCount)}
-            label={`${reportGroup.paidCount} paid · ${reportGroup.waivedCount} waived`}
-            caption="Members counted"
-          />
-          <HeroStat
-            value={formatFeeAmount(reportGroup.feeTotalCents, currency)}
-            caption="Fees collected"
-          />
+        <StatGroup variant="inset" columns={report.confirmDueAt ? 3 : 2} className="border-t">
+          <Stat>
+            <StatLabel>Members counted</StatLabel>
+            <StatValue>{reportGroup.memberCount}</StatValue>
+            <StatDescription>
+              {reportGroup.paidCount} paid · {reportGroup.waivedCount} waived
+            </StatDescription>
+          </Stat>
+          <Stat>
+            <StatLabel>Fees collected</StatLabel>
+            <StatValue>{formatFeeAmount(reportGroup.feeTotalCents, currency)}</StatValue>
+          </Stat>
           {report.confirmDueAt ? (
-            <HeroStat
-              value={formatDate(report.confirmDueAt, locale)}
-              caption="Confirm by"
-              label={
-                daysLeft === null
-                  ? undefined
-                  : daysLeft < 0
+            <Stat>
+              <StatLabel>Confirm by</StatLabel>
+              <StatValue
+                className="text-2xl"
+                tone={daysLeft !== null && daysLeft < 0 ? "danger" : daysLeft !== null && daysLeft <= 7 ? "warning" : "default"}
+              >
+                {formatDate(report.confirmDueAt, locale)}
+              </StatValue>
+              {daysLeft !== null ? (
+                <StatDescription
+                  className={cn(daysLeft <= 7 && "font-medium text-orange-600 dark:text-orange-400")}
+                >
+                  {daysLeft < 0
                     ? `${Math.abs(daysLeft)} days overdue`
                     : daysLeft === 0
                       ? "Due today"
-                      : `${daysLeft} days left`
-              }
-              tone={
-                daysLeft !== null && daysLeft <= 7 ? "attention" : undefined
-              }
-            />
+                      : `${daysLeft} days left`}
+                </StatDescription>
+              ) : null}
+            </Stat>
           ) : null}
-        </div>
+        </StatGroup>
       </div>
 
       {comparison ? (

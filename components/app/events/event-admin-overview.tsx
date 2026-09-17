@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import {
   CalendarIcon,
+  CoinsIcon,
   CopyIcon,
   ExternalLinkIcon,
   HourglassIcon,
@@ -15,6 +16,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { formatEventWhen } from "@/lib/events/display";
+import { formatBankAccount } from "@/lib/iban";
+import { formatMoney } from "@/lib/payments";
 import type { Event } from "@/server/db/schema";
 
 function Row({
@@ -144,6 +147,21 @@ export function EventAdminOverview({
                 : "No guests"}
             </span>
           </Row>
+          {event.priceAmount !== null && event.priceCurrency ? (
+            <Row icon={<CoinsIcon />} label="Price">
+              {formatMoney(event.priceAmount, event.priceCurrency, locale)} per person
+              <span className="block text-xs text-muted-foreground">
+                {event.paymentDueAt
+                  ? `Pay by ${new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone }).format(new Date(event.paymentDueAt))}`
+                  : event.rsvpDeadlineAt
+                    ? "Pay by the RSVP deadline"
+                    : event.startsAt
+                      ? "Pay by the start of the event"
+                      : "Pay within 14 days of answering"}
+                {event.priceBankAccount ? ` · ${formatBankAccount(event.priceBankAccount).primary}` : " · organisation account"}
+              </span>
+            </Row>
+          ) : null}
           {event.communicationLink ? (
             <Row icon={<MessageSquareIcon />} label="Chat">
               <a

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BellIcon,
+  CalendarIcon,
   FileTextIcon,
   GlobeIcon,
   LanguagesIcon,
@@ -14,7 +15,10 @@ import {
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { JoinPageSettingsForm } from "@/components/app/join-page-settings-form";
-import { EventsSettingsCard, type EventSettingsState } from "@/components/app/events-settings-card";
+import {
+  EventsSettingsCard,
+  type EventSettingsState,
+} from "@/components/app/events-settings-card";
 import {
   EmailNotificationSettingsCard,
   type EmailNotificationSettingsState,
@@ -121,6 +125,7 @@ export function AdminSettingsTabs({
           Notifications
         </TabsTrigger>
         <TabsTrigger value="events">
+          <CalendarIcon data-icon="inline-start" />
           Events
         </TabsTrigger>
         <TabsTrigger value="groups">

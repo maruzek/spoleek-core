@@ -31,6 +31,15 @@ const optionalUrl = z
     message: "Link must start with http:// or https://.",
   });
 
+/** Major units as the form types them; converted with `feeToMinorUnits` in the action. */
+const priceMajorUnits = z
+  .number()
+  .positive("Price must be greater than zero.")
+  .max(1_000_000)
+  .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+    message: "Price can have at most two decimals.",
+  });
+
 export const eventOwnerTypeSchema = z.enum(["organization", "category", "group"]);
 export const eventVisibilitySchema = z.enum(["public", "org", "targeted"]);
 export const eventRsvpAnswerSchema = z.enum(["yes", "no", "maybe"]);
@@ -54,8 +63,36 @@ export const eventInputSchema = z
     locationName: optionalText(200),
     locationAddress: optionalText(500),
     communicationLink: optionalUrl,
+    /** Derived from the price in the wizard: off means every price field below is ignored. */
+    paid: z.boolean().default(false),
+    priceAmount: priceMajorUnits.nullable().optional(),
+    priceCurrency: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^[A-Z]{3}$/, "Currency must be a 3-letter code.")
+      .nullable()
+      .optional(),
+    /** Null means the organization's fee account. */
+    priceBankAccount: optionalText(64),
+    /** Null means derived from the RSVP deadline, then the start date. */
+    paymentDueAt: z.coerce.date().nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.paid && value.priceAmount == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["priceAmount"],
+        message: "Enter the price per person.",
+      });
+    }
+    if (value.paid && !value.priceCurrency) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["priceCurrency"],
+        message: "Pick a currency.",
+      });
+    }
     if (value.endsAt && !value.startsAt) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -87,6 +124,25 @@ export const eventInputSchema = z
   });
 
 export type EventInput = z.infer<typeof eventInputSchema>;
+
+/**
+ * The price fields of an `events` row as the form edits them: the switch is
+ * derived from `priceAmount`, and the amount goes out in major units.
+ */
+export function eventPriceToInput(event: {
+  priceAmount: number | null;
+  priceCurrency: string | null;
+  priceBankAccount: string | null;
+  paymentDueAt: Date | null;
+}): Pick<EventInput, "paid" | "priceAmount" | "priceCurrency" | "priceBankAccount" | "paymentDueAt"> {
+  return {
+    paid: event.priceAmount !== null,
+    priceAmount: event.priceAmount === null ? null : event.priceAmount / 100,
+    priceCurrency: event.priceCurrency,
+    priceBankAccount: event.priceBankAccount,
+    paymentDueAt: event.paymentDueAt,
+  };
+}
 
 export const audienceRuleSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("group"), groupId: z.string().uuid() }),
@@ -165,6 +221,42 @@ export const setResponseStandingSchema = z.object({
 export const removeResponseSchema = z.object({
   eventId: z.string().uuid(),
   responseId: z.string().uuid(),
+});
+
+// ─── Event payments (manager actions on the response list) ───────────────────
+
+export const eventPaymentCancellationReasonSchema = z.enum([
+  "duplicate",
+  "waived",
+  "admin_error",
+  "other",
+  "rsvp_withdrawn",
+]);
+
+export type EventPaymentCancellationReason = z.infer<
+  typeof eventPaymentCancellationReasonSchema
+>;
+
+export const markEventPaymentPaidSchema = z.object({
+  paymentId: z.string().uuid(),
+  paidAt: z.string().datetime().optional(),
+  adminNote: z.string().max(500).optional(),
+});
+
+export const bulkMarkEventPaymentsPaidSchema = z.object({
+  eventId: z.string().uuid(),
+  paymentIds: z.array(z.string().uuid()).min(1).max(500),
+  paidAt: z.string().datetime().optional(),
+});
+
+export const cancelEventPaymentSchema = z.object({
+  paymentId: z.string().uuid(),
+  reason: eventPaymentCancellationReasonSchema,
+  adminNote: z.string().max(500).optional(),
+});
+
+export const markEventPaymentRefundedSchema = z.object({
+  paymentId: z.string().uuid(),
 });
 
 export const eventSettingsSchema = z.object({

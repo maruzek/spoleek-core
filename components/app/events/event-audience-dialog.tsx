@@ -29,7 +29,7 @@ import { loadEventAudienceOptionsAction } from "@/server/actions/events";
 
 export type AudienceDraft = AudienceRuleInput & { label: string };
 
-type Kind = "category" | "group" | "member";
+export type Kind = "category" | "group" | "member";
 
 type Option = {
   key: string;
@@ -64,6 +64,7 @@ export function EventAudienceDialog({
   open,
   eventId,
   excludeKeys,
+  initialKind = "group",
   onOpenChange,
   onAdd,
 }: {
@@ -72,13 +73,21 @@ export function EventAudienceDialog({
   eventId?: string;
   /** `kind:id` keys already in the draft — hidden from the list. */
   excludeKeys: Set<string>;
+  /** Tab to open on — the rule list passes the section the "+ Add" sat in. */
+  initialKind?: Kind;
   onOpenChange: (open: boolean) => void;
   onAdd: (drafts: AudienceDraft[]) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {open ? (
-        <EventAudienceDialogBody eventId={eventId} excludeKeys={excludeKeys} onOpenChange={onOpenChange} onAdd={onAdd} />
+        <EventAudienceDialogBody
+          eventId={eventId}
+          excludeKeys={excludeKeys}
+          initialKind={initialKind}
+          onOpenChange={onOpenChange}
+          onAdd={onAdd}
+        />
       ) : null}
     </Dialog>
   );
@@ -87,16 +96,18 @@ export function EventAudienceDialog({
 function EventAudienceDialogBody({
   eventId,
   excludeKeys,
+  initialKind,
   onOpenChange,
   onAdd,
 }: {
   eventId?: string;
   excludeKeys: Set<string>;
+  initialKind: Kind;
   onOpenChange: (open: boolean) => void;
   onAdd: (drafts: AudienceDraft[]) => void;
 }) {
   const searchId = useId();
-  const [kind, setKind] = useState<Kind>("group");
+  const [kind, setKind] = useState<Kind>(initialKind);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
 

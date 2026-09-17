@@ -4,6 +4,7 @@ import {
   ArrowLeftIcon,
   BanIcon,
   CalendarIcon,
+  CoinsIcon,
   ExternalLinkIcon,
   HourglassIcon,
   MapPinIcon,
@@ -17,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatEventWhen, isLongDescription } from "@/lib/events/display";
+import { formatMoney } from "@/lib/payments";
 import type { Dictionary } from "@/lib/i18n/messages";
 import { cn } from "@/lib/utils";
 import type { Event, EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
@@ -164,15 +166,14 @@ export function PortalEventDetail({
       <div className={cn("grid gap-8", twoColumn ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
         <section className="min-w-0">
           {forms ? <div className="mb-8">{forms}</div> : null}
+          {/* No placeholder when the organiser wrote nothing; `d.noDescription` is kept should one come back. */}
           {event.descriptionHtml ? (
             <div
               className="policy-prose"
               // Sanitized on write by server/lib/policy-html.ts; rendered verbatim.
               dangerouslySetInnerHTML={{ __html: event.descriptionHtml }}
             />
-          ) : (
-            <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">{d.noDescription}</p>
-          )}
+          ) : null}
         </section>
 
         <aside
@@ -181,7 +182,8 @@ export function PortalEventDetail({
             twoColumn ? "lg:sticky lg:top-6 lg:self-start" : "sm:grid-cols-2 sm:items-start",
           )}
         >
-          <div className="rounded-xl border bg-card p-4 shadow-xs">{rsvp}</div>
+          {/* The RSVP control and, when the event charges, the payment card below it. */}
+          <div className="grid gap-4">{rsvp}</div>
 
           <dl className="divide-y rounded-xl border bg-card p-4">
             <Row icon={<CalendarIcon />} label={d.when}>
@@ -221,6 +223,14 @@ export function PortalEventDetail({
                 {event.maxGuestsPerResponse > 0 ? ` · ${d.guestsAllowed(event.maxGuestsPerResponse)}` : ""}
               </span>
             </Row>
+            {event.priceAmount !== null && event.priceCurrency ? (
+              <Row icon={<CoinsIcon />} label={d.price}>
+                {d.pricePerPerson(formatMoney(event.priceAmount, event.priceCurrency, locale))}
+                {event.maxGuestsPerResponse > 0 ? (
+                  <span className="block text-xs text-muted-foreground">{d.priceGuestsToo}</span>
+                ) : null}
+              </Row>
+            ) : null}
             {event.communicationLink ? (
               <Row icon={<MessageSquareIcon />} label={d.chat}>
                 <a

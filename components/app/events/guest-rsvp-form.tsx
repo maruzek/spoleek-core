@@ -27,12 +27,15 @@ export function GuestRsvpForm({
   eventSlug,
   open,
   maxGuests,
+  priced,
   rsvpBaseUrl,
   afterRsvpForm,
 }: {
   eventSlug: string;
   open: RsvpOpenResult;
   maxGuests: number;
+  /** A confirmed yes creates a payment; the thank-you then points at the link and email. */
+  priced: boolean;
   /** Absolute `/events/rsvp/` prefix; the token is appended client-side. */
   rsvpBaseUrl: string;
   /** An open `after_rsvp` form; the guest is sent to it on their new token. */
@@ -68,6 +71,9 @@ export function GuestRsvpForm({
           <p className={cn("text-sm", done.standing === "confirmed" ? "text-primary" : "text-amber-700 dark:text-amber-400")}>
             {t.standing[done.standing]}
           </p>
+        ) : null}
+        {priced && answer === "yes" && done.standing === "confirmed" ? (
+          <p className="text-sm text-muted-foreground">{t.detail.payment.guestPrompt}</p>
         ) : null}
         {afterRsvpForm ? (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">

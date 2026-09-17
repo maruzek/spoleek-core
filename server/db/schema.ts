@@ -288,7 +288,15 @@ export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
   "paid",
   "overdue",
   "cancelled",
+  // Set when a paid event payment loses its confirmed-yes response (answer
+  // changed, demoted to the reserve list, response deleted). Nothing moves it
+  // on automatically; a manager settles it by hand (`cancelled` with reason
+  // `refunded`).
+  "refund_due",
 ]);
+
+/** `member_payments.period_key` for event rows is this prefix + the event id. */
+export const EVENT_PAYMENT_PERIOD_KEY_PREFIX = "event:";
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
@@ -1699,6 +1707,17 @@ export const emailActivityEvents = pgTable(
   ],
 );
 
+/**
+ * A tracked payment: a membership fee or an event fee.
+ *
+ * Membership-fee rows are keyed by member and period (`member_id`,
+ * `period_key`); event rows are keyed by the RSVP that owes them
+ * (`response_id`), with `period_key = 'event:<eventId>'` so the shared title
+ * helper keeps working. Guest rows have no member at all and read their name
+ * and email through the response, which the retention shred anonymises — the
+ * payment itself copies nothing. `response_id` is set null rather than
+ * cascaded so a paid record outlives a deleted response.
+ */
 export const memberPayments = pgTable(
   "member_payments",
   {
@@ -1706,9 +1725,15 @@ export const memberPayments = pgTable(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    memberId: uuid("member_id")
-      .notNull()
-      .references(() => tenantMembers.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "cascade",
+    }),
+    responseId: uuid("response_id").references(() => eventResponses.id, {
+      onDelete: "set null",
+    }),
     type: memberPaymentTypeEnum("type").notNull().default("membership_fee"),
     status: memberPaymentStatusEnum("status").notNull().default("pending"),
     amount: integer("amount").notNull(),
@@ -1731,16 +1756,24 @@ export const memberPayments = pgTable(
     index("member_payments_org_member_idx").on(table.orgId, table.memberId),
     index("member_payments_org_status_idx").on(table.orgId, table.status),
     index("member_payments_org_period_key_idx").on(table.orgId, table.periodKey),
-    uniqueIndex("member_payments_member_period_key_idx").on(
-      table.memberId,
-      table.periodKey,
-    ),
+    uniqueIndex("member_payments_member_period_key_idx")
+      .on(table.memberId, table.periodKey)
+      .where(sql`type = 'membership_fee'`),
+    // One live payment per response; a cancelled row may be followed by a new one.
+    uniqueIndex("member_payments_response_live_idx")
+      .on(table.responseId)
+      .where(sql`response_id IS NOT NULL AND status <> 'cancelled'`),
+    index("member_payments_org_event_idx").on(table.orgId, table.eventId),
     index("member_payments_org_vs_idx").on(table.orgId, table.variableSymbol),
     index("member_payments_member_status_idx").on(table.memberId, table.status),
     index("member_payments_org_due_at_idx").on(table.orgId, table.dueAt),
     check(
       "member_payments_amount_check",
       sql`${table.amount} > 0`,
+    ),
+    check(
+      "member_payments_type_check",
+      sql`(${table.type} = 'membership_fee' AND ${table.memberId} IS NOT NULL AND ${table.eventId} IS NULL AND ${table.responseId} IS NULL) OR (${table.type} = 'event' AND ${table.eventId} IS NOT NULL)`,
     ),
   ],
 );
@@ -1975,6 +2008,10 @@ export const membershipReportMembers = pgTable(
  * schedule is known; the CHECK only insists that an end without a start is
  * meaningless. `capacity` is the number of confirmed seats including guests;
  * the reserve list is whoever said yes once it was full.
+ *
+ * Price is per person in minor units and null means a free event; the bank
+ * account and due date fall back to the organization's fee account and the
+ * RSVP deadline (then the start date) when unset.
  */
 export const events = pgTable(
   "events",
@@ -2006,6 +2043,10 @@ export const events = pgTable(
     /** Confirmed seats including guests. Null means unlimited. */
     capacity: integer("capacity"),
     maxGuestsPerResponse: integer("max_guests_per_response").notNull().default(0),
+    priceAmount: integer("price_amount"),
+    priceCurrency: text("price_currency"),
+    priceBankAccount: text("price_bank_account"),
+    paymentDueAt: timestamp("payment_due_at", { withTimezone: true }),
     locationName: text("location_name"),
     locationAddress: text("location_address"),
     /** WhatsApp / Facebook / etc. group for the event, shown to invitees. */
@@ -2036,6 +2077,14 @@ export const events = pgTable(
     ),
     check("events_capacity_check", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
     check("events_max_guests_check", sql`${table.maxGuestsPerResponse} >= 0`),
+    check(
+      "events_price_amount_check",
+      sql`${table.priceAmount} IS NULL OR ${table.priceAmount} > 0`,
+    ),
+    check(
+      "events_price_currency_check",
+      sql`(${table.priceAmount} IS NULL) = (${table.priceCurrency} IS NULL)`,
+    ),
   ],
 );
 

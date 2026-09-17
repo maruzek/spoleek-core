@@ -6,23 +6,30 @@ import { useMemo } from "react";
 
 import { ColumnDef } from "@tanstack/react-table";
 
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+
+import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
 import { DataTable } from "@/components/ui/data-table";
-import { getPaymentTitle } from "@/lib/payments";
-import type { MemberPayment } from "@/server/db/schema";
+import { comparePaymentStatus, getPaymentTitle } from "@/lib/payments";
+import type { MemberPaymentRow } from "@/server/queries/payments";
 
 function buildColumns(
   formatDateTime: (date: Date | string | null | undefined) => string,
-): ColumnDef<MemberPayment>[] {
+): ColumnDef<MemberPaymentRow>[] {
   return [
   {
     accessorKey: "periodLabel",
-    header: "Period",
-    cell: ({ row }) => (
-      <span className="font-medium">
-        {getPaymentTitle(row.original.type, row.original.periodLabel)}
-      </span>
-    ),
+    header: "Payment",
+    cell: ({ row }) =>
+      row.original.type === "event" && row.original.eventSlug ? (
+        <Link href={`/portal/events/${row.original.eventSlug}`} className="font-medium underline-offset-4 hover:underline">
+          {getPaymentTitle(row.original.type, row.original.eventTitle ?? row.original.periodLabel)}
+        </Link>
+      ) : (
+        <span className="font-medium">
+          {getPaymentTitle(row.original.type, row.original.periodLabel)}
+        </span>
+      ),
   },
   {
     accessorKey: "amount",
@@ -38,25 +45,8 @@ function buildColumns(
   {
     accessorKey: "status",
     header: "Status",
-    cell: ({ row }) => {
-      const status = row.getValue("status") as string;
-      return (
-        <Badge
-          variant={
-            status === "paid"
-              ? "default"
-              : status === "cancelled"
-              ? "outline"
-              : status === "overdue"
-              ? "destructive"
-              : "secondary"
-          }
-          className="capitalize"
-        >
-          {status}
-        </Badge>
-      );
-    },
+    cell: ({ row }) => <PaymentStatusBadge status={row.original.status} />,
+    sortingFn: (a, b) => comparePaymentStatus(a.original.status, b.original.status),
   },
   {
     accessorKey: "variableSymbol",
@@ -91,7 +81,7 @@ function buildColumns(
 }
 
 interface PaymentsTableProps {
-  data: MemberPayment[];
+  data: MemberPaymentRow[];
 }
 
 export function PaymentsTable({ data }: PaymentsTableProps) {
@@ -103,7 +93,7 @@ export function PaymentsTable({ data }: PaymentsTableProps) {
       columns={columns}
       data={data}
       searchKey="periodLabel"
-      searchPlaceholder="Search periods..."
+      searchPlaceholder="Search payments..."
     />
   );
 }

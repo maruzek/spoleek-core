@@ -8,6 +8,16 @@ import { toast } from "sonner";
 import type { AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { WizardFooter } from "@/components/app/wizard/wizard-footer";
 import type { StepGate } from "@/components/app/wizard/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Stepper,
@@ -23,6 +33,7 @@ import { createEventAction, setEventAudienceAction, updateEventAction } from "@/
 
 import { StepAudience } from "./step-audience";
 import { StepBasics } from "./step-basics";
+import { StepPayment } from "./step-payment";
 import { StepReview } from "./step-review";
 import { StepSchedule } from "./step-schedule";
 import {
@@ -49,6 +60,7 @@ const STEP_FIELDS: Record<WizardStep, (keyof EventDraft)[]> = {
   basics: ["title", "slug", "ownerCategoryId", "ownerGroupId"],
   schedule: ["startsAt", "endsAt", "rsvpDeadlineAt", "communicationLink"],
   audience: ["capacity", "maxGuestsPerResponse"],
+  payment: ["priceAmount", "priceCurrency", "priceBankAccount", "paymentDueAt"],
   review: [],
 };
 
@@ -70,7 +82,16 @@ function toRule(d: AudienceDraft): AudienceRuleInput {
  * leaves the wizard ready to publish. External invitees stay on the event
  * page because each one mints a token.
  */
-export function EventWizardDialog({ open, onOpenChange, owners, event, audience, onSaved }: EventWizardProps) {
+export function EventWizardDialog({
+  open,
+  onOpenChange,
+  owners,
+  event,
+  audience,
+  paymentDefaults,
+  chargedCount = 0,
+  onSaved,
+}: EventWizardProps) {
   const isEdit = Boolean(event?.id);
 
   const [activeStep, setActiveStep] = useState<WizardStep>("basics");
@@ -80,6 +101,10 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   // Errors only show for steps the user has tried to leave.
   const [visited, setVisited] = useState<Set<WizardStep>>(() => new Set());
   const [saving, setSaving] = useState(false);
+  // Turning the price off with charged responses asks first.
+  const [confirmUnpaid, setConfirmUnpaid] = useState(false);
+  // Closing with unsaved edits (Escape, X) asks first.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   // Reset when (re)opened, during render so the first frame is already fresh.
   const [wasOpen, setWasOpen] = useState(open);
@@ -92,8 +117,24 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
       setSlugTouched(isEdit);
       setVisited(new Set());
       setSaving(false);
+      setConfirmUnpaid(false);
+      setConfirmDiscard(false);
     }
   }
+
+  // Dirty = the draft or member rules differ from what the wizard opened with.
+  const initial = useMemo(
+    () => JSON.stringify({ draft: event ?? emptyDraft(), rules: audience ?? [] }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot per open
+    [open],
+  );
+  const dirty = JSON.stringify({ draft, rules }) !== initial;
+
+  const requestClose = useCallback(() => {
+    if (saving) return;
+    if (dirty) setConfirmDiscard(true);
+    else onOpenChange(false);
+  }, [saving, dirty, onOpenChange]);
 
   const patch = useCallback((p: Partial<EventDraft>) => setDraft((d) => ({ ...d, ...p })), []);
 
@@ -107,11 +148,15 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   const updateAction = useAction(updateEventAction);
   const audienceAction = useAction(setEventAudienceAction);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (options?: { confirmedUnpaid?: boolean }) => {
     const parsed = eventInputSchema.safeParse(draft);
     if (!parsed.success) {
       setVisited(new Set(STEPS));
       setActiveStep("basics");
+      return;
+    }
+    if (isEdit && event?.paid && !parsed.data.paid && chargedCount > 0 && !options?.confirmedUnpaid) {
+      setConfirmUnpaid(true);
       return;
     }
     setSaving(true);
@@ -147,7 +192,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
     } finally {
       setSaving(false);
     }
-  }, [draft, event?.id, isEdit, rules, createAction, updateAction, audienceAction, onOpenChange, onSaved]);
+  }, [draft, event?.id, event?.paid, chargedCount, isEdit, rules, createAction, updateAction, audienceAction, onOpenChange, onSaved]);
 
   const gates = useMemo<Record<WizardStep, StepGate>>(() => {
     const blockedBy = (step: WizardStep) =>
@@ -166,6 +211,7 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
             }
           : {}),
       },
+      payment: visited.has("payment") ? blockedBy("payment") : {},
       review: { busy: saving },
     };
   }, [stepErrors, visited, draft.visibility, rules.length, saving]);
@@ -191,18 +237,16 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
   };
 
   const nextLabel =
-    activeStep === "review" ? (isEdit ? "Save changes" : "Create draft") : activeStep === "audience" ? "Review" : "Continue";
+    activeStep === "review" ? (isEdit ? "Save changes" : "Create draft") : activeStep === "payment" ? "Review" : "Continue";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
       <DialogContent
         className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
-        onInteractOutside={(e) => {
-          if (saving) e.preventDefault();
-          // Nested dialogs/popovers (audience picker, hover cards) must not close us.
-          if (e.target instanceof Element && e.target.closest('[data-slot="dialog-content"],[data-slot="popover-content"]'))
-            e.preventDefault();
-        }}
+        // Never close on outside clicks: the dialog resizes between steps, so a
+        // click aimed at "Continue" can land on the overlay and discard the draft.
+        // The X button and Escape still close it.
+        onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => saving && e.preventDefault()}
       >
         <DialogHeader className="shrink-0 border-b px-6 py-4">
@@ -218,14 +262,15 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
 
         <div className="shrink-0 border-b px-6 py-3">
           <Stepper value={activeStep} onValueChange={(v) => goTo(v as WizardStep)} className="gap-0">
-            <StepperList className="gap-1">
+            <StepperList className="justify-center gap-1">
               {STEPS.map((step, idx) => (
-                <StepperItem key={step} value={step} className="shrink">
+                // `flex-none` + fixed separators: equal gaps whatever the label length.
+                <StepperItem key={step} value={step} className="flex-none">
                   <StepperTrigger className="flex items-center gap-1.5 px-2 py-1">
                     <StepperIndicator className="size-5 rounded-full text-[10px]" />
                     <StepperTitle className="hidden text-xs sm:block">{STEP_LABELS[step]}</StepperTitle>
                   </StepperTrigger>
-                  {idx < STEPS.length - 1 && <StepperSeparator className="mx-1 h-px flex-1 bg-border" />}
+                  {idx < STEPS.length - 1 && <StepperSeparator className="mx-1 h-px w-8 flex-none" />}
                 </StepperItem>
               ))}
             </StepperList>
@@ -255,8 +300,18 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
                 onRulesChange={setRules}
               />
             )}
+            {activeStep === "payment" && (
+              <StepPayment draft={draft} errors={shownErrors("payment")} defaults={paymentDefaults} onChange={patch} />
+            )}
             {activeStep === "review" && (
-              <StepReview draft={draft} rules={rules} owners={owners} isEdit={isEdit} onEdit={setActiveStep} />
+              <StepReview
+                draft={draft}
+                rules={rules}
+                owners={owners}
+                paymentDefaults={paymentDefaults}
+                isEdit={isEdit}
+                onEdit={setActiveStep}
+              />
             )}
           </div>
         </div>
@@ -278,6 +333,51 @@ export function EventWizardDialog({ open, onOpenChange, owners, event, audience,
           onNext={goNext}
         />
       </DialogContent>
+
+      <AlertDialog open={confirmUnpaid} onOpenChange={setConfirmUnpaid}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Make this event free?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {chargedCount === 1 ? "One person has" : `${chargedCount} people have`} been charged for it.
+              Pending payments will be cancelled; paid ones are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep the price</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmUnpaid(false);
+                void save({ confirmedUnpaid: true });
+              }}
+            >
+              Make it free
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isEdit ? "Your edits to this event" : "This event"} will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmDiscard(false);
+                onOpenChange(false);
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

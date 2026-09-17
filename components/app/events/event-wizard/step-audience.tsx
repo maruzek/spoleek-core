@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FolderIcon, GlobeIcon, PlusIcon, TargetIcon, UserRoundIcon, UsersIcon, XIcon } from "lucide-react";
+import { GlobeIcon, PlusIcon, TargetIcon, UsersIcon } from "lucide-react";
 
+import { AudienceRuleList, type AudienceKind, audienceDraftKey } from "@/components/app/events/audience-rule-list";
 import { EventAudienceDialog, type AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -17,21 +18,6 @@ const VISIBILITY: { value: EventInput["visibility"]; icon: typeof UsersIcon; tit
   { value: "org", icon: UsersIcon, title: "Whole organization", body: "Every active member sees it." },
   { value: "public", icon: GlobeIcon, title: "Public", body: "Anyone with the link, no account needed." },
 ];
-
-const KIND_ICON = { category: FolderIcon, group: UsersIcon, member: UserRoundIcon } as const;
-
-export function draftKey(d: AudienceDraft) {
-  switch (d.kind) {
-    case "group":
-      return `group:${d.groupId}`;
-    case "category":
-      return `category:${d.categoryId}`;
-    case "member":
-      return `member:${d.memberId}`;
-    case "external":
-      return `external:${d.externalEmail}`;
-  }
-}
 
 export function StepAudience({
   draft,
@@ -48,8 +34,8 @@ export function StepAudience({
   onChange: (patch: Partial<EventDraft>) => void;
   onRulesChange: (rules: AudienceDraft[]) => void;
 }) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const chosen = useMemo(() => new Set(rules.map(draftKey)), [rules]);
+  const [picker, setPicker] = useState<{ open: boolean; kind?: AudienceKind }>({ open: false });
+  const chosen = useMemo(() => new Set(rules.map(audienceDraftKey)), [rules]);
   const err = (k: keyof EventDraft) => (errors[k] ?? []).map((message) => ({ message }));
 
   return (
@@ -89,55 +75,34 @@ export function StepAudience({
       <section className="rounded-xl border">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div>
-            <h3 className="text-sm font-semibold">Audience</h3>
+            <h3 className="font-sans text-sm font-semibold">Audience</h3>
             <p className="text-xs text-muted-foreground">
               {draft.visibility === "targeted"
                 ? "Nobody can see the event until at least one rule matches them."
                 : "Kept for invites and the “no answer” count; does not narrow who can see it."}
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setPicker({ open: true })}>
             <PlusIcon data-icon="inline-start" />
             Add rule
           </Button>
         </header>
-        <div className="p-4">
-          {rules.length === 0 ? (
-            <p className="py-3 text-center text-sm text-muted-foreground">
-              No rules yet. {draft.visibility === "targeted" ? "Add a category, group or member." : "Everyone counts as invited."}
-            </p>
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {rules.map((r) => {
-                if (r.kind === "external") return null;
-                const Icon = KIND_ICON[r.kind];
-                return (
-                  <li key={draftKey(r)} className="flex items-center gap-2 rounded-lg border bg-card py-1.5 pr-1 pl-2.5 text-sm shadow-xs">
-                    <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                    <span className="truncate">{r.label}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${r.label}`}
-                      className="ml-0.5 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onClick={() => onRulesChange(rules.filter((x) => draftKey(x) !== draftKey(r)))}
-                    >
-                      <XIcon className="size-3.5" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+        <AudienceRuleList
+          rules={rules}
+          emptyText={`No rules yet. ${draft.visibility === "targeted" ? "Add a category, group or member." : "Everyone counts as invited."}`}
+          onRemove={(key) => onRulesChange(rules.filter((x) => audienceDraftKey(x) !== key))}
+          onAdd={(kind) => setPicker({ open: true, kind })}
+        />
       </section>
 
       <EventAudienceDialog
-        open={pickerOpen}
+        open={picker.open}
         eventId={eventId}
         excludeKeys={chosen}
-        onOpenChange={setPickerOpen}
+        initialKind={picker.kind}
+        onOpenChange={(open) => setPicker((p) => ({ ...p, open }))}
         onAdd={(incoming) => {
-          const fresh = incoming.filter((d) => !chosen.has(draftKey(d)));
+          const fresh = incoming.filter((d) => !chosen.has(audienceDraftKey(d)));
           if (fresh.length > 0) onRulesChange([...rules, ...fresh]);
         }}
       />

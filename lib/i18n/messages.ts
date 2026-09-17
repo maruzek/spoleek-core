@@ -333,6 +333,10 @@ const en = {
       TOKEN_INVALID: "This link is no longer valid.",
       RATE_LIMITED: "Too many attempts. Please try again later.",
       NOT_FOUND: "This event could not be found.",
+      PAYMENT_BANK_ACCOUNT_MISSING:
+        "This event has a price but no bank account to pay into. Add one on the event or in the organization's fee settings.",
+      PAYMENT_NOT_PENDING: "Only a pending or overdue payment can be changed this way.",
+      PAYMENT_NOT_PAID: "Only a payment marked as refund due can be settled.",
       generic: "Something went wrong. Please try again.",
     },
     list: {
@@ -378,6 +382,10 @@ const en = {
       goingCount: (n: number) => (n === 1 ? "1 person going" : `${n} people going`),
       chat: "Chat",
       openChat: "Open the event chat",
+      price: "Price",
+      pricePerPerson: (amount: string) => `${amount} per person`,
+      priceGuestsToo: "Guests pay the same.",
+      free: "Free",
       noDescription: "The organiser has not added any details yet.",
       yourStatus: {
         going: "You're going",
@@ -395,6 +403,11 @@ const en = {
       fewer: "Fewer guests",
       more: "More guests",
       party: (n: number) => (n === 1 ? "Just you" : `You + ${n - 1}`),
+      payment: {
+        reserveTitle: "No payment needed yet",
+        reserveBody: "You are on the reserve list. Payment details appear here once the organiser confirms your place.",
+        guestPrompt: "Payment details are on the page behind your link, and in the email we sent you.",
+      },
     },
     public: {
       yourName: "Your name",
@@ -413,6 +426,31 @@ const en = {
       answeringAs: (name: string) => `Answering as ${name}`,
       invalidTitle: "This link is no longer valid",
       invalidBody: "The event may be over, cancelled, or the link has been replaced by a newer invitation. Ask the organiser for a fresh one.",
+    },
+  },
+
+  payments: {
+    /** The QR/receipt card a member sees for one payment. */
+    card: {
+      membershipFee: "Membership fee",
+      eventFee: "Event fee",
+      statePending: "Waiting for your payment",
+      stateOverdue: "Payment overdue",
+      statePaid: "Paid",
+      stateRefundDue: "Refund on its way",
+      stateCancelled: "Cancelled",
+      dueBy: (date: string) => `Pay by ${date}`,
+      overdueSince: (date: string) => `Was due ${date}`,
+      paidOn: (date: string) => `Paid on ${date}`,
+      refundBody: "You paid, but your place is no longer confirmed. The organiser will return the money and contact you.",
+      scanToPay: "Scan with your banking app",
+      bankAccount: "Bank account",
+      bankCode: "Bank code",
+      variableSymbol: "Variable symbol",
+      payer: "Payer",
+      copy: (what: string) => `Copy ${what.toLowerCase()}`,
+      showDetails: "Show payment details",
+      noAccount: "The organisation has not set up a bank account yet — ask the organiser how to pay.",
     },
   },
 
@@ -886,6 +924,10 @@ const cs: Dictionary = {
       TOKEN_INVALID: "Tento odkaz už není platný.",
       RATE_LIMITED: "Příliš mnoho pokusů. Zkuste to prosím později.",
       NOT_FOUND: "Akce nebyla nalezena.",
+      PAYMENT_BANK_ACCOUNT_MISSING:
+        "Akce má cenu, ale není kam platit. Doplňte bankovní účet u akce nebo v nastavení příspěvků organizace.",
+      PAYMENT_NOT_PENDING: "Takto lze změnit jen čekající nebo zpožděnou platbu.",
+      PAYMENT_NOT_PAID: "Vypořádat lze jen platbu označenou k vrácení.",
       generic: "Něco se pokazilo. Zkuste to prosím znovu.",
     },
     list: {
@@ -933,6 +975,10 @@ const cs: Dictionary = {
       goingCount: (n: number) => (n === 1 ? "1 člověk přijde" : n < 5 ? `${n} lidé přijdou` : `${n} lidí přijde`),
       chat: "Chat",
       openChat: "Otevřít chat akce",
+      price: "Cena",
+      pricePerPerson: (amount: string) => `${amount} za osobu`,
+      priceGuestsToo: "Hosté platí stejně.",
+      free: "Zdarma",
       noDescription: "Pořadatel zatím nepřidal žádné podrobnosti.",
       yourStatus: {
         going: "Přijdete",
@@ -950,6 +996,11 @@ const cs: Dictionary = {
       fewer: "Méně hostů",
       more: "Více hostů",
       party: (n: number) => (n === 1 ? "Jen vy" : `Vy + ${n - 1}`),
+      payment: {
+        reserveTitle: "Zatím není co platit",
+        reserveBody: "Jste mezi náhradníky. Platební údaje se tu objeví, jakmile vám pořadatel potvrdí místo.",
+        guestPrompt: "Platební údaje najdete na stránce za svým odkazem a v e-mailu, který jsme vám poslali.",
+      },
     },
     public: {
       yourName: "Vaše jméno",
@@ -968,6 +1019,30 @@ const cs: Dictionary = {
       answeringAs: (name: string) => `Odpovídáte jako ${name}`,
       invalidTitle: "Tento odkaz už není platný",
       invalidBody: "Akce možná proběhla, byla zrušena, nebo byl odkaz nahrazen novější pozvánkou. Požádejte pořadatele o nový.",
+    },
+  },
+
+  payments: {
+    card: {
+      membershipFee: "Členský příspěvek",
+      eventFee: "Poplatek za akci",
+      statePending: "Čeká na vaši platbu",
+      stateOverdue: "Platba po splatnosti",
+      statePaid: "Zaplaceno",
+      stateRefundDue: "Vrátíme vám peníze",
+      stateCancelled: "Zrušeno",
+      dueBy: (date: string) => `Zaplaťte do ${date}`,
+      overdueSince: (date: string) => `Splatnost byla ${date}`,
+      paidOn: (date: string) => `Zaplaceno ${date}`,
+      refundBody: "Zaplatili jste, ale vaše místo už není potvrzené. Pořadatel vám peníze vrátí a ozve se vám.",
+      scanToPay: "Naskenujte v bankovní aplikaci",
+      bankAccount: "Číslo účtu",
+      bankCode: "Kód banky",
+      variableSymbol: "Variabilní symbol",
+      payer: "Plátce",
+      copy: (what: string) => `Kopírovat ${what.toLowerCase()}`,
+      showDetails: "Zobrazit platební údaje",
+      noAccount: "Organizace zatím nemá nastavený bankovní účet — zeptejte se pořadatele, jak zaplatit.",
     },
   },
 

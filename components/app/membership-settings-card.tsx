@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { feeToMajorUnits, feeToMinorUnits } from "@/lib/payments";
 import {
-  feeCurrencyOptions,
   membershipManagementModeOptions,
 } from "@/lib/membership";
 import {
@@ -22,6 +21,7 @@ import type {
   MembershipPeriodMode,
 } from "@/server/db/schema";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CurrencyInput } from "@/components/app/currency-input";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
 import {
@@ -302,31 +302,13 @@ export function MembershipSettingsCard({
               <Field>
                 <FieldLabel htmlFor="fee-amount">Fee amount</FieldLabel>
                 <FieldContent>
-                  <Input
+                  <CurrencyInput
                     id="fee-amount"
-                    type="number"
-                    min={0}
-                    value={feeAmount}
-                    onChange={(e) => setFeeAmount(Number(e.target.value))}
+                    amount={feeAmount}
+                    currency={feeCurrency}
+                    onAmountChange={(amount) => setFeeAmount(amount ?? 0)}
+                    onCurrencyChange={setFeeCurrency}
                   />
-                </FieldContent>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="fee-currency">Currency</FieldLabel>
-                <FieldContent>
-                  <Select value={feeCurrency} onValueChange={setFeeCurrency}>
-                    <SelectTrigger id="fee-currency">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {feeCurrencyOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
                 </FieldContent>
               </Field>
 

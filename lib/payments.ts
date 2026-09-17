@@ -16,6 +16,22 @@ export function getPaymentTitle(
   }
 }
 
+/**
+ * The name written into a payment QR's message: the member's, else the guest
+ * name from the RSVP, else nothing (a shredded guest — the VS still matches).
+ */
+export function paymentQrPayerName(row: {
+  firstName: string | null;
+  lastName: string | null;
+  guestName: string | null;
+}): string | undefined {
+  return (
+    [row.firstName, row.lastName].filter(Boolean).join(" ") ||
+    row.guestName ||
+    undefined
+  );
+}
+
 export function buildSpdString(
   payment: Pick<
     MemberPayment,
@@ -66,6 +82,25 @@ export function formatFeeAmount(minor: number, currency: string): string {
 }
 
 /**
+ * Locale-aware money for member-facing pages: "350 Kč" in Czech, "CZK 350"
+ * in English, decimals only when the amount has them. Falls back to
+ * `formatFeeAmount` for a currency `Intl` does not know.
+ */
+export function formatMoney(minor: number, currency: string, locale: string): string {
+  const whole = minor % 100 === 0;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(minor / 100);
+  } catch {
+    return formatFeeAmount(minor, currency);
+  }
+}
+
+/**
  * Dashboard ordering for payment statuses: lower rank sorts higher up the
  * table. Outstanding work comes first — an admin opens this page to see who
  * still owes money, not to admire settled rows — and closed records sink.
@@ -74,13 +109,15 @@ export function formatFeeAmount(minor: number, currency: string): string {
  * client-side re-sort agree on one definition.
  */
 export const PAYMENT_STATUS_SORT_ORDER: Record<MemberPaymentStatus, number> = {
-  overdue: 0,
-  pending: 1,
+  // Money the organization owes back is the most urgent thing on the page.
+  refund_due: 0,
+  overdue: 1,
+  pending: 2,
   // Settled records — paid and cancelled alike — are closed business, so they
   // share a rank and fall through to the due-date tiebreaker instead of being
   // split into two blocks.
-  paid: 2,
-  cancelled: 2,
+  paid: 3,
+  cancelled: 3,
 };
 
 /** Comparator for TanStack Table / Array#sort over payment statuses. */
@@ -97,31 +134,13 @@ export function comparePaymentStatus(
  * blue while the table badge used the grey `secondary` variant, so a pending
  * row simply vanished among the muted text.
  *
- * `chart` is a raw hex because Recharts fills SVG, not classes; `badge` is a
- * tinted background plus foreground so the badge stays legible in both themes.
+ * `chart` is a raw hex because Recharts fills SVG, not classes. The table
+ * badge is `PaymentStatusBadge`, on the shared `Status` dot primitive.
  */
-export const PAYMENT_STATUS_COLORS: Record<
-  MemberPaymentStatus,
-  { chart: string; badge: string }
-> = {
-  overdue: {
-    chart: "#ef4444",
-    badge:
-      "border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200",
-  },
-  pending: {
-    chart: "#3b82f6",
-    badge:
-      "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200",
-  },
-  paid: {
-    chart: "#176b4d",
-    badge:
-      "border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  },
-  cancelled: {
-    chart: "#94a3b8",
-    badge:
-      "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-  },
+export const PAYMENT_STATUS_COLORS: Record<MemberPaymentStatus, { chart: string }> = {
+  overdue: { chart: "#ef4444" },
+  refund_due: { chart: "#f97316" },
+  pending: { chart: "#3b82f6" },
+  paid: { chart: "#176b4d" },
+  cancelled: { chart: "#94a3b8" },
 };
