@@ -72,22 +72,24 @@ export function TokenEventRsvp({
 
   return (
     <>
-      <EventRsvpControl
-        open={open}
-        maxGuests={maxGuests}
-        current={current}
-        onSubmit={async (input) => {
-          const result = await respond.executeAsync({ token, ...input });
-          if (result?.data?.success) {
-            setLivePayment(result.data.payment);
-            setAnswered({ ...input, standing: result.data.standing });
-            startRefresh(() => router.refresh());
-            if (afterRsvpForm) setJustAnswered(true);
-            return { ok: true, standing: result.data.standing };
-          }
-          return { ok: false, error: result?.serverError ?? "generic" };
-        }}
-      />
+      <div className="rounded-xl border bg-card p-4 shadow-xs">
+        <EventRsvpControl
+          open={open}
+          maxGuests={maxGuests}
+          current={current}
+          onSubmit={async (input) => {
+            const result = await respond.executeAsync({ token, ...input });
+            if (result?.data?.success) {
+              setLivePayment(result.data.payment);
+              setAnswered({ ...input, standing: result.data.standing });
+              startRefresh(() => router.refresh());
+              if (afterRsvpForm) setJustAnswered(true);
+              return { ok: true, standing: result.data.standing };
+            }
+            return { ok: false, error: result?.serverError ?? "generic" };
+          }}
+        />
+      </div>
       <EventPaymentCard
         payment={livePayment}
         current={answered}

@@ -19,7 +19,13 @@ export type EventStat = {
  */
 export function EventAdminStats({ stats }: { stats: EventStat[] }) {
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border lg:grid-cols-4">
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border",
+        // A priced event adds a fifth tile; keep one row rather than an orphan.
+        stats.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4",
+      )}
+    >
       {stats.map((stat) => {
         const ratio = stat.of ? Math.min(1, stat.value / stat.of) : null;
         const Tag = stat.onClick ? "button" : "div";

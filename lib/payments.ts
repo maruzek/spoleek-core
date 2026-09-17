@@ -82,6 +82,25 @@ export function formatFeeAmount(minor: number, currency: string): string {
 }
 
 /**
+ * Locale-aware money for member-facing pages: "350 Kč" in Czech, "CZK 350"
+ * in English, decimals only when the amount has them. Falls back to
+ * `formatFeeAmount` for a currency `Intl` does not know.
+ */
+export function formatMoney(minor: number, currency: string, locale: string): string {
+  const whole = minor % 100 === 0;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: whole ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(minor / 100);
+  } catch {
+    return formatFeeAmount(minor, currency);
+  }
+}
+
+/**
  * Dashboard ordering for payment statuses: lower rank sorts higher up the
  * table. Outstanding work comes first — an admin opens this page to see who
  * still owes money, not to admire settled rows — and closed records sink.
@@ -115,36 +134,13 @@ export function comparePaymentStatus(
  * blue while the table badge used the grey `secondary` variant, so a pending
  * row simply vanished among the muted text.
  *
- * `chart` is a raw hex because Recharts fills SVG, not classes; `badge` is a
- * tinted background plus foreground so the badge stays legible in both themes.
+ * `chart` is a raw hex because Recharts fills SVG, not classes. The table
+ * badge is `PaymentStatusBadge`, on the shared `Status` dot primitive.
  */
-export const PAYMENT_STATUS_COLORS: Record<
-  MemberPaymentStatus,
-  { chart: string; badge: string }
-> = {
-  overdue: {
-    chart: "#ef4444",
-    badge:
-      "border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-200",
-  },
-  refund_due: {
-    chart: "#a855f7",
-    badge:
-      "border-purple-300 bg-purple-100 text-purple-900 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-200",
-  },
-  pending: {
-    chart: "#3b82f6",
-    badge:
-      "border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200",
-  },
-  paid: {
-    chart: "#176b4d",
-    badge:
-      "border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  },
-  cancelled: {
-    chart: "#94a3b8",
-    badge:
-      "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300",
-  },
+export const PAYMENT_STATUS_COLORS: Record<MemberPaymentStatus, { chart: string }> = {
+  overdue: { chart: "#ef4444" },
+  refund_due: { chart: "#f97316" },
+  pending: { chart: "#3b82f6" },
+  paid: { chart: "#176b4d" },
+  cancelled: { chart: "#94a3b8" },
 };

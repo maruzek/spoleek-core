@@ -57,7 +57,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getEventNextStep, type EventNextStep } from "@/lib/events/next-step";
 import type { TemplateOption } from "@/components/app/forms/form-create-dialog";
 import { eventPriceToInput, type EventInput, type EventRecipientFilter } from "@/lib/events/schemas";
-import { formatFeeAmount } from "@/lib/payments";
+import { formatMoney } from "@/lib/payments";
 import { cn } from "@/lib/utils";
 import {
   cancelEventAction,
@@ -341,8 +341,8 @@ export function EventAdminDetail({
                   value: counts.paidCount,
                   of: counts.chargedCount,
                   hint: counts.currency
-                    ? `${formatFeeAmount(counts.collectedMinor, counts.currency)} collected · ${formatFeeAmount(counts.outstandingMinor, counts.currency)} outstanding`
-                    : "nobody charged yet",
+                    ? `${formatMoney(counts.collectedMinor, counts.currency, locale)} collected · ${formatMoney(counts.outstandingMinor, counts.currency, locale)} outstanding`
+                    : "charged once someone confirms",
                   onClick: () => handleTabChange("responses"),
                 },
               ]

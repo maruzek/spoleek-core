@@ -23,6 +23,8 @@ export const STEP_LABELS: Record<WizardStep, string> = {
 export type PaymentDefaults = {
   currency: string;
   bankAccount: string | null;
+  /** Organization locale: a Czech org sees a local account-number placeholder, everyone else an IBAN. */
+  locale: string;
 };
 
 /** The event as the wizard edits it — the action input, minus nothing. */

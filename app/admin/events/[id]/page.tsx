@@ -88,6 +88,7 @@ export default async function AdminEventPage({
         paymentDefaults={{
           currency: context.organization.membershipFeeCurrency,
           bankAccount: context.organization.membershipFeeBankAccount,
+          locale: context.organization.locale,
         }}
         audience={audienceRows}
         eligibleCount={eligibleIds.size}

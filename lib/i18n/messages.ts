@@ -429,6 +429,31 @@ const en = {
     },
   },
 
+  payments: {
+    /** The QR/receipt card a member sees for one payment. */
+    card: {
+      membershipFee: "Membership fee",
+      eventFee: "Event fee",
+      statePending: "Waiting for your payment",
+      stateOverdue: "Payment overdue",
+      statePaid: "Paid",
+      stateRefundDue: "Refund on its way",
+      stateCancelled: "Cancelled",
+      dueBy: (date: string) => `Pay by ${date}`,
+      overdueSince: (date: string) => `Was due ${date}`,
+      paidOn: (date: string) => `Paid on ${date}`,
+      refundBody: "You paid, but your place is no longer confirmed. The organiser will return the money and contact you.",
+      scanToPay: "Scan with your banking app",
+      bankAccount: "Bank account",
+      bankCode: "Bank code",
+      variableSymbol: "Variable symbol",
+      payer: "Payer",
+      copy: (what: string) => `Copy ${what.toLowerCase()}`,
+      showDetails: "Show payment details",
+      noAccount: "The organisation has not set up a bank account yet — ask the organiser how to pay.",
+    },
+  },
+
   emails: {
     activation: {
       heading: "Your membership has been approved",
@@ -994,6 +1019,30 @@ const cs: Dictionary = {
       answeringAs: (name: string) => `Odpovídáte jako ${name}`,
       invalidTitle: "Tento odkaz už není platný",
       invalidBody: "Akce možná proběhla, byla zrušena, nebo byl odkaz nahrazen novější pozvánkou. Požádejte pořadatele o nový.",
+    },
+  },
+
+  payments: {
+    card: {
+      membershipFee: "Členský příspěvek",
+      eventFee: "Poplatek za akci",
+      statePending: "Čeká na vaši platbu",
+      stateOverdue: "Platba po splatnosti",
+      statePaid: "Zaplaceno",
+      stateRefundDue: "Vrátíme vám peníze",
+      stateCancelled: "Zrušeno",
+      dueBy: (date: string) => `Zaplaťte do ${date}`,
+      overdueSince: (date: string) => `Splatnost byla ${date}`,
+      paidOn: (date: string) => `Zaplaceno ${date}`,
+      refundBody: "Zaplatili jste, ale vaše místo už není potvrzené. Pořadatel vám peníze vrátí a ozve se vám.",
+      scanToPay: "Naskenujte v bankovní aplikaci",
+      bankAccount: "Číslo účtu",
+      bankCode: "Kód banky",
+      variableSymbol: "Variabilní symbol",
+      payer: "Plátce",
+      copy: (what: string) => `Kopírovat ${what.toLowerCase()}`,
+      showDetails: "Zobrazit platební údaje",
+      noAccount: "Organizace zatím nemá nastavený bankovní účet — zeptejte se pořadatele, jak zaplatit.",
     },
   },
 

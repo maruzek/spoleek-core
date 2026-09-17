@@ -14,7 +14,6 @@ import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-di
 import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
 import { MarkRefundedDialog } from "@/components/app/payments/payment-actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
@@ -99,19 +98,26 @@ function RefundsDue({
 
   if (refunds.length === 0) return null;
 
+  const total = refunds.reduce((sum, r) => sum + r.amount, 0);
+  const currency = refunds[0]?.currency ?? "";
+  const sameCurrency = refunds.every((r) => r.currency === currency);
+
   return (
-    <Card className="border-purple-300 dark:border-purple-800">
-      <CardHeader>
-        <CardTitle className="text-base">Refunds due</CardTitle>
-        <CardDescription>
-          These people paid for an event and then withdrew, were demoted to the reserve list or had
-          their answer removed. Return the money, then mark it here.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="p-0">
-        <ul className="divide-y">
+    <div className="overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+        <UndoIcon className="size-4 text-orange-600 dark:text-orange-400" aria-hidden />
+        <p className="text-sm font-medium">
+          {refunds.length === 1 ? "1 refund due" : `${refunds.length} refunds due`}
+          {sameCurrency ? <span className="font-normal text-muted-foreground"> · {formatFeeAmount(total, currency)}</span> : null}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Paid, then withdrawn, demoted to the reserve list or removed. Return the money, then mark it here.
+        </p>
+      </div>
+      <div className="bg-card">
+        <ul className="divide-y border-t border-orange-500/20">
           {refunds.map((payment) => (
-            <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 text-sm">
+            <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
               <div className="min-w-0">
                 <p className="font-medium">
                   {payment.memberName}
@@ -133,7 +139,7 @@ function RefundsDue({
             </li>
           ))}
         </ul>
-      </CardContent>
+      </div>
       {refunding ? (
         <MarkRefundedDialog
           open
@@ -145,7 +151,7 @@ function RefundsDue({
           }}
         />
       ) : null}
-    </Card>
+    </div>
   );
 }
 

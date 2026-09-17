@@ -63,7 +63,7 @@ export const eventInputSchema = z
     locationName: optionalText(200),
     locationAddress: optionalText(500),
     communicationLink: optionalUrl,
-    /** The "Paid event" switch. Off means every price field below is ignored. */
+    /** Derived from the price in the wizard: off means every price field below is ignored. */
     paid: z.boolean().default(false),
     priceAmount: priceMajorUnits.nullable().optional(),
     priceCurrency: z

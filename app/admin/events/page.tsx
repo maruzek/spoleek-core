@@ -27,6 +27,7 @@ export default async function AdminEventsPage() {
         paymentDefaults={{
           currency: context.organization.membershipFeeCurrency,
           bankAccount: context.organization.membershipFeeBankAccount,
+          locale: context.organization.locale,
         }}
         canCreate={canCreate}
         timeZone={context.organization.timezone}

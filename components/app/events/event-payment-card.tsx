@@ -26,7 +26,7 @@ export function EventPaymentCard({
   t: Dictionary["events"]["detail"]["payment"];
 }) {
   if (payment) {
-    return <PaymentQrCard payment={{ ...payment, type: "event" }} payerName={payerName} eventTitle={eventTitle} />;
+    return <PaymentQrCard payment={{ ...payment, type: "event" }} payerName={payerName} eventTitle={eventTitle} showEventTitle={false} />;
   }
 
   if (priced && current?.answer === "yes" && current.standing === "reserve") {
