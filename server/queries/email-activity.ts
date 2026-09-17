@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
@@ -83,6 +83,8 @@ export async function listOrganizationEmailActivities(
     memberId?: string;
     /** Narrow to one event's send log. */
     eventId?: string;
+    /** Narrow to one form's reminder log (stored in `metadata.formId`). */
+    formId?: string;
   },
 ) {
   const rows = await db
@@ -129,6 +131,9 @@ export async function listOrganizationEmailActivities(
           ? eq(emailActivities.memberId, options.memberId)
           : undefined,
         options?.eventId ? eq(emailActivities.eventId, options.eventId) : undefined,
+        options?.formId
+          ? sql`${emailActivities.metadata}->>'formId' = ${options.formId}`
+          : undefined,
       ),
     )
     .orderBy(emailActivities.lastStatusAt);
@@ -269,6 +274,10 @@ export async function listMemberEmailActivities(orgId: string, memberId: string)
 
 export async function listEventEmailActivities(orgId: string, eventId: string) {
   return listOrganizationEmailActivities(orgId, { eventId });
+}
+
+export async function listFormEmailActivities(orgId: string, formId: string) {
+  return listOrganizationEmailActivities(orgId, { formId });
 }
 
 export type EmailActivityRow = Awaited<

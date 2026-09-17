@@ -58,13 +58,18 @@ export function PortalEventsAgenda({
   past,
   locale,
   timeZone,
+  pendingForms = {},
 }: {
   upcoming: ViewerEventItem[];
   past: ViewerEventItem[];
   locale: string;
   timeZone: string;
+  /** eventId → number of required forms the member still has to fill in. */
+  pendingForms?: Record<string, number>;
 }) {
-  const t = useDictionary().events;
+  const dict = useDictionary();
+  const t = dict.events;
+  const f = dict.forms;
   const l = t.list;
   const router = useRouter();
   const [view, setView] = useState<View>("list");
@@ -251,6 +256,11 @@ export function PortalEventsAgenda({
                             </span>
                             {event.visibility === "targeted" ? <Badge variant="outline">{l.invitedBadge}</Badge> : null}
                             {cancelled ? <Badge variant="destructive">{l.cancelledBadge}</Badge> : null}
+                            {pendingForms[event.id] ? (
+                              <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-500">
+                                {f.event.pendingHint(pendingForms[event.id]!)}
+                              </Badge>
+                            ) : null}
                           </div>
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
                             <span>{formatEventWhen(event, locale, timeZone) ?? t.dateTba}</span>

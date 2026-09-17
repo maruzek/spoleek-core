@@ -104,6 +104,10 @@ export const emailKindEnum = pgEnum("email_kind", [
   // the send dialog after seeing the recipient count. Never automatic:
   // publishing, editing or targeting an event sends nothing.
   "event_invite",
+  // A reminder to fill a form, sent only when a manager explicitly asks for
+  // it after seeing the pending count. Never automatic, for the same reason
+  // as `event_invite`.
+  "form_reminder",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -327,6 +331,62 @@ export const eventRsvpAnswerEnum = pgEnum("event_rsvp_answer", [
 export const eventRsvpStandingEnum = pgEnum("event_rsvp_standing", [
   "confirmed",
   "reserve",
+]);
+
+// ─── Forms ──────────────────────────────────────────────────────────────────
+
+/**
+ * When a form should be filled. A placement, not a gate: it decides where the
+ * form is surfaced and nagged for, never whether an open form accepts a
+ * submission.
+ */
+export const formTimingEnum = pgEnum("form_timing", [
+  "after_rsvp",
+  "before_event",
+  "during_event",
+  "after_event",
+  "anytime",
+]);
+
+export const formStatusEnum = pgEnum("form_status", [
+  "draft",
+  "open",
+  "closed",
+]);
+
+/** Only read for forms without an event; a linked form inherits the event's reach. */
+export const formVisibilityEnum = pgEnum("form_visibility", [
+  "org",
+  "targeted",
+]);
+
+export const formQuestionKindEnum = pgEnum("form_question_kind", [
+  "input",
+  "section",
+]);
+
+/**
+ * Whether an answer to a profile-linked question is written back to the
+ * member's custom field: never, offered as an unticked / ticked checkbox, or
+ * always.
+ */
+export const formProfileSyncEnum = pgEnum("form_profile_sync", [
+  "none",
+  "offer",
+  "offer_checked",
+  "always",
+]);
+
+export const formAudienceKindEnum = pgEnum("form_audience_kind", [
+  "group",
+  "category",
+  "member",
+]);
+
+/** `admins` narrows a group / category rule to its admins ("leaders only"). */
+export const formAudienceScopeEnum = pgEnum("form_audience_scope", [
+  "members",
+  "admins",
 ]);
 
 /** Who may create organization-wide events (owner type `organization`). */
@@ -2150,6 +2210,313 @@ export const eventRsvpTokens = pgTable(
   ],
 );
 
+// ─── Forms ──────────────────────────────────────────────────────────────────
+
+/**
+ * A form: a standalone questionnaire optionally linked to one event.
+ *
+ * Kept separate from the RSVP so a "yes" and the dietary sheet are two rows
+ * with two lifetimes. A template is just a form with `isTemplate` set, no
+ * event and organization ownership; creating a form from it deep-copies the
+ * questions and the two never touch again — a template edit must not
+ * silently change a form that is already collecting answers. Ownership
+ * mirrors `events` (same enum, same CHECK) so the same access table applies.
+ */
+export const forms = pgTable(
+  "forms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Plain text shown above the questions. */
+    description: text("description"),
+    isTemplate: boolean("is_template").notNull().default(false),
+    ownerType: eventOwnerTypeEnum("owner_type").notNull(),
+    ownerCategoryId: uuid("owner_category_id").references(
+      () => groupCategories.id,
+      { onDelete: "cascade" },
+    ),
+    ownerGroupId: uuid("owner_group_id").references(() => groups.id, {
+      onDelete: "cascade",
+    }),
+    /** Set null on event deletion: the form and its answers outlive the event. */
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
+    timing: formTimingEnum("timing").notNull().default("anytime"),
+    /** Drives pending badges and the reminder list; never blocks anything. */
+    required: boolean("required").notNull().default(false),
+    /** Only meaningful when `eventId` is set. */
+    onlyRsvpYes: boolean("only_rsvp_yes").notNull().default(false),
+    closesAt: timestamp("closes_at", { withTimezone: true }),
+    /** Only read when `eventId IS NULL`; a linked form follows the event. */
+    visibility: formVisibilityEnum("visibility").notNull().default("org"),
+    status: formStatusEnum("status").notNull().default("draft"),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    index("forms_org_event_idx").on(table.orgId, table.eventId),
+    index("forms_org_template_idx").on(table.orgId, table.isTemplate),
+    index("forms_org_status_idx").on(table.orgId, table.status),
+    index("forms_org_owner_group_idx").on(table.orgId, table.ownerGroupId),
+    index("forms_org_owner_category_idx").on(table.orgId, table.ownerCategoryId),
+    // Exactly the id matching `ownerType` is set; `organization` sets neither.
+    check(
+      "forms_owner_check",
+      sql`(${table.ownerType} = 'organization' AND ${table.ownerCategoryId} IS NULL AND ${table.ownerGroupId} IS NULL) OR (${table.ownerType} = 'category' AND ${table.ownerCategoryId} IS NOT NULL AND ${table.ownerGroupId} IS NULL) OR (${table.ownerType} = 'group' AND ${table.ownerGroupId} IS NOT NULL AND ${table.ownerCategoryId} IS NULL)`,
+    ),
+    // A template is org-wide and never attached to an event.
+    check(
+      "forms_template_owner_check",
+      sql`${table.isTemplate} = false OR ${table.ownerType} = 'organization'`,
+    ),
+    check(
+      "forms_template_event_check",
+      sql`${table.isTemplate} = false OR ${table.eventId} IS NULL`,
+    ),
+  ],
+);
+
+/**
+ * One question or section heading on a form.
+ *
+ * Questions reuse the custom-field type system. A question linked to a member
+ * custom field (`memberFieldId`) carries a *snapshot* of the field's `type`,
+ * `options` and `constraints` taken when it was saved; the server re-reads
+ * the live field on render and on submit, so the copy only matters if the
+ * field is later deleted — the link is nulled and the question keeps working
+ * unlinked. A special-category question can never be linked (custom field
+ * values are not encrypted yet) and must carry a TTL, so sensitive answers
+ * are always on their way out.
+ */
+export const formQuestions = pgTable(
+  "form_questions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    kind: formQuestionKindEnum("kind").notNull(),
+    /** Question label or section heading. */
+    label: text("label").notNull(),
+    /** Sanitized Tiptap output: instructions for a section, help text for an input. */
+    descriptionHtml: text("description_html"),
+    /** Null only for sections. */
+    type: memberCustomFieldTypeEnum("type"),
+    options: jsonb("options").$type<string[]>().notNull().default([]),
+    constraints: jsonb("constraints")
+      .$type<MemberCustomFieldConstraints>()
+      .notNull()
+      .default({}),
+    required: boolean("required").notNull().default(false),
+    memberFieldId: uuid("member_field_id").references(
+      () => memberCustomFields.id,
+      { onDelete: "set null" },
+    ),
+    profileSync: formProfileSyncEnum("profile_sync").notNull().default("none"),
+    sensitivity: memberCustomFieldSensitivityEnum("sensitivity")
+      .notNull()
+      .default("normal"),
+    /** Required once `sensitivity` is `special_category`; meaningless before. */
+    art9Condition: memberCustomFieldArt9ConditionEnum("art9_condition"),
+    processingPurpose: text("processing_purpose"),
+    valueVisibility: memberCustomFieldVisibilityEnum("value_visibility")
+      .notNull()
+      .default("member_managers"),
+    /**
+     * Answers are nulled this many days after the anchor (the event's end, or
+     * `closesAt` for an unlinked form). Null means kept with the submission.
+     */
+    shredAfterEventDays: integer("shred_after_event_days"),
+    ...timestamps,
+  },
+  (table) => [
+    index("form_questions_form_sort_idx").on(table.formId, table.sortOrder),
+    index("form_questions_org_member_field_idx").on(
+      table.orgId,
+      table.memberFieldId,
+    ),
+    check("form_questions_sort_order_check", sql`${table.sortOrder} >= 0`),
+    check(
+      "form_questions_type_check",
+      sql`${table.kind} = 'section' OR ${table.type} IS NOT NULL`,
+    ),
+    check(
+      "form_questions_profile_sync_check",
+      sql`${table.profileSync} = 'none' OR ${table.memberFieldId} IS NOT NULL`,
+    ),
+    check(
+      "form_questions_art9_check",
+      sql`${table.sensitivity} = 'normal' OR (${table.art9Condition} IS NOT NULL AND ${table.processingPurpose} IS NOT NULL)`,
+    ),
+    // Sensitive answers are never synced to a plaintext profile and always
+    // expire. Enforced here as well as in the editor, because a script is not
+    // going through the editor.
+    check(
+      "form_questions_special_category_check",
+      sql`${table.sensitivity} = 'normal' OR (${table.memberFieldId} IS NULL AND ${table.shredAfterEventDays} IS NOT NULL)`,
+    ),
+    check(
+      "form_questions_shred_days_check",
+      sql`${table.shredAfterEventDays} IS NULL OR ${table.shredAfterEventDays} > 0`,
+    ),
+  ],
+);
+
+/**
+ * Audience rules for an unlinked, targeted form.
+ *
+ * Same shape and reasoning as `event_audience` (rules, not rows), minus
+ * `external` — there is no event to hang a token on. `scope` narrows a group
+ * or category rule to its admins and is ignored for `member`. Rows are only
+ * read when `eventId IS NULL AND visibility = 'targeted'` but are kept
+ * otherwise so toggling does not lose the list.
+ */
+export const formAudience = pgTable(
+  "form_audience",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    kind: formAudienceKindEnum("kind").notNull(),
+    groupId: uuid("group_id").references(() => groups.id, {
+      onDelete: "cascade",
+    }),
+    categoryId: uuid("category_id").references(() => groupCategories.id, {
+      onDelete: "cascade",
+    }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    scope: formAudienceScopeEnum("scope").notNull().default("members"),
+    ...timestamps,
+  },
+  (table) => [
+    // One partial unique index per kind stands in for a single unique over
+    // `(formId, kind, coalesce(...), scope)`, which Postgres cannot express.
+    uniqueIndex("form_audience_form_group_idx")
+      .on(table.formId, table.groupId, table.scope)
+      .where(sql`kind = 'group'`),
+    uniqueIndex("form_audience_form_category_idx")
+      .on(table.formId, table.categoryId, table.scope)
+      .where(sql`kind = 'category'`),
+    uniqueIndex("form_audience_form_member_idx")
+      .on(table.formId, table.memberId)
+      .where(sql`kind = 'member'`),
+    index("form_audience_org_form_idx").on(table.orgId, table.formId),
+    index("form_audience_member_idx").on(table.memberId),
+    check(
+      "form_audience_kind_check",
+      sql`(${table.kind} = 'group' AND ${table.groupId} IS NOT NULL AND ${table.categoryId} IS NULL AND ${table.memberId} IS NULL) OR (${table.kind} = 'category' AND ${table.categoryId} IS NOT NULL AND ${table.groupId} IS NULL AND ${table.memberId} IS NULL) OR (${table.kind} = 'member' AND ${table.memberId} IS NOT NULL AND ${table.groupId} IS NULL AND ${table.categoryId} IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * One submission per person per form.
+ *
+ * A submitter is a member (`memberId`) or a guest (`guestEmail`), never both.
+ * Guest identity columns are nullable so the retention cron can anonymise
+ * them while keeping the row, hence "at most one" rather than "exactly one"
+ * in the CHECK — the same relaxation as `event_responses`. `submittedByUserId`
+ * is set only when a manager submitted or edited on someone's behalf, so
+ * "who typed this" is never lost. `shreddedAt` records that every answer to a
+ * shreddable question has been nulled.
+ */
+export const formSubmissions = pgTable(
+  "form_submissions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    formId: uuid("form_id")
+      .notNull()
+      .references(() => forms.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    guestEmail: text("guest_email"),
+    guestName: text("guest_name"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    submittedByUserId: text("submitted_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    shreddedAt: timestamp("shredded_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("form_submissions_form_member_idx")
+      .on(table.formId, table.memberId)
+      .where(sql`member_id IS NOT NULL`),
+    uniqueIndex("form_submissions_form_guest_email_idx")
+      .on(table.formId, sql`lower(${table.guestEmail})`)
+      .where(sql`guest_email IS NOT NULL`),
+    index("form_submissions_org_form_idx").on(table.orgId, table.formId),
+    index("form_submissions_org_member_idx").on(table.orgId, table.memberId),
+    check(
+      "form_submissions_submitter_check",
+      sql`${table.memberId} IS NULL OR ${table.guestEmail} IS NULL`,
+    ),
+  ],
+);
+
+/**
+ * One answer per question per submission.
+ *
+ * Answers to `normal` questions are plaintext in `value` so aggregates and
+ * exports stay a SQL query. Answers to `special_category` questions live only
+ * in `encryptedValue` (a `lib/crypto.ts` envelope of the JSON value) and
+ * never in `value` — the CHECK makes a plaintext leak a constraint violation
+ * rather than a code-review catch. Both nulled by the retention cron once the
+ * question's TTL has passed.
+ */
+export const formAnswers = pgTable(
+  "form_answers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => formSubmissions.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => formQuestions.id, { onDelete: "cascade" }),
+    value: jsonb("value").$type<CustomFieldValue>(),
+    encryptedValue: text("encrypted_value"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("form_answers_submission_question_idx").on(
+      table.submissionId,
+      table.questionId,
+    ),
+    index("form_answers_org_question_idx").on(table.orgId, table.questionId),
+    check(
+      "form_answers_value_check",
+      sql`${table.value} IS NULL OR ${table.encryptedValue} IS NULL`,
+    ),
+  ],
+);
+
 /**
  * Fixed-window counters for public, unauthenticated endpoints.
  *
@@ -2213,6 +2580,11 @@ export const schema = {
   eventAudience,
   eventResponses,
   eventRsvpTokens,
+  forms,
+  formQuestions,
+  formAudience,
+  formSubmissions,
+  formAnswers,
   rateLimitBuckets,
 };
 
@@ -2308,3 +2680,15 @@ export type Event = typeof events.$inferSelect;
 export type EventAudienceRule = typeof eventAudience.$inferSelect;
 export type EventResponse = typeof eventResponses.$inferSelect;
 export type EventRsvpToken = typeof eventRsvpTokens.$inferSelect;
+export type FormTiming = typeof formTimingEnum.enumValues[number];
+export type FormStatus = typeof formStatusEnum.enumValues[number];
+export type FormVisibility = typeof formVisibilityEnum.enumValues[number];
+export type FormQuestionKind = typeof formQuestionKindEnum.enumValues[number];
+export type FormProfileSync = typeof formProfileSyncEnum.enumValues[number];
+export type FormAudienceKind = typeof formAudienceKindEnum.enumValues[number];
+export type FormAudienceScope = typeof formAudienceScopeEnum.enumValues[number];
+export type Form = typeof forms.$inferSelect;
+export type FormQuestion = typeof formQuestions.$inferSelect;
+export type FormAudienceRule = typeof formAudience.$inferSelect;
+export type FormSubmission = typeof formSubmissions.$inferSelect;
+export type FormAnswer = typeof formAnswers.$inferSelect;

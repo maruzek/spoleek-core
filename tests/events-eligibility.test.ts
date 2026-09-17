@@ -100,3 +100,82 @@ describe("isMemberEligible", () => {
     expect(isMemberEligible("m1", params)).toBe(false);
   });
 });
+
+/**
+ * Forms narrow a rule to admins. m1 leads g1, m3 leads g2; m4 is the admin
+ * of the "scouts" category without being in any of its groups.
+ */
+const groupMembershipsWithRoles = [
+  { groupId: "g1", memberId: "m1", role: "group_admin" as const },
+  { groupId: "g1", memberId: "m2", role: "member" as const },
+  { groupId: "g2", memberId: "m3", role: "group_admin" as const },
+  { groupId: "g2", memberId: "m5", role: "group_admin" as const }, // inactive
+  { groupId: "g3", memberId: "m4", role: "member" as const },
+];
+
+const categoryAdmins = [
+  { categoryId: "scouts", memberId: "m4" },
+  { categoryId: "scouts", memberId: "m5" }, // inactive
+];
+
+const resolveScoped = (rules: AudienceRule[]) =>
+  [
+    ...resolveEligibleMemberIds({
+      rules,
+      groupMemberships: groupMembershipsWithRoles,
+      groupsByCategory,
+      activeMemberIds,
+      categoryAdmins,
+    }),
+  ].sort();
+
+describe("resolveEligibleMemberIds with scope", () => {
+  it("defaults to members when scope is omitted", () => {
+    expect(resolveScoped([rule({ kind: "group", groupId: "g1" })])).toEqual(["m1", "m2"]);
+  });
+
+  it("narrows a group rule to its active group admins", () => {
+    expect(
+      resolveScoped([
+        rule({ kind: "group", groupId: "g1", scope: "admins" }),
+        rule({ kind: "group", groupId: "g2", scope: "admins" }),
+      ]),
+    ).toEqual(["m1", "m3"]);
+  });
+
+  it("narrows a category rule to the category's admins, not its group admins", () => {
+    expect(
+      resolveScoped([rule({ kind: "category", categoryId: "scouts", scope: "admins" })]),
+    ).toEqual(["m4"]);
+  });
+
+  it("ignores scope on member rules", () => {
+    expect(resolveScoped([rule({ kind: "member", memberId: "m2", scope: "admins" })])).toEqual([
+      "m2",
+    ]);
+  });
+
+  it("unions a members rule and an admins rule", () => {
+    expect(
+      resolveScoped([
+        rule({ kind: "group", groupId: "g3" }),
+        rule({ kind: "category", categoryId: "scouts", scope: "admins" }),
+      ]),
+    ).toEqual(["m4"]);
+  });
+
+  it("treats memberships without a role as plain members", () => {
+    // Event callers never load roles; an admins rule then reaches nobody
+    // through groups rather than everybody.
+    expect(
+      [
+        ...resolveEligibleMemberIds({
+          rules: [rule({ kind: "group", groupId: "g1", scope: "admins" })],
+          groupMemberships,
+          groupsByCategory,
+          activeMemberIds,
+        }),
+      ],
+    ).toEqual([]);
+  });
+});

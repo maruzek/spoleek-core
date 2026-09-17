@@ -163,6 +163,8 @@ const en = {
     patternMessage: (label: string, message: string) => `${label}: ${message}`,
     patternGeneric: (label: string) =>
       `${label} is not in the expected format.`,
+    notAnOption: (label: string) => `${label} must be one of the listed options.`,
+    unknownQuestion: "This question is not on the form.",
   },
 
   /** Group-category selection on the join form. */
@@ -197,6 +199,99 @@ const en = {
       "Too many activation attempts were detected. Wait a few minutes and try the newest invite link again.",
     passwordNotSet: "Unable to set the password for this invitation.",
     autoSignInFailed: "Your password was saved, but automatic sign-in failed.",
+  },
+
+  forms: {
+    portalEyebrow: "Member portal",
+    portalTitle: "Forms",
+    portalDescription: "Registrations, questionnaires and evaluations your groups have asked you to fill in.",
+    sections: { pending: "To fill in", submitted: "Submitted" },
+    emptyPending: "Nothing to fill in right now.",
+    emptySubmitted: "You have not submitted any forms yet.",
+    requiredBadge: "Required",
+    optionalBadge: "Optional",
+    submittedBadge: "Submitted",
+    closesAt: (date: string) => `Closes ${date}`,
+    submittedAt: (date: string) => `Submitted ${date}`,
+    fillIn: "Fill in",
+    view: "View",
+    edit: "Edit answers",
+    forEvent: (title: string) => `For ${title}`,
+    standalone: "Standalone form",
+    timing: {
+      after_rsvp: "After you answer the invitation",
+      before_event: "Before the event",
+      during_event: "During the event",
+      after_event: "After the event",
+      anytime: "Anytime",
+    },
+    detail: {
+      back: "All forms",
+      backToEvent: "Back to the event",
+      submit: "Submit",
+      update: "Save changes",
+      saved: "Your answers are saved.",
+      updated: "Your answers are updated.",
+      alreadySubmitted: (date: string) => `You submitted this on ${date}. You can change your answers while the form is open.`,
+      encrypted: "Stored encrypted",
+      shredNote: (days: number, anchor: "event" | "deadline") =>
+        `deleted ${days} days after the ${anchor === "event" ? "event" : "deadline"}`,
+      saveToProfile: "Also save this to my profile",
+      savedToProfile: "Saved to your profile as well",
+      closed: {
+        draft: "This form is not open yet.",
+        closed: "This form is closed.",
+        deadline_passed: "The deadline for this form has passed.",
+        event_cancelled: "The event was cancelled.",
+        event_deleted: "The event no longer exists.",
+      },
+      cannotSubmit: {
+        NOT_ELIGIBLE: "This form is not open to you.",
+        RSVP_REQUIRED: "Answer the invitation with a yes first, then come back to this form.",
+      },
+      readOnly: "Your answers are shown for reference.",
+    },
+    event: {
+      title: "Forms",
+      pendingHint: (n: number) => (n === 1 ? "1 form to fill in" : `${n} forms to fill in`),
+      inlineTitle: "One more thing",
+      inlineHint: "The organiser needs a few more details from you.",
+      dialogRequired: "Please fill this in to complete your answer.",
+      dialogOptional: "You can also do this later from the event page.",
+      later: "Later",
+    },
+    home: {
+      title: "Forms to fill in",
+      body: (n: number) => (n === 1 ? "1 form is waiting for your answers." : `${n} forms are waiting for your answers.`),
+      action: "Open forms",
+    },
+    errors: {
+      FORM_CLOSED: "This form no longer accepts answers.",
+      NOT_ELIGIBLE: "This form is not open to you.",
+      RSVP_REQUIRED: "Answer the invitation with a yes first.",
+      TOKEN_INVALID: "This link is no longer valid.",
+      RATE_LIMITED: "Too many attempts. Please try again later.",
+      INVALID_ANSWERS: "Check the highlighted answers.",
+      NOT_FOUND: "This form could not be found.",
+      generic: "Something went wrong. Please try again.",
+    },
+    public: {
+      yourName: "Your name",
+      yourEmail: "Your email",
+      thanks: "Thank you — your answers are saved.",
+      nameRequired: "Name is required.",
+      emailInvalid: "Enter a valid email address.",
+      fillAfterRsvp: (title: string) => `Fill in: ${title}`,
+      openForms: "Forms for this event",
+      signInPrompt: "Member?",
+      signInLink: "Sign in",
+      signInSuffix: "to fill it in from your portal instead.",
+    },
+    token: {
+      fillingAs: (name: string) => `Filling in as ${name}`,
+      invalidTitle: "This link is no longer valid",
+      invalidBody: "The event may be over, cancelled, or the link has been replaced by a newer one. Ask the organiser for a fresh one.",
+    },
   },
 
   events: {
@@ -362,6 +457,21 @@ const en = {
       communication: "Join the event chat",
       fallbackIntro: "If the button does not open, paste this URL into your browser:",
       keepThis: "This link is personal to you. Anyone who has it can answer in your name, so do not forward it.",
+    },
+
+    formReminder: {
+      subject: (organizationName: string, formTitle: string) =>
+        `${organizationName}: please fill in ${formTitle}`,
+      heading: (formTitle: string) => `Please fill in: ${formTitle}`,
+      greeting: (name: string) => `Hello ${name},`,
+      body: (organizationName: string) =>
+        `${organizationName} is still waiting for your answers. Use the button below to fill in the form.`,
+      eventTitle: "For the event",
+      deadline: (date: string) => `Please answer by ${date}.`,
+      open: "Fill in the form",
+      fallbackIntro: "If the button does not open, paste this URL into your browser:",
+      keepThis: "This link is personal to you. Anyone who has it can answer in your name, so do not forward it.",
+      signIn: "Sign in to the member portal to fill it in.",
     },
 
     policyPublished: {
@@ -607,6 +717,9 @@ const cs: Dictionary = {
       `${csField(label)}: ${message}`,
     patternGeneric: (label: string) =>
       `${csField(label)} nemá očekávaný formát.`,
+    notAnOption: (label: string) =>
+      `${csField(label)} musí být jedna z nabízených možností.`,
+    unknownQuestion: "Tato otázka ve formuláři není.",
   },
 
   groupRegistration: {
@@ -639,6 +752,99 @@ const cs: Dictionary = {
       "Zaznamenali jsme příliš mnoho pokusů o aktivaci. Počkejte několik minut a zkuste to znovu s nejnovějším odkazem z pozvánky.",
     passwordNotSet: "K této pozvánce se nepodařilo nastavit heslo.",
     autoSignInFailed: "Heslo bylo uloženo, ale automatické přihlášení se nezdařilo.",
+  },
+
+  forms: {
+    portalEyebrow: "Členský portál",
+    portalTitle: "Formuláře",
+    portalDescription: "Přihlášky, dotazníky a hodnocení, o jejichž vyplnění vás vaše skupiny požádaly.",
+    sections: { pending: "K vyplnění", submitted: "Odesláno" },
+    emptyPending: "Momentálně není co vyplnit.",
+    emptySubmitted: "Zatím jste neodeslali žádný formulář.",
+    requiredBadge: "Povinný",
+    optionalBadge: "Nepovinný",
+    submittedBadge: "Odesláno",
+    closesAt: (date: string) => `Uzávěrka ${date}`,
+    submittedAt: (date: string) => `Odesláno ${date}`,
+    fillIn: "Vyplnit",
+    view: "Zobrazit",
+    edit: "Upravit odpovědi",
+    forEvent: (title: string) => `K akci ${title}`,
+    standalone: "Samostatný formulář",
+    timing: {
+      after_rsvp: "Po odpovědi na pozvánku",
+      before_event: "Před akcí",
+      during_event: "Během akce",
+      after_event: "Po akci",
+      anytime: "Kdykoli",
+    },
+    detail: {
+      back: "Všechny formuláře",
+      backToEvent: "Zpět na akci",
+      submit: "Odeslat",
+      update: "Uložit změny",
+      saved: "Vaše odpovědi jsou uloženy.",
+      updated: "Vaše odpovědi jsou aktualizovány.",
+      alreadySubmitted: (date: string) => `Odesláno ${date}. Dokud je formulář otevřený, můžete odpovědi měnit.`,
+      encrypted: "Uloženo šifrovaně",
+      shredNote: (days: number, anchor: "event" | "deadline") =>
+        `smazáno ${days} dní po ${anchor === "event" ? "akci" : "uzávěrce"}`,
+      saveToProfile: "Uložit také do mého profilu",
+      savedToProfile: "Uloží se i do vašeho profilu",
+      closed: {
+        draft: "Tento formulář ještě není otevřený.",
+        closed: "Tento formulář je uzavřený.",
+        deadline_passed: "Uzávěrka tohoto formuláře už proběhla.",
+        event_cancelled: "Akce byla zrušena.",
+        event_deleted: "Akce už neexistuje.",
+      },
+      cannotSubmit: {
+        NOT_ELIGIBLE: "Tento formulář pro vás není určen.",
+        RSVP_REQUIRED: "Nejdřív odpovězte na pozvánku, že přijdete, a pak se vraťte k formuláři.",
+      },
+      readOnly: "Vaše odpovědi jsou zobrazeny pro informaci.",
+    },
+    event: {
+      title: "Formuláře",
+      pendingHint: (n: number) => (n === 1 ? "1 formulář k vyplnění" : `${n} formulářů k vyplnění`),
+      inlineTitle: "Ještě jedna věc",
+      inlineHint: "Pořadatel od vás potřebuje ještě pár údajů.",
+      dialogRequired: "Vyplňte prosím tento formulář, aby byla vaše odpověď úplná.",
+      dialogOptional: "Můžete to udělat i později ze stránky akce.",
+      later: "Později",
+    },
+    home: {
+      title: "Formuláře k vyplnění",
+      body: (n: number) => (n === 1 ? "1 formulář čeká na vaše odpovědi." : `${n} formulářů čeká na vaše odpovědi.`),
+      action: "Otevřít formuláře",
+    },
+    errors: {
+      FORM_CLOSED: "Tento formulář už nepřijímá odpovědi.",
+      NOT_ELIGIBLE: "Tento formulář pro vás není určen.",
+      RSVP_REQUIRED: "Nejdřív odpovězte na pozvánku, že přijdete.",
+      TOKEN_INVALID: "Tento odkaz už není platný.",
+      RATE_LIMITED: "Příliš mnoho pokusů. Zkuste to prosím později.",
+      INVALID_ANSWERS: "Zkontrolujte označené odpovědi.",
+      NOT_FOUND: "Formulář se nepodařilo najít.",
+      generic: "Něco se pokazilo. Zkuste to prosím znovu.",
+    },
+    public: {
+      yourName: "Vaše jméno",
+      yourEmail: "Váš e-mail",
+      thanks: "Děkujeme — vaše odpovědi jsou uloženy.",
+      nameRequired: "Vyplňte jméno.",
+      emailInvalid: "Zadejte platnou e-mailovou adresu.",
+      fillAfterRsvp: (title: string) => `Vyplnit: ${title}`,
+      openForms: "Formuláře k této akci",
+      signInPrompt: "Jste členem?",
+      signInLink: "Přihlaste se",
+      signInSuffix: "a vyplňte formulář v portálu.",
+    },
+    token: {
+      fillingAs: (name: string) => `Vyplňujete jako ${name}`,
+      invalidTitle: "Tento odkaz už není platný",
+      invalidBody: "Akce možná skončila, byla zrušena, nebo byl odkaz nahrazen novějším. Požádejte pořadatele o nový.",
+    },
   },
 
   events: {
@@ -806,6 +1012,21 @@ const cs: Dictionary = {
       communication: "Připojit se ke skupinovému chatu",
       fallbackIntro: "Pokud tlačítko nefunguje, vložte tuto adresu do prohlížeče:",
       keepThis: "Tento odkaz je osobní. Kdokoli, kdo jej má, může odpovědět vaším jménem, proto jej nepřeposílejte.",
+    },
+
+    formReminder: {
+      subject: (organizationName: string, formTitle: string) =>
+        `${organizationName}: prosíme o vyplnění ${formTitle}`,
+      heading: (formTitle: string) => `Prosíme o vyplnění: ${formTitle}`,
+      greeting: (name: string) => `Dobrý den, ${name},`,
+      body: (organizationName: string) =>
+        `Organizace ${organizationName} stále čeká na vaše odpovědi. Formulář vyplníte tlačítkem níže.`,
+      eventTitle: "K akci",
+      deadline: (date: string) => `Odpovězte prosím do ${date}.`,
+      open: "Vyplnit formulář",
+      fallbackIntro: "Pokud tlačítko nefunguje, vložte tuto adresu do prohlížeče:",
+      keepThis: "Tento odkaz je osobní. Kdokoli, kdo jej má, může odpovědět vaším jménem, proto jej nepřeposílejte.",
+      signIn: "Přihlaste se do členského portálu a formulář vyplňte tam.",
     },
 
     policyPublished: {

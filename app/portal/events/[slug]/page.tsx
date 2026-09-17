@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 
 import { PortalEventDetail } from "@/components/app/events/portal-event-detail";
 import { PortalEventRsvp } from "@/components/app/events/portal-event-rsvp";
+import { PortalEventForms } from "@/components/app/forms/portal-event-forms";
 import { isRsvpOpen } from "@/lib/events/rsvp";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 import { getEventCounts, getEventDetail, getMemberResponse } from "@/server/queries/events";
+import { getFormForFiller, listFormsForEvent } from "@/server/queries/forms";
 
 export default async function PortalEventPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -23,6 +25,26 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
     getEventCounts(organization.id, row.event.id),
   ]);
 
+  // The member can see the event, so they are eligible for its forms.
+  const identity = {
+    kind: "member" as const,
+    memberId: member.id,
+    eligible: true,
+    rsvpAnswer: response?.answer ?? null,
+  };
+  const forms = (await listFormsForEvent(organization.id, row.event, identity)).map((item) => ({
+    ...item,
+    event: row.event,
+  }));
+  // One `after_rsvp` form is prompted for in a dialog as soon as the
+  // invitation is answered (and on every load while a required one is
+  // pending). The list above the description still shows it.
+  const afterRsvp =
+    forms.find((item) => item.placement === "inline_after_rsvp" && item.open.open && item.submittedAt == null) ?? null;
+  const afterRsvpData = afterRsvp
+    ? await getFormForFiller(organization.id, afterRsvp.form, row.event, identity)
+    : null;
+
   // Not wrapped in `AppPage`: the event header is the page title, same as
   // the admin record.
   return (
@@ -35,6 +57,7 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
         counts={counts}
         response={response ? { answer: response.answer, standing: response.standing } : null}
         t={t}
+        forms={<PortalEventForms items={forms} />}
         rsvp={
           <PortalEventRsvp
             eventId={row.event.id}
@@ -42,6 +65,25 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
             maxGuests={row.event.maxGuestsPerResponse}
             current={
               response ? { answer: response.answer, guestCount: response.guestCount, standing: response.standing } : null
+            }
+            afterRsvpForm={
+              afterRsvpData
+                ? {
+                    form: {
+                      id: afterRsvpData.form.id,
+                      title: afterRsvpData.form.title,
+                      description: afterRsvpData.form.description,
+                      eventId: afterRsvpData.form.eventId,
+                    },
+                    questions: afterRsvpData.questions,
+                    open: afterRsvpData.open,
+                    canSubmit: afterRsvpData.canSubmit,
+                    submittedAt: afterRsvpData.submission?.submittedAt ?? null,
+                    answers: afterRsvpData.answers,
+                    prefill: afterRsvpData.prefill,
+                    required: afterRsvpData.form.required,
+                  }
+                : null
             }
           />
         }

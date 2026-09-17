@@ -15,6 +15,7 @@ import {
   listEventsForOwnerPicker,
 } from "@/server/queries/events";
 import type { EventRecipient } from "@/server/queries/events";
+import { listEventFormsForManager, listFormsForManager } from "@/server/queries/forms";
 
 export default async function AdminEventPage({
   params,
@@ -39,6 +40,12 @@ export default async function AdminEventPage({
       getEventCounts(orgId, event.id),
       listEventEmailActivities(orgId, event.id),
     ]);
+
+  const [formRows, managed, templates] = await Promise.all([
+    listEventFormsForManager(orgId, event),
+    listFormsForManager({ templates: false }),
+    listFormsForManager({ templates: true }),
+  ]);
 
   const recipientEntries = await Promise.all(
     eventRecipientFilterSchema.options.map(
@@ -85,6 +92,9 @@ export default async function AdminEventPage({
         recipients={recipients}
         sendLog={sendLog}
         publicUrl={event.visibility === "public" ? buildAbsoluteAppUrl(`/events/${event.slug}`) : null}
+        forms={formRows}
+        unlinkedForms={managed.items.filter((item) => !item.form.eventId).map((item) => ({ id: item.form.id, title: item.form.title }))}
+        formTemplates={templates.items.map((item) => ({ id: item.form.id, title: item.form.title }))}
         defaultTab={typeof query.tab === "string" ? query.tab : undefined}
       />
     </div>

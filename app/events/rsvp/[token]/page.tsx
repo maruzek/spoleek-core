@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { PublicEventCard } from "@/components/app/events/public-event-card";
 import { TokenEventRsvp } from "@/components/app/events/token-event-rsvp";
+import { PublicEventForms } from "@/components/app/forms/public-event-forms";
 import { PublicShell } from "@/components/public/public-shell";
 import { isRsvpOpen, isTokenValid } from "@/lib/events/rsvp";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
@@ -13,6 +14,7 @@ import { findTokenHolder } from "@/server/lib/events/tokens";
 import { getAppOrganization } from "@/server/queries/app";
 import { getViewerSession } from "@/server/queries/auth";
 import { getEventById, getEventCounts, getMemberResponse } from "@/server/queries/events";
+import { getFormForFiller, listFormsForEvent } from "@/server/queries/forms";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +26,8 @@ export const dynamic = "force-dynamic";
  */
 export default async function TokenRsvpPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const t = getDictionary().events;
+  const dict = getDictionary();
+  const t = dict.events;
   const organization = await getAppOrganization();
 
   if (!organization) redirect("/setup");
@@ -98,6 +101,17 @@ export default async function TokenRsvpPage({ params }: { params: Promise<{ toke
 
   const open = isRsvpOpen(holder.event, now);
 
+  const identity = {
+    kind: "token" as const,
+    memberId: holder.token.memberId,
+    guestEmail: holder.token.externalEmail,
+    guestName: holder.token.externalEmail,
+    rsvpAnswer: current?.answer ?? null,
+  };
+  const forms = await listFormsForEvent(organization.id, holder.event, identity);
+  const afterRsvp = forms.find((item) => item.placement === "inline_after_rsvp" && item.submittedAt == null) ?? null;
+  const afterRsvpData = afterRsvp ? await getFormForFiller(organization.id, afterRsvp.form, holder.event, identity) : null;
+
   return (
     <PublicShell brand={organization.name}>
       <PublicEventCard
@@ -108,12 +122,31 @@ export default async function TokenRsvpPage({ params }: { params: Promise<{ toke
         counts={counts}
         note={t.token.answeringAs(holderName ?? "")}
         t={t}
+        forms={<PublicEventForms items={forms} hrefFor={(id) => `/events/rsvp/${token}/forms/${id}`} t={dict.forms} />}
         rsvp={
           <TokenEventRsvp
             token={token}
             open={open}
             maxGuests={holder.event.maxGuestsPerResponse}
             current={current ? { answer: current.answer, guestCount: current.guestCount, standing: current.standing } : null}
+            afterRsvpForm={
+              afterRsvpData
+                ? {
+                    form: {
+                      id: afterRsvpData.form.id,
+                      title: afterRsvpData.form.title,
+                      description: afterRsvpData.form.description,
+                      eventId: afterRsvpData.form.eventId,
+                    },
+                    questions: afterRsvpData.questions,
+                    open: afterRsvpData.open,
+                    canSubmit: afterRsvpData.canSubmit,
+                    submittedAt: afterRsvpData.submission?.submittedAt ?? null,
+                    answers: afterRsvpData.answers,
+                    required: afterRsvpData.form.required,
+                  }
+                : null
+            }
           />
         }
       />

@@ -33,6 +33,7 @@ export function PublicEventCard({
   timeZone,
   counts,
   rsvp,
+  forms,
   note,
   t,
 }: {
@@ -42,6 +43,8 @@ export function PublicEventCard({
   timeZone: string;
   counts: { confirmedSeats: number; reserveCount: number } | null;
   rsvp: ReactNode;
+  /** The event's open forms, rendered above the description. */
+  forms?: ReactNode;
   /** Line above the header, e.g. "Answering as …" on a personal link. */
   note?: ReactNode;
   t: Dictionary["events"];
@@ -100,6 +103,7 @@ export function PublicEventCard({
 
       <div className={cn("mt-8 grid gap-8", twoColumn && "md:grid-cols-[minmax(0,1fr)_18rem]")}>
         <section className="min-w-0">
+          {forms ? <div className="mb-8">{forms}</div> : null}
           {event.descriptionHtml ? (
             <div
               className="policy-prose"

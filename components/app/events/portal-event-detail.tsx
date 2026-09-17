@@ -62,6 +62,7 @@ export function PortalEventDetail({
   counts,
   response,
   rsvp,
+  forms,
   t,
 }: {
   event: Event;
@@ -71,6 +72,8 @@ export function PortalEventDetail({
   counts: { confirmedSeats: number; reserveCount: number };
   response: { answer: EventRsvpAnswer; standing: EventRsvpStanding } | null;
   rsvp: ReactNode;
+  /** The event's forms block, rendered above the description so it is not missed. */
+  forms?: ReactNode;
   t: Dictionary["events"];
 }) {
   const d = t.detail;
@@ -160,6 +163,7 @@ export function PortalEventDetail({
 
       <div className={cn("grid gap-8", twoColumn ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
         <section className="min-w-0">
+          {forms ? <div className="mb-8">{forms}</div> : null}
           {event.descriptionHtml ? (
             <div
               className="policy-prose"

@@ -10,6 +10,7 @@ import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
   events,
+  forms,
   groupCategories,
   groupMemberships,
   groups,
@@ -749,6 +750,68 @@ export async function requireEventManagementAccess(eventId: string) {
   );
 
   return { context, event };
+}
+
+// ─── Forms ──────────────────────────────────────────────────────────────────
+
+/**
+ * Same owner table as events: a form is managed by whoever manages its
+ * owner. Thin alias so the two cannot drift.
+ */
+export async function requireFormOwnerAccess(
+  ownerType: EventOwnerType,
+  ownerId?: string | null,
+) {
+  return requireEventOwnerAccess(ownerType, ownerId);
+}
+
+/**
+ * Loads a live form in the current org and checks management access.
+ *
+ * Templates are org-wide: every manager may read one (to copy it), only org
+ * admins may change or delete it. Everything else dispatches on the owner.
+ */
+export async function requireFormManagementAccess(
+  formId: string,
+  options: { write?: boolean } = {},
+) {
+  const organization = await requireOrganization();
+
+  const [form] = await db
+    .select()
+    .from(forms)
+    .where(
+      and(eq(forms.orgId, organization.id), eq(forms.id, formId), isNull(forms.deletedAt)),
+    )
+    .limit(1);
+
+  if (!form) {
+    forbidden();
+  }
+
+  if (form.isTemplate) {
+    const context = await requireGroupAdminModuleAccess();
+    if (options.write && !context.capabilities.canManageOrganization) {
+      forbidden();
+    }
+    return { context, form };
+  }
+
+  const context = await requireFormOwnerAccess(
+    form.ownerType,
+    form.ownerType === "group" ? form.ownerGroupId : form.ownerCategoryId,
+  );
+
+  return { context, form };
+}
+
+/** Attaching or detaching needs management access to both sides. */
+export async function requireFormAttachAccess(formId: string, eventId: string) {
+  const [{ context, form }, { event }] = await Promise.all([
+    requireFormManagementAccess(formId, { write: true }),
+    requireEventManagementAccess(eventId),
+  ]);
+  return { context, form, event };
 }
 
 /**
