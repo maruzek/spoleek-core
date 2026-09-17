@@ -9,6 +9,7 @@ import {
 } from "@/server/queries/access";
 import { getCategoryDetailData } from "@/server/queries/groups";
 import { getAppOrganization } from "@/server/queries/app";
+import { describeCategoryMembership, describeJoinPolicy } from "@/lib/group-category-display";
 
 export default async function AdminGroupCategoryPage({
   params,
@@ -45,7 +46,14 @@ export default async function AdminGroupCategoryPage({
   }
 
   return (
-    <AppPage eyebrow="Groups" title={detail.category.name}>
+    <AppPage
+      eyebrow={detail.category.isActive ? "Groups" : "Groups · Archived"}
+      title={detail.category.name}
+      description={
+        detail.category.description ??
+        `${describeCategoryMembership(detail.category)} ${describeJoinPolicy(detail.category.defaultJoinPolicy)}`
+      }
+    >
       <GroupCategoryDetail
         category={detail.category}
         groups={detail.groups}

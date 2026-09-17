@@ -9,13 +9,11 @@ import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
   ArrowRightIcon,
-  ClipboardListIcon,
-  CoinsIcon,
+  FolderTreeIcon,
   PencilIcon,
-  PinIcon,
   PlusIcon,
   ShieldIcon,
-  XIcon,
+  ShieldOffIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,23 +21,15 @@ import { GroupDialog } from "@/components/app/group-dialog";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import { describeCategoryMembership, describeJoinPolicy } from "@/lib/group-category-display";
+import { getMemberStatusVariant } from "@/lib/member-status-display";
 import { groupJoinPolicyOptions, type GroupFormValues } from "@/lib/groups";
 import { matchesSearch } from "@/lib/search";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { MembershipStatus } from "@/server/db/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   assignCategoryAdminAction,
   removeCategoryAdminAction,
@@ -107,14 +97,12 @@ type CategoryDetailProps = {
 };
 
 const columnHelper = createColumnHelper<CategoryDetailProps["groups"][number]>();
+const adminColumnHelper = createColumnHelper<CategoryDetailProps["categoryAdmins"][number]>();
 
 const joinPolicyLabel = Object.fromEntries(
   groupJoinPolicyOptions.map((option) => [option.value, option.label]),
 ) as Record<CategoryDetailProps["groups"][number]["joinPolicy"], string>;
 
-function initials(member: { firstName: string; lastName: string }) {
-  return `${member.firstName.charAt(0)}${member.lastName.charAt(0)}`.toUpperCase() || "?";
-}
 
 export function GroupCategoryDetail({
   category,
@@ -256,157 +244,147 @@ export function GroupCategoryDetail({
     [category.id],
   );
 
+  const adminColumns = useMemo(
+    () => [
+      adminColumnHelper.accessor((row) => getMemberDisplayName(row), {
+        id: "member",
+        meta: { label: "Member" },
+        header: ({ column }) => <SortableHeader column={column}>Member</SortableHeader>,
+        filterFn: (row, _id, value: string) =>
+          matchesSearch(
+            [row.original.firstName, row.original.lastName, row.original.email ?? ""].join(" "),
+            value ?? "",
+          ),
+        cell: ({ row }) => (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium text-foreground">
+              {getMemberDisplayName(row.original)}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {row.original.email ?? "No email"}
+            </span>
+          </div>
+        ),
+      }),
+      adminColumnHelper.accessor("status", {
+        meta: { label: "Status" },
+        header: "Status",
+        enableSorting: false,
+        cell: (info) => (
+          <Status variant={getMemberStatusVariant(info.getValue() as MembershipStatus)}>
+            <StatusIndicator />
+            <StatusLabel className="capitalize">{info.getValue()}</StatusLabel>
+          </Status>
+        ),
+      }),
+      adminColumnHelper.accessor("assignedAt", {
+        meta: { label: "Assigned" },
+        header: ({ column }) => <SortableHeader column={column}>Assigned</SortableHeader>,
+        cell: (info) => (
+          <span className="text-sm text-muted-foreground">{formatDateTime(info.getValue())}</span>
+        ),
+      }),
+      adminColumnHelper.display({
+        id: "actions",
+        header: "",
+        enableHiding: false,
+        cell: ({ row }) =>
+          canManageCategoryAdmins ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={removeCategoryAdmin.isPending}
+                onClick={() =>
+                  removeCategoryAdmin.execute({
+                    categoryId: category.id,
+                    memberId: row.original.memberId,
+                  })
+                }
+              >
+                <ShieldOffIcon data-icon="inline-start" />
+                Remove
+              </Button>
+            </div>
+          ) : null,
+      }),
+    ],
+    [canManageCategoryAdmins, category.id, formatDateTime, removeCategoryAdmin],
+  );
+
   const availableCategoryAdmins = assignableMembers.filter(
     (member) =>
       member.status === "active" &&
       !categoryAdmins.some((admin) => admin.memberId === member.id),
   );
 
-  const surfaces = [
-    category.showInRegistration && {
-      key: "registration",
-      icon: ClipboardListIcon,
-      label: "Registration",
-      hint: "Asked at sign-up",
-    },
-    category.isPinnedToNavigation && {
-      key: "pinned",
-      icon: PinIcon,
-      label: "Pinned",
-      hint: "Listed under Groups in the sidebar",
-    },
-    category.managesMembershipFees && {
-      key: "fees",
-      icon: CoinsIcon,
-      label: "Fees",
-      hint: "Membership fees are collected per group in this category",
-    },
-  ].filter((surface): surface is Exclude<typeof surface, false> => Boolean(surface));
-
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader>
-            <CardTitle>About this category</CardTitle>
-            <CardDescription>
-              {category.description ?? `Members are sorted into ${category.name} through its groups.`}
-            </CardDescription>
-            <CardAction>
-              <Status variant={category.isActive ? "success" : "default"}>
-                <StatusIndicator />
-                <StatusLabel>{category.isActive ? "Active" : "Archived"}</StatusLabel>
-              </Status>
-            </CardAction>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <p className="text-sm">
-              {describeCategoryMembership(category)}{" "}
-              <span className="text-muted-foreground">
-                {describeJoinPolicy(category.defaultJoinPolicy)}
-              </span>
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {surfaces.map(({ key, icon: Icon, label, hint }) => (
-                <Tooltip key={key}>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="cursor-default text-muted-foreground">
-                      <Icon data-icon="inline-start" aria-hidden />
-                      {label}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>{hint}</TooltipContent>
-                </Tooltip>
-              ))}
-              <span className="ml-auto self-center font-mono text-xs text-muted-foreground">
-                {category.slug}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Category admins</CardTitle>
-            <CardDescription>Can manage every group inside this category.</CardDescription>
-            {canManageCategoryAdmins ? (
-              <CardAction>
-                <Button size="sm" variant="outline" onClick={() => setAdminSheetOpen(true)}>
-                  <ShieldIcon data-icon="inline-start" />
-                  Add
-                </Button>
-              </CardAction>
-            ) : null}
-          </CardHeader>
-          <CardContent className="flex flex-col gap-1">
+      <Tabs defaultValue="groups">
+        <TabsList>
+          <TabsTrigger value="groups">
+            <FolderTreeIcon data-icon="inline-start" />
+            Groups
+            <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{groups.length}</span>
+          </TabsTrigger>
+          <TabsTrigger value="admins">
+            <ShieldIcon data-icon="inline-start" />
+            Category admins
             {categoryAdmins.length > 0 ? (
-              categoryAdmins.map((admin) => (
-                <div
-                  key={admin.assignmentId}
-                  className="group/admin -mx-2 flex items-center gap-3 rounded-lg px-2 py-1.5"
-                >
-                  <Avatar size="sm">
-                    <AvatarFallback>{initials(admin)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {getMemberDisplayName(admin)}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {admin.email ?? "No email"} · since {formatDateTime(admin.assignedAt)}
-                    </span>
-                  </div>
-                  {canManageCategoryAdmins ? (
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={`Remove ${getMemberDisplayName(admin)}`}
-                      className="text-muted-foreground"
-                      onClick={() =>
-                        removeCategoryAdmin.execute({
-                          categoryId: category.id,
-                          memberId: admin.memberId,
-                        })
-                      }
-                      disabled={removeCategoryAdmin.isPending}
-                    >
-                      <XIcon />
-                    </Button>
-                  ) : null}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No category admins yet — every group here is managed by organisation admins.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
+                {categoryAdmins.length}
+              </span>
+            ) : null}
+          </TabsTrigger>
+        </TabsList>
 
-      <DataTable
-        data={groups}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        columns={groupColumns as any}
-        searchKey="group"
-        searchPlaceholder="Search groups..."
-        emptyStateTitle="No groups in this category yet"
-        emptyStateDescription={
-          canCreateGroups
-            ? "Create the first active group inside this category."
-            : "No groups you can manage are assigned in this category."
-        }
-        onRowClick={(row) => router.push(`/admin/groups/${category.id}/${row.id}`)}
-        toolbarActions={() =>
-          canCreateGroups ? (
-            <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
-              <PlusIcon data-icon="inline-start" />
-              New group
-            </Button>
-          ) : null
-        }
-      />
+        <TabsContent value="groups" className="flex flex-col gap-4 pt-4">
+          <DataTable
+            data={groups}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            columns={groupColumns as any}
+            searchKey="group"
+            searchPlaceholder="Search groups..."
+            emptyStateTitle="No groups in this category yet"
+            emptyStateDescription={
+              canCreateGroups
+                ? "Create the first active group inside this category."
+                : "No groups you can manage are assigned in this category."
+            }
+            onRowClick={(row) => router.push(`/admin/groups/${category.id}/${row.id}`)}
+            toolbarActions={() =>
+              canCreateGroups ? (
+                <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
+                  <PlusIcon data-icon="inline-start" />
+                  New group
+                </Button>
+              ) : null
+            }
+          />
+        </TabsContent>
+
+        <TabsContent value="admins" className="flex flex-col gap-4 pt-4">
+          <DataTable
+            data={categoryAdmins}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            columns={adminColumns as any}
+            searchKey="member"
+            searchPlaceholder="Search category admins..."
+            emptyStateTitle="No category admins"
+            emptyStateDescription="Category admins can manage every group inside this category. Until one is assigned, organisation admins do."
+            onRowClick={(admin) => router.push(`/admin/members/${admin.memberId}`)}
+            toolbarActions={() =>
+              canManageCategoryAdmins ? (
+                <Button onClick={() => setAdminSheetOpen(true)}>
+                  <PlusIcon data-icon="inline-start" />
+                  Add category admin
+                </Button>
+              ) : null
+            }
+          />
+        </TabsContent>
+      </Tabs>
 
       <GroupDialog
         open={groupSheetState.open}
