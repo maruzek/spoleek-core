@@ -148,6 +148,8 @@ export async function getViewerAppContext(): Promise<
   AppShellContext & {
     memberRecordId: string | null;
     organizationId: string;
+    /** Platform operator, not just an org admin. Gates provider-wide data. */
+    isSystemAdmin: boolean;
     session: Awaited<ReturnType<typeof requireViewerSession>>;
   }
 > {
@@ -201,6 +203,7 @@ export async function getViewerAppContext(): Promise<
     session,
     organizationId: organization.id,
     memberRecordId: member?.id ?? null,
+    isSystemAdmin: user?.systemRole === "system_admin",
     organization: {
       name: organization.name,
       slug: organization.slug,

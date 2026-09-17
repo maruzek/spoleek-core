@@ -1,4 +1,8 @@
+import Link from "next/link";
+import { HeartPulseIcon } from "lucide-react";
+
 import { AppPage } from "@/components/app/app-page";
+import { Button } from "@/components/ui/button";
 import { EmailAdmin } from "@/components/app/email-admin";
 import { requireAdminAccess } from "@/server/queries/access";
 import {
@@ -32,6 +36,14 @@ export default async function AdminEmailPage({
       title="Track organization email activity."
       description="Review outbound email history, delivery health, provider events, and invite-specific troubleshooting in one place."
       tooltip="This dashboard is the organization-level source of truth for outbound email activity captured by Spoleek. Invite emails are the first supported email type."
+      actions={
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin/email/health">
+            <HeartPulseIcon data-icon="inline-start" />
+            Delivery health
+          </Link>
+        </Button>
+      }
     >
       <EmailAdmin activities={activities} selectedActivity={selectedActivity} />
     </AppPage>

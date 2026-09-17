@@ -3,6 +3,7 @@
 import * as RechartsPrimitive from "recharts";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Stat, StatDescription, StatGroup, StatLabel, StatValue } from "@/components/ui/stat";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import type { PaymentStats } from "@/server/queries/payments";
 import { feeToMajorUnits, PAYMENT_STATUS_COLORS } from "@/lib/payments";
@@ -16,35 +17,8 @@ function formatCents(cents: number, currency: string, locale: string): string {
   }).format(feeToMajorUnits(cents) ?? 0);
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: "green" | "red" | "amber" | "blue";
-}) {
-  const accentClass = {
-    green: "text-emerald-700",
-    red: "text-red-600",
-    amber: "text-amber-600",
-    blue: "text-blue-600",
-  }[accent ?? "green"];
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className={`text-2xl font-semibold ${accentClass}`}>{value}</p>
-        {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
-      </CardContent>
-    </Card>
-  );
+function paymentCount(count: number): string {
+  return `${count} payment${count !== 1 ? "s" : ""}`;
 }
 
 const chartConfig = {
@@ -65,41 +39,41 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
 
   return (
     <div className="mb-8 space-y-4">
-      <h2 className="text-lg font-semibold">Financial health</h2>
+      <h2 className="font-sans text-lg font-semibold">Financial health</h2>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          label="Collected"
-          value={formatCents(stats.paid.totalCents, currency, locale)}
-          sub={`${stats.paid.count} payment${stats.paid.count !== 1 ? "s" : ""}`}
-          accent="green"
-        />
-        <StatCard
-          label="Pending"
-          value={formatCents(stats.pending.totalCents, currency, locale)}
-          sub={`${stats.pending.count} payment${stats.pending.count !== 1 ? "s" : ""}`}
-          accent="blue"
-        />
-        <StatCard
-          label="Overdue"
-          value={formatCents(stats.overdue.totalCents, currency, locale)}
-          sub={`${stats.overdue.count} payment${stats.overdue.count !== 1 ? "s" : ""}`}
-          accent="red"
-        />
-        <StatCard
-          label="Collection rate"
-          value={`${stats.collectionRate}%`}
-          sub={`of ${totalPayments} total`}
-          accent={stats.collectionRate >= 80 ? "green" : stats.collectionRate >= 50 ? "amber" : "red"}
-        />
-      </div>
+      <StatGroup columns={4}>
+        <Stat>
+          <StatLabel>Collected</StatLabel>
+          <StatValue tone="success">{formatCents(stats.paid.totalCents, currency, locale)}</StatValue>
+          <StatDescription>{paymentCount(stats.paid.count)}</StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Pending</StatLabel>
+          <StatValue tone="info">{formatCents(stats.pending.totalCents, currency, locale)}</StatValue>
+          <StatDescription>{paymentCount(stats.pending.count)}</StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Overdue</StatLabel>
+          <StatValue tone={stats.overdue.count > 0 ? "danger" : "default"}>
+            {formatCents(stats.overdue.totalCents, currency, locale)}
+          </StatValue>
+          <StatDescription>{paymentCount(stats.overdue.count)}</StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Collection rate</StatLabel>
+          <StatValue tone={stats.collectionRate >= 80 ? "success" : stats.collectionRate >= 50 ? "warning" : "danger"}>
+            {stats.collectionRate}%
+          </StatValue>
+          <StatDescription>of {totalPayments} total</StatDescription>
+        </Stat>
+      </StatGroup>
 
       {/* `items-start` so a short debt list does not stretch to the chart's height. */}
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
         {donutData.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="font-sans text-sm font-medium text-muted-foreground">
                 Payment status distribution
               </CardTitle>
             </CardHeader>
@@ -142,7 +116,7 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
         {stats.debtAging.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className="font-sans text-sm font-medium text-muted-foreground">
                 Debt aging — longest overdue
               </CardTitle>
             </CardHeader>

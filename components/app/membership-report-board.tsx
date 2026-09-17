@@ -15,6 +15,7 @@ import {
   MoreHorizontalIcon,
   PencilIcon,
   SearchIcon,
+  TrendingDownIcon,
   TrendingUpIcon,
   UserRoundXIcon,
   UndoIcon,
@@ -43,6 +44,15 @@ import {
 } from "@/server/actions/membership-reports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Stat,
+  StatDescription,
+  StatGroup,
+  StatIndicator,
+  StatLabel,
+  StatTrend,
+  StatValue,
+} from "@/components/ui/stat";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ReportHistoryChart } from "@/components/app/report-history-chart";
 import { ReportNotice } from "@/components/app/report-notice";
@@ -102,38 +112,6 @@ function formatDate(value: Date, locale: string) {
 function formatDelta(value: number) {
   if (value === 0) return "0";
   return value > 0 ? `+${value}` : String(value);
-}
-
-function Stat({
-  value,
-  label,
-  tone,
-  action,
-}: {
-  value: string;
-  label: string;
-  tone?: "warning" | "danger";
-  /** Rendered top-right, for a stat the board can edit in place. */
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="relative flex flex-col gap-1 rounded-xl border p-4">
-      {action ? <div className="absolute top-2 right-2">{action}</div> : null}
-      <span
-        className={cn(
-          "font-semibold text-2xl tabular-nums",
-          tone === "danger"
-            ? "text-destructive"
-            : tone === "warning"
-              ? "text-orange-600 dark:text-orange-400"
-              : undefined,
-        )}
-      >
-        {value}
-      </span>
-      <span className="text-muted-foreground text-sm">{label}</span>
-    </div>
-  );
 }
 
 /** Columns the board can reorder by. `status` is the chase-list default. */
@@ -371,25 +349,24 @@ export function MembershipReportBoard({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          value={`${totals.submittedCount} / ${totals.groupCount}`}
-          label="Groups submitted"
-          tone={
-            totals.submittedCount < totals.groupCount ? "warning" : undefined
-          }
-        />
-        <Stat
-          value={String(totals.memberCount)}
-          label={
-            hasBaseline
-              ? `Members confirmed · ${formatDelta(totalDelta)} on ${baselineLabel}`
-              : "Members confirmed"
-          }
-          tone={hasBaseline && totalDelta < 0 ? "warning" : undefined}
-          action={
-            // One year is a dot, not a trend.
-            history.length > 1 ? (
+      <StatGroup columns={4}>
+        <Stat>
+          <StatLabel>Groups submitted</StatLabel>
+          <StatValue tone={totals.submittedCount < totals.groupCount ? "warning" : "success"}>
+            {totals.submittedCount} <span className="text-muted-foreground">/ {totals.groupCount}</span>
+          </StatValue>
+          <StatDescription>
+            {totals.submittedCount === totals.groupCount
+              ? "Every group has reported"
+              : `${totals.groupCount - totals.submittedCount} still to send`}
+          </StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Members confirmed</StatLabel>
+          <StatValue>{totals.memberCount}</StatValue>
+          {/* One year is a dot, not a trend. */}
+          {history.length > 1 ? (
+            <StatIndicator variant="action">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -403,37 +380,43 @@ export function MembershipReportBoard({
                 </TooltipTrigger>
                 <TooltipContent>Members confirmed over time</TooltipContent>
               </Tooltip>
-            ) : null
-          }
-        />
-        <Stat
-          value={formatFeeAmount(totals.feeTotalCents, totals.currency)}
-          label="Fees collected"
-        />
-        <Stat
-          value={
-            daysLeft === null
-              ? "No deadline"
+            </StatIndicator>
+          ) : null}
+          {hasBaseline ? (
+            <StatTrend trend={totalDelta > 0 ? "up" : totalDelta < 0 ? "down" : "neutral"}>
+              {totalDelta > 0 ? <TrendingUpIcon /> : totalDelta < 0 ? <TrendingDownIcon /> : null}
+              {formatDelta(totalDelta)} on {baselineLabel}
+            </StatTrend>
+          ) : (
+            <StatDescription>Paid or waived for {report.periodLabel}</StatDescription>
+          )}
+        </Stat>
+        <Stat>
+          <StatLabel>Fees collected</StatLabel>
+          <StatValue>{formatFeeAmount(totals.feeTotalCents, totals.currency)}</StatValue>
+          <StatDescription>Across submitted rosters</StatDescription>
+        </Stat>
+        <Stat>
+          <StatLabel>Deadline</StatLabel>
+          <StatValue
+            tone={
+              daysLeft === null
+                ? "default"
+                : daysLeft < 0
+                  ? "danger"
+                  : daysLeft <= 7
+                    ? "warning"
+                    : "default"
+            }
+          >
+            {daysLeft === null
+              ? "None"
               : daysLeft < 0
                 ? `${Math.abs(daysLeft)} days late`
-                : `${daysLeft} days`
-          }
-          label={
-            report.confirmDueAt
-              ? `Deadline ${formatDate(report.confirmDueAt, locale)}`
-              : "No confirmation deadline set"
-          }
-          tone={
-            daysLeft === null
-              ? undefined
-              : daysLeft < 0
-                ? "danger"
-                : daysLeft <= 7
-                  ? "warning"
-                  : undefined
-          }
-          action={
-            isEditable ? (
+                : `${daysLeft} days`}
+          </StatValue>
+          {isEditable ? (
+            <StatIndicator variant="action">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -458,10 +441,15 @@ export function MembershipReportBoard({
                 </TooltipTrigger>
                 <TooltipContent>Change the deadline</TooltipContent>
               </Tooltip>
-            ) : null
-          }
-        />
-      </div>
+            </StatIndicator>
+          ) : null}
+          <StatDescription>
+            {report.confirmDueAt
+              ? `Groups confirm by ${formatDate(report.confirmDueAt, locale)}`
+              : "No confirmation deadline set"}
+          </StatDescription>
+        </Stat>
+      </StatGroup>
 
       {/*
         The only notice left standing. Everything else the board used to be
