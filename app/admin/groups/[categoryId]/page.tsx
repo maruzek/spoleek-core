@@ -61,6 +61,7 @@ export default async function AdminGroupCategoryPage({
         assignableMembers={detail.assignableMembers}
         canCreateGroups={canManageEntireCategory}
         canManageCategoryAdmins={access.adminAccessLevel === "full"}
+        canEditCategory={access.adminAccessLevel === "full" || access.member?.role === "leader"}
         workspaceConnected={Boolean(organization?.workspaceConnectedAt)}
         canManageWorkspaceIntegration={
           access.adminAccessLevel === "full" || access.member?.role === "leader"

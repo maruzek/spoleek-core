@@ -12,21 +12,28 @@ import {
   FolderTreeIcon,
   PencilIcon,
   PlusIcon,
+  Settings2Icon,
   ShieldIcon,
   ShieldOffIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { GroupCategoryForm } from "@/components/app/group-category-form";
 import { GroupDialog } from "@/components/app/group-dialog";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { getMemberStatusVariant } from "@/lib/member-status-display";
-import { groupJoinPolicyOptions, type GroupFormValues } from "@/lib/groups";
+import {
+  groupJoinPolicyOptions,
+  type GroupCategoryFormValues,
+  type GroupFormValues,
+} from "@/lib/groups";
 import { matchesSearch } from "@/lib/search";
 import type { MembershipStatus } from "@/server/db/schema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,25 +41,12 @@ import {
   assignCategoryAdminAction,
   removeCategoryAdminAction,
   saveGroupAction,
+  saveGroupCategoryAction,
 } from "@/server/actions/groups";
 
 type CategoryDetailProps = {
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-    description: string | null;
-    isActive: boolean;
-    isPinnedToNavigation: boolean;
-    showInRegistration: boolean;
-    selectionMode: "single" | "multiple";
-    selectionRequired: boolean;
-    maxSelections: number | null;
-    defaultJoinPolicy: "admin_only" | "free_join_leave" | "request_to_join";
-    managesMembershipFees: boolean;
-    sortOrder: number;
-    updatedAt: Date;
-  };
+  /** The full row: the Settings tab edits every field of it. */
+  category: GroupCategoryFormValues & { id: string; updatedAt: Date };
   groups: Array<{
     id: string;
     categoryId: string;
@@ -92,6 +86,8 @@ type CategoryDetailProps = {
   }>;
   canManageCategoryAdmins: boolean;
   canCreateGroups: boolean;
+  /** Org admins and leaders; scoped category admins only see the tabs. */
+  canEditCategory: boolean;
   workspaceConnected?: boolean;
   canManageWorkspaceIntegration?: boolean;
 };
@@ -111,6 +107,7 @@ export function GroupCategoryDetail({
   assignableMembers,
   canManageCategoryAdmins,
   canCreateGroups,
+  canEditCategory,
   workspaceConnected,
   canManageWorkspaceIntegration,
 }: CategoryDetailProps) {
@@ -132,6 +129,14 @@ export function GroupCategoryDetail({
       if (data?.success) {
         toast.success(groupSheetState.group ? "Group updated." : "Group created.");
         setGroupSheetState({ open: false, group: null });
+        router.refresh();
+      }
+    },
+  });
+  const saveCategory = useAction(saveGroupCategoryAction, {
+    onSuccess({ data }) {
+      if (data?.success) {
+        toast.success("Category updated.");
         router.refresh();
       }
     },
@@ -337,6 +342,12 @@ export function GroupCategoryDetail({
               </span>
             ) : null}
           </TabsTrigger>
+          {canEditCategory ? (
+            <TabsTrigger value="settings">
+              <Settings2Icon data-icon="inline-start" />
+              Settings
+            </TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="groups" className="flex flex-col gap-4 pt-4">
@@ -384,6 +395,34 @@ export function GroupCategoryDetail({
             }
           />
         </TabsContent>
+
+        {canEditCategory ? (
+          <TabsContent value="settings" className="flex flex-col gap-6 pt-4">
+            {/* Centred like the group settings: a long form reads as a column. */}
+            <Card className="mx-auto w-full max-w-2xl overflow-hidden">
+              <CardHeader>
+                <CardTitle>Category settings</CardTitle>
+                <CardDescription>Last saved {formatDateTime(category.updatedAt)}.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GroupCategoryForm
+                  key={`${category.id}-${category.updatedAt.toISOString()}`}
+                  category={category}
+                  isPending={saveCategory.isPending}
+                  validationErrors={saveCategory.result.validationErrors}
+                  submitLabel="Save category"
+                  onSubmit={async (value: GroupCategoryFormValues) => {
+                    const result = await saveCategory.executeAsync(value);
+
+                    if (result?.serverError) {
+                      toast.error(result.serverError);
+                    }
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <GroupDialog
