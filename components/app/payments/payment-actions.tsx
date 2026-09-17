@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
-import { CheckIcon, UndoIcon, XIcon } from "lucide-react";
+import { CheckIcon, EllipsisIcon, UndoIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import type { PaymentWithMember } from "@/components/app/payments/types";
@@ -18,6 +18,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Select,
@@ -306,10 +312,11 @@ export function MarkRefundedDialog({
 }
 
 /**
- * Mark paid / Cancel (or Mark refunded for a refund-due row), with their
- * dialogs. Used by the payments dashboard rows, the member payments tab, the
- * payment detail dialog and the event response list, so an admin gets the
- * same controls wherever a payment is shown.
+ * Mark paid, with Cancel behind a `⋯` menu (or Mark refunded for a refund-due
+ * row), with their dialogs. Used by the payments dashboard rows, the member
+ * payments tab, the payment detail dialog and the event response list, so an
+ * admin gets the same controls wherever a payment is shown. Cancel is the rare
+ * action, so it does not get a labelled button on every row.
  */
 export function PaymentActions({
   payment,
@@ -359,10 +366,19 @@ export function PaymentActions({
           <CheckIcon data-icon="inline-start" />
           Mark paid
         </Button>
-        <Button size={size} variant="ghost" onClick={() => setCancelOpen(true)}>
-          <XIcon data-icon="inline-start" />
-          Cancel
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size={size === "sm" ? "icon-sm" : "icon"} variant="ghost" aria-label="More actions">
+              <EllipsisIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem variant="destructive" onSelect={() => setCancelOpen(true)}>
+              <XIcon />
+              Cancel payment
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <MarkPaidDialog
         open={markPaidOpen}

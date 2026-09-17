@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   Table as TanStackTable,
   Column,
@@ -87,6 +88,8 @@ interface DataTableProps<TData, TValue> {
    * per-row actions keep working.
    */
   onRowClick?: (row: TData) => void;
+  /** Extra classes per row, e.g. a tint for rows that need attention. */
+  rowClassName?: (row: TData) => string | undefined;
 }
 
 /**
@@ -169,6 +172,7 @@ export function DataTable<TData, TValue>({
   enableRowSelection,
   toolbarActions,
   onRowClick,
+  rowClassName,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] =
@@ -267,7 +271,7 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  className={cn(onRowClick && "cursor-pointer", rowClassName?.(row.original))}
                   onClick={
                     onRowClick
                       ? (event) => {

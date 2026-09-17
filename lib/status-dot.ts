@@ -12,3 +12,16 @@ export const STATUS_DOT_CLASSES: Record<StatusDotVariant, string> = {
   warning: "bg-orange-600 dark:bg-orange-400",
   info: "bg-blue-600 dark:bg-blue-400",
 };
+
+/**
+ * Text colour for the same variants, for counts and labels that stand beside a
+ * badge. Keeping it next to the dot map is what stops a summary count from
+ * drifting to a colour its badge never used.
+ */
+export const STATUS_TEXT_CLASSES: Record<StatusDotVariant, string> = {
+  default: "text-foreground",
+  success: "text-green-700 dark:text-green-400",
+  error: "text-destructive",
+  warning: "text-orange-600 dark:text-orange-400",
+  info: "text-blue-600 dark:text-blue-400",
+};

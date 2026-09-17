@@ -11,8 +11,11 @@ import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
 import { PaymentDetailDialog } from "@/components/app/payments/payment-detail-dialog";
-import { PaymentStatusBadge } from "@/components/app/payments/payment-status-badge";
-import { MarkRefundedDialog } from "@/components/app/payments/payment-actions";
+import {
+  PaymentStatusBadge,
+  paymentStatusDotVariant,
+  paymentStatusLabel,
+} from "@/components/app/payments/payment-status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -24,7 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { comparePaymentStatus, formatFeeAmount } from "@/lib/payments";
+import { comparePaymentStatus, formatFeeAmount, PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
+import { STATUS_DOT_CLASSES, STATUS_TEXT_CLASSES } from "@/lib/status-dot";
+import { cn } from "@/lib/utils";
 import {
   bulkMarkPaymentsPaidAction,
   generatePaymentsAction,
@@ -34,45 +39,72 @@ import type { PaymentRow } from "@/server/queries/payments";
 
 const columnHelper = createColumnHelper<PaymentRow>();
 
-function PaymentSummary({ payments }: { payments: PaymentRow[] }) {
+type StatusFilter = MemberPaymentStatus | null;
+
+const STATUSES = (Object.keys(paymentStatusLabel) as MemberPaymentStatus[]).sort(
+  (a, b) => PAYMENT_STATUS_SORT_ORDER[a] - PAYMENT_STATUS_SORT_ORDER[b] || a.localeCompare(b),
+);
+
+/**
+ * One chip per status, coloured from the same map as the badges, and each one
+ * a filter. Counts come from the rows before the status filter is applied, so
+ * the numbers do not collapse to one the moment a chip is picked.
+ */
+function PaymentSummary({
+  payments,
+  status,
+  onStatusChange,
+}: {
+  payments: PaymentRow[];
+  status: StatusFilter;
+  onStatusChange: (status: StatusFilter) => void;
+}) {
   const counts = payments.reduce(
     (acc, p) => {
       acc[p.status] = (acc[p.status] ?? 0) + 1;
       return acc;
     },
-    {} as Record<MemberPaymentStatus, number>,
+    {} as Partial<Record<MemberPaymentStatus, number>>,
   );
 
+  const chip = "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-sm transition-colors";
+
   return (
-    <div className="flex flex-wrap gap-3">
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{payments.length}</span> total
-      </div>
-      {counts.paid ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.paid}</span> paid
-        </div>
-      ) : null}
-      {counts.pending ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.pending}</span> pending
-        </div>
-      ) : null}
-      {counts.overdue ? (
-        <div className="flex items-center gap-1.5 text-sm text-destructive">
-          <span className="font-medium">{counts.overdue}</span> overdue
-        </div>
-      ) : null}
-      {counts.refund_due ? (
-        <div className="flex items-center gap-1.5 text-sm text-purple-700 dark:text-purple-300">
-          <span className="font-medium">{counts.refund_due}</span> refund due
-        </div>
-      ) : null}
-      {counts.cancelled ? (
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{counts.cancelled}</span> cancelled
-        </div>
-      ) : null}
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+      <button
+        type="button"
+        onClick={() => onStatusChange(null)}
+        aria-pressed={status === null}
+        className={cn(chip, status === null ? "border-foreground/30 bg-muted" : "border-transparent hover:bg-muted/60")}
+      >
+        <span className="font-medium tabular-nums">{payments.length}</span>
+        <span className="text-muted-foreground">total</span>
+      </button>
+      {STATUSES.map((s) => {
+        const count = counts[s];
+        if (!count) return null;
+        const variant = paymentStatusDotVariant[s];
+        const active = status === s;
+        return (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onStatusChange(active ? null : s)}
+            aria-pressed={active}
+            className={cn(
+              chip,
+              STATUS_TEXT_CLASSES[variant],
+              active ? "border-current/40 bg-current/10" : "border-transparent hover:bg-muted/60",
+            )}
+          >
+            <span className={cn("size-1.5 rounded-full", STATUS_DOT_CLASSES[variant])} aria-hidden />
+            <span className="font-medium tabular-nums">{count}</span>
+            <span className={variant === "default" ? "text-muted-foreground" : "opacity-80"}>
+              {paymentStatusLabel[s].toLowerCase()}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -83,19 +115,20 @@ const ALL_GROUPS = "__all__";
 type TypeFilter = "all" | MemberPaymentType;
 
 /**
- * Paid event payments whose RSVP was withdrawn. Pinned above the table until
- * an admin settles each one by hand; nothing moves them on automatically.
+ * Paid event payments whose RSVP was withdrawn. The rows themselves sit at the
+ * top of the table (refund_due sorts first) with an orange tint; this strip
+ * only totals them and jumps the filter there. Nothing settles them
+ * automatically.
  */
 function RefundsDue({
   refunds,
-  onSuccess,
+  active,
+  onShow,
 }: {
   refunds: PaymentRow[];
-  onSuccess: () => void;
+  active: boolean;
+  onShow: () => void;
 }) {
-  const { formatDateTime } = useFormatters();
-  const [refunding, setRefunding] = useState<PaymentRow | null>(null);
-
   if (refunds.length === 0) return null;
 
   const total = refunds.reduce((sum, r) => sum + r.amount, 0);
@@ -103,65 +136,34 @@ function RefundsDue({
   const sameCurrency = refunds.every((r) => r.currency === currency);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-        <UndoIcon className="size-4 text-orange-600 dark:text-orange-400" aria-hidden />
-        <p className="text-sm font-medium">
-          {refunds.length === 1 ? "1 refund due" : `${refunds.length} refunds due`}
-          {sameCurrency ? <span className="font-normal text-muted-foreground"> · {formatFeeAmount(total, currency)}</span> : null}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          Paid, then withdrawn, demoted to the reserve list or removed. Return the money, then mark it here.
-        </p>
-      </div>
-      <div className="bg-card">
-        <ul className="divide-y border-t border-orange-500/20">
-          {refunds.map((payment) => (
-            <li key={payment.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 text-sm">
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {payment.memberName}
-                  {!payment.memberId ? <span className="text-muted-foreground"> · guest</span> : null}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {payment.eventTitle ?? payment.periodLabel}
-                  {payment.paidAt ? ` · paid ${formatDateTime(payment.paidAt)}` : ""}
-                  {payment.variableSymbol ? ` · VS ${payment.variableSymbol}` : ""}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="font-medium tabular-nums">{formatFeeAmount(payment.amount, payment.currency)}</span>
-                <Button size="sm" variant="outline" onClick={() => setRefunding(payment)}>
-                  <UndoIcon data-icon="inline-start" />
-                  Mark refunded
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {refunding ? (
-        <MarkRefundedDialog
-          open
-          onOpenChange={(open) => !open && setRefunding(null)}
-          payment={refunding}
-          onSuccess={() => {
-            setRefunding(null);
-            onSuccess();
-          }}
-        />
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-orange-500/40 bg-orange-500/5 px-4 py-2.5">
+      <UndoIcon className="size-4 text-orange-600 dark:text-orange-400" aria-hidden />
+      <p className="text-sm font-medium">
+        {refunds.length === 1 ? "1 refund due" : `${refunds.length} refunds due`}
+        {sameCurrency ? <span className="font-normal text-muted-foreground"> · {formatFeeAmount(total, currency)}</span> : null}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Paid, then withdrawn, demoted to the reserve list or removed. Return the money, then mark it refunded.
+      </p>
+      {!active ? (
+        <Button size="sm" variant="outline" className="ml-auto" onClick={onShow}>
+          Show
+        </Button>
       ) : null}
     </div>
   );
 }
 
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
-  const { formatDateTime } = useFormatters();
+  const { formatDate, formatDateTime } = useFormatters();
+  const formatDue = (date: Date) =>
+    date.getHours() === 0 && date.getMinutes() === 0 ? formatDate(date) : formatDateTime(date);
 
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
   const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
   const [type, setType] = useState<TypeFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>(null);
 
   const refunds = useMemo(() => payments.filter((p) => p.status === "refund_due"), [payments]);
   const hasEventPayments = useMemo(() => payments.some((p) => p.type === "event"), [payments]);
@@ -176,7 +178,9 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [payments]);
 
-  const visiblePayments = useMemo(
+  // Type and group narrow the set the chips count; the status chip then
+  // narrows the table only.
+  const scopedPayments = useMemo(
     () =>
       payments
         .filter((payment) => type === "all" || payment.type === type)
@@ -184,6 +188,10 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
           (payment) => groupId === ALL_GROUPS || payment.memberGroups.some((g) => g.id === groupId),
         ),
     [payments, groupId, type],
+  );
+  const visiblePayments = useMemo(
+    () => (status ? scopedPayments.filter((p) => p.status === status) : scopedPayments),
+    [scopedPayments, status],
   );
 
   const generate = useAction(generatePaymentsAction, {
@@ -300,7 +308,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       meta: { label: "Variable symbol" },
       cell: ({ row }) =>
         row.original.variableSymbol ? (
-          <span className="font-mono text-xs">{row.original.variableSymbol}</span>
+          <span className="font-mono text-xs tabular-nums">{row.original.variableSymbol}</span>
         ) : (
           "—"
         ),
@@ -308,13 +316,14 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.accessor("dueAt", {
       header: ({ column }) => <SortableHeader column={column}>Due</SortableHeader>,
       meta: { label: "Due" },
-      cell: ({ row }) => formatDateTime(row.original.dueAt),
+      // A midnight deadline is a day, not a moment — showing "0:00" on every
+      // membership fee just adds noise.
+      cell: ({ row }) => formatDue(row.original.dueAt),
     }),
     columnHelper.accessor("paidAt", {
       header: ({ column }) => <SortableHeader column={column}>Paid at</SortableHeader>,
       meta: { label: "Paid at" },
-      cell: ({ row }) =>
-        row.original.paidAt ? formatDateTime(row.original.paidAt) : "—",
+      cell: ({ row }) => (row.original.paidAt ? formatDate(row.original.paidAt) : null),
     }),
     columnHelper.display({
       id: "actions",
@@ -330,8 +339,8 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   return (
     <div className="flex flex-col gap-4">
-      <RefundsDue refunds={refunds} onSuccess={() => router.refresh()} />
-      <PaymentSummary payments={visiblePayments} />
+      <RefundsDue refunds={refunds} active={status === "refund_due"} onShow={() => setStatus("refund_due")} />
+      <PaymentSummary payments={scopedPayments} status={status} onStatusChange={setStatus} />
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
@@ -341,6 +350,9 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         emptyStateTitle="No payment records"
         emptyStateDescription="Generate payment records for the current renewal period or wait for the nightly cron."
         onRowClick={(payment) => setDetailPayment(payment)}
+        rowClassName={(payment) =>
+          payment.status === "refund_due" ? "bg-orange-500/5 hover:bg-orange-500/10" : undefined
+        }
         toolbarActions={(table) => {
           const selected = table
             .getFilteredSelectedRowModel()

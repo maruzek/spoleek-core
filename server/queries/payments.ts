@@ -20,6 +20,8 @@ export type PaymentStats = {
   paid: PaymentStatBucket;
   pending: PaymentStatBucket;
   overdue: PaymentStatBucket;
+  /** Paid, then withdrawn: money the org owes back. Not part of the collection rate. */
+  refundDue: PaymentStatBucket;
   /** The same three buckets split by payment type. */
   byType: Record<
     MemberPaymentType,
@@ -271,7 +273,7 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
     .where(
       and(
         eq(memberPayments.orgId, orgId),
-        inArray(memberPayments.status, ["paid", "pending", "overdue"]),
+        inArray(memberPayments.status, ["paid", "pending", "overdue", "refund_due"]),
       ),
     )
     .groupBy(memberPayments.status, memberPayments.type);
@@ -286,9 +288,15 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
     event: emptyBuckets(),
   };
   const totals = emptyBuckets();
+  const refundDue: PaymentStatBucket = { count: 0, totalCents: 0 };
   for (const r of statRows) {
-    if (r.status !== "paid" && r.status !== "pending" && r.status !== "overdue") continue;
     const bucket = { count: r.count, totalCents: Number(r.total ?? 0) };
+    if (r.status === "refund_due") {
+      refundDue.count += bucket.count;
+      refundDue.totalCents += bucket.totalCents;
+      continue;
+    }
+    if (r.status !== "paid" && r.status !== "pending" && r.status !== "overdue") continue;
     byType[r.type][r.status] = bucket;
     totals[r.status].count += bucket.count;
     totals[r.status].totalCents += bucket.totalCents;
@@ -328,7 +336,7 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
     daysOverdue: Math.floor((now.getTime() - r.dueAt.getTime()) / (1000 * 60 * 60 * 24)),
   }));
 
-  return { paid, pending, overdue, byType, collectionRate, projectedIncomeCents, debtAging };
+  return { paid, pending, overdue, refundDue, byType, collectionRate, projectedIncomeCents, debtAging };
 }
 
 export type MemberOverdueFees = {
