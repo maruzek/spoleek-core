@@ -1,9 +1,9 @@
 import { AppPage } from "@/components/app/app-page";
 import { ProfileForm } from "@/components/app/profile-form";
+import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 import {
   getMemberCustomFieldAnswerMap,
-  getPostApprovalCompleteness,
   listActiveMemberCustomFields,
 } from "@/server/queries/member-custom-fields";
 
@@ -22,14 +22,13 @@ export default async function PortalProfilePage({
     organization.workspaceModuleEnabled &&
     organization.workspaceConnectedAt !== null &&
     Boolean(organization.workspaceDomain);
-  const [customFields, answerMap, completeness] = await Promise.all([
+  const [customFields, answerMap] = await Promise.all([
     listActiveMemberCustomFields(organization.id, [
       "registration",
       "post_approval",
       "optional",
     ]),
     getMemberCustomFieldAnswerMap(organization.id, member.id),
-    getPostApprovalCompleteness(organization.id, member.id),
   ]);
   const showIncompleteBanner =
     params.incomplete === "1" || params.incomplete === "true";
@@ -37,8 +36,8 @@ export default async function PortalProfilePage({
   return (
     <AppPage
       eyebrow="Member portal"
-      title="Manage your profile."
-      description="Keep your core contact information current so admins do not need to chase manual updates."
+      title="Your profile."
+      description={`What ${organization.name} knows about you, and where it reaches you.`}
     >
       <ProfileForm
         firstName={member.firstName}
@@ -46,13 +45,13 @@ export default async function PortalProfilePage({
         customFields={customFields}
         customFieldAnswers={answerMap}
         showIncompleteBanner={showIncompleteBanner}
-        missingRequiredFieldLabels={completeness.missingRequiredFields.map(
-          (field) => field.label,
-        )}
         preferredEmail={member.preferredEmail}
         workspaceEmail={member.workspaceUserEmail ?? null}
         workspaceReady={workspaceReady}
         personalEmail={member.email ?? null}
+        contactEmail={resolveMemberEmailForOrg({ member, organization })}
+        membershipStatus={member.status}
+        memberSince={member.linkedAt ?? member.createdAt}
       />
     </AppPage>
   );

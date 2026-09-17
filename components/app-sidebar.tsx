@@ -41,6 +41,7 @@ function getSidebarData(appContext: AppShellContext) {
       title: "Overview",
       href: "/portal",
       icon: LayoutDashboardIcon,
+      exact: true
     },
     {
       title: "Profile",
@@ -123,6 +124,7 @@ function getSidebarData(appContext: AppShellContext) {
       title: "Settings",
       href: "/admin/settings",
       icon: Settings2Icon,
+      exact: true
     },
     {
       title: "Member fields",

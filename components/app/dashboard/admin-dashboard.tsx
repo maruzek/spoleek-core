@@ -4,10 +4,8 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import {
-  ArrowRightIcon,
   BookOpenIcon,
   CalendarDaysIcon,
-  CheckIcon,
   ClipboardCheckIcon,
   CreditCardIcon,
   FolderTreeIcon,
@@ -17,7 +15,6 @@ import {
 } from "lucide-react";
 
 import { useFormatLocale } from "@/components/locale-provider";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Stat,
   StatDescription,
@@ -26,8 +23,17 @@ import {
   StatLabel,
   StatValue,
 } from "@/components/ui/stat";
-import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
-import { cn } from "@/lib/utils";
+import {
+  AllClear,
+  DayHeading,
+  EmptyNote,
+  ListRow,
+  ScrollList,
+  SectionHeading,
+  relativeTime,
+  reveal,
+  rowLink,
+} from "@/components/app/dashboard/dashboard-primitives";
 import {
   daysUntil,
   groupByDay,
@@ -61,50 +67,6 @@ const MODULE_LABELS: Record<DashboardModule, string> = {
   settings: "Settings",
 };
 
-/** The three lists share one height so the top row reads as one band. */
-const LIST_HEIGHT = "h-[22rem]";
-
-/** Staggered entrance. Each row starts a beat after the previous one. */
-function reveal(index: number) {
-  return {
-    className: "animate-in fade-in slide-in-from-bottom-1 fill-mode-both duration-400 ease-out",
-    style: { animationDelay: `${Math.min(index, 10) * 40}ms` },
-  };
-}
-
-function SectionHeading({
-  children,
-  count,
-  hint,
-}: {
-  children: React.ReactNode;
-  count?: number;
-  hint?: string;
-}) {
-  return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="flex items-baseline gap-2 font-sans text-base font-semibold text-foreground">
-        {children}
-        {count != null && count > 0 ? (
-          <span className="text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
-        ) : null}
-      </h2>
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-    </div>
-  );
-}
-
-function EmptyNote({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-      {children}
-    </p>
-  );
-}
-
-const rowLink =
-  "group -mx-2 flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none";
-
 // ─── Needs you ──────────────────────────────────────────────────────────────
 
 function waitingLabel(item: AttentionItem, now: Date) {
@@ -115,78 +77,46 @@ function waitingLabel(item: AttentionItem, now: Date) {
   return `${days} days`;
 }
 
-function AttentionRow({ item, now, index }: { item: AttentionItem; now: Date; index: number }) {
-  const Icon = MODULE_ICONS[item.module];
-  const waiting = waitingLabel(item, now);
-  const r = reveal(index);
-
-  return (
-    <li className={cn("border-b border-border last:border-b-0", r.className)} style={r.style}>
-      <Link href={item.href} className={rowLink}>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-foreground">{item.title}</span>
-          <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-            <Icon className="size-3 shrink-0" aria-hidden />
-            {MODULE_LABELS[item.module]}
-            {waiting ? <span className="tabular-nums"> · {waiting}</span> : null}
-          </span>
-        </span>
-        {item.urgent ? (
-          <span
-            aria-hidden
-            className={cn(
-              "mt-1.5 size-2 shrink-0 rounded-full",
-              STATUS_DOT_CLASSES[item.tone === "danger" ? "error" : "warning"],
-            )}
-          />
-        ) : null}
-        <ArrowRightIcon
-          aria-hidden
-          className="mt-1 size-3.5 shrink-0 text-muted-foreground/0 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground"
-        />
-      </Link>
-    </li>
-  );
-}
-
 function AttentionSection({ items, now }: { items: AttentionItem[]; now: Date }) {
   return (
     <section>
       <SectionHeading count={items.length}>Needs you</SectionHeading>
       {items.length === 0 ? (
-        <div className="flex items-center gap-3 rounded-lg border border-dashed border-border px-4 py-5">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <CheckIcon className="size-4" aria-hidden />
-          </span>
-          <div>
-            <p className="text-sm font-medium text-foreground">Nothing is waiting on you.</p>
-            <p className="text-xs text-muted-foreground">
-              No requests, no overdue fees, no failed deliveries.
-            </p>
-          </div>
-        </div>
+        <AllClear
+          title="Nothing is waiting on you."
+          detail="No requests, no overdue fees, no failed deliveries."
+        />
       ) : (
-        <ScrollArea className={LIST_HEIGHT}>
-          <ul className="flex flex-col pr-3">
-            {items.map((item, index) => (
-              <AttentionRow key={item.id} item={item} now={now} index={index} />
-            ))}
+        <ScrollList>
+          <ul className="flex flex-col">
+            {items.map((item, index) => {
+              const Icon = MODULE_ICONS[item.module];
+              const waiting = waitingLabel(item, now);
+              return (
+                <ListRow
+                  key={item.id}
+                  index={index}
+                  href={item.href}
+                  title={item.title}
+                  urgent={item.urgent ? (item.tone === "danger" ? "error" : "warning") : null}
+                  meta={
+                    <>
+                      <Icon className="size-3 shrink-0" aria-hidden />
+                      {MODULE_LABELS[item.module]}
+                      {waiting ? <span className="tabular-nums"> · {waiting}</span> : null}
+                    </>
+                  }
+                />
+              );
+            })}
           </ul>
-        </ScrollArea>
+        </ScrollList>
       )}
     </section>
   );
 }
 
 // ─── Coming up ──────────────────────────────────────────────────────────────
-
-function dayHeading(dayOffset: number, date: Date, locale: string) {
-  if (dayOffset === 0) return "Today";
-  if (dayOffset === 1) return "Tomorrow";
-  return new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(
-    date,
-  );
-}
 
 const UPCOMING_KIND_LABEL: Record<UpcomingItem["kind"], string> = {
   event: "Event",
@@ -229,23 +159,11 @@ function UpcomingSection({
       {days.length === 0 ? (
         <EmptyNote>Nothing scheduled in the next two weeks.</EmptyNote>
       ) : (
-        <ScrollArea className={LIST_HEIGHT}>
-          <ol className="flex flex-col gap-4 pr-3">
+        <ScrollList>
+          <ol className="flex flex-col gap-4">
             {days.map((day, dayIndex) => (
               <li key={day.dayOffset}>
-                <h3
-                  className={cn(
-                    "mb-1 font-sans text-xs font-semibold tracking-wider uppercase",
-                    day.dayOffset === 0 ? "text-primary" : "text-muted-foreground",
-                  )}
-                >
-                  {dayHeading(day.dayOffset, day.date, locale)}
-                  {day.dayOffset > 1 ? (
-                    <span className="ml-2 font-normal normal-case tracking-normal">
-                      in {day.dayOffset} days
-                    </span>
-                  ) : null}
-                </h3>
+                <DayHeading dayOffset={day.dayOffset} date={day.date} locale={locale} />
                 <ul className="flex flex-col">
                   {day.items.map((item, itemIndex) => {
                     const Icon = MODULE_ICONS[item.module];
@@ -273,23 +191,13 @@ function UpcomingSection({
               </li>
             ))}
           </ol>
-        </ScrollArea>
+        </ScrollList>
       )}
     </section>
   );
 }
 
 // ─── Just happened ──────────────────────────────────────────────────────────
-
-function relativeTime(at: Date, now: Date, locale: string) {
-  const diffMs = at.getTime() - now.getTime();
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  const minutes = Math.round(diffMs / 60_000);
-  if (Math.abs(minutes) < 60) return rtf.format(minutes, "minute");
-  const hours = Math.round(diffMs / 3_600_000);
-  if (Math.abs(hours) < 24) return rtf.format(hours, "hour");
-  return rtf.format(daysUntil(at, now), "day");
-}
 
 function ActivitySection({
   items,
@@ -310,41 +218,35 @@ function ActivitySection({
       {items.length === 0 ? (
         <EmptyNote>A quiet week. Nothing new came in.</EmptyNote>
       ) : (
-        <ScrollArea className={LIST_HEIGHT}>
-          <ul className="flex flex-col pr-3">
+        <ScrollList>
+          <ul className="flex flex-col">
             {items.map((item, index) => {
               const Icon = MODULE_ICONS[item.module];
-              const r = reveal(startIndex + index);
               return (
-                <li
+                <ListRow
                   key={item.id}
-                  className={cn("border-b border-border last:border-b-0", r.className)}
-                  style={r.style}
-                >
-                  <Link href={item.href} className={rowLink}>
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <Icon className="size-3" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-foreground">
-                        {item.title}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {item.detail}
-                      </span>
-                    </span>
+                  index={startIndex + index}
+                  href={item.href}
+                  title={item.title}
+                  meta={
+                    <>
+                      <Icon className="size-3 shrink-0" aria-hidden />
+                      <span className="truncate">{item.detail}</span>
+                    </>
+                  }
+                  trailing={
                     <time
                       dateTime={item.at.toISOString()}
                       className="shrink-0 pt-0.5 text-xs whitespace-nowrap tabular-nums text-muted-foreground"
                     >
-                      {relativeTime(item.at, now, locale)}
+                      {relativeTime(item.at, now, locale, daysUntil(item.at, now))}
                     </time>
-                  </Link>
-                </li>
+                  }
+                />
               );
             })}
           </ul>
-        </ScrollArea>
+        </ScrollList>
       )}
     </section>
   );
