@@ -16,8 +16,8 @@ export default async function AdminGroupsPage() {
   return (
     <AppPage
       eyebrow="Administration"
-      title="Group categories define the structure of your organization."
-      description="Manage category rules, registration hooks, delegated managers, and the groups that live inside each structural layer."
+      title="Groups"
+      description="The layers your organisation is built from — each category holds its groups and decides how members are sorted into them."
     >
       <GroupCategoriesAdmin
         canManageCategories={canManageCategories}
