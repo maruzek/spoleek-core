@@ -1,22 +1,24 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
+import { PortalEventsAgenda } from "@/components/app/events/portal-events-agenda";
+import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { listEventsForViewer } from "@/server/queries/events";
 
 export default async function PortalEventsPage() {
-  await requireCurrentMemberAccess({
+  const { member, organization } = await requireCurrentMemberAccess({
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });
+  const t = getDictionary().events;
+  const buckets = await listEventsForViewer({ orgId: organization.id, memberId: member.id });
 
   return (
-    <AppPage
-      eyebrow="Member portal"
-      title="Your events will live here."
-      description="Members will use this side of the app to discover events, RSVP, and handle event-linked self-service tasks."
-    >
-      <AppPlaceholder
-        title="Portal events space ready"
-        description="The shared shell is in place so event participation can be added without another navigation reset."
+    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription}>
+      <PortalEventsAgenda
+        upcoming={[...buckets.invited, ...buckets.open]}
+        past={buckets.past}
+        locale={orgFormatLocale(organization.locale)}
+        timeZone={organization.timezone}
       />
     </AppPage>
   );

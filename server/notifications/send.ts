@@ -17,6 +17,7 @@ export async function sendNotificationEmails(params: {
   subject: string;
   react: ReactElement;
   memberId?: string | null;
+  eventId?: string | null;
   metadata?: Record<string, unknown> | null;
 }) {
   if (params.recipients.length === 0) {
@@ -57,6 +58,7 @@ export async function sendNotificationEmails(params: {
         kind: params.kind,
         // Per-recipient id wins: a broadcast has a different member per row.
         memberId: recipient.memberId ?? params.memberId ?? null,
+        eventId: params.eventId ?? null,
         fromEmail,
         toEmail: recipient.email,
         toName: recipient.name,
@@ -79,6 +81,7 @@ export async function sendNotificationEmails(params: {
         kind: params.kind,
         // Per-recipient id wins: a broadcast has a different member per row.
         memberId: recipient.memberId ?? params.memberId ?? null,
+        eventId: params.eventId ?? null,
         fromEmail,
         toEmail: recipient.email,
         toName: recipient.name,

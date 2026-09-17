@@ -3,6 +3,8 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { eventSettingsSchema } from "@/lib/events/schemas";
+
 import { organizationLocalizationSettingsSchema } from "@/lib/collation";
 import { joinPageSettingsSchema } from "@/lib/join";
 import { membershipSettingsSchema } from "@/lib/membership";
@@ -185,6 +187,24 @@ const emailNotificationSettingsSchema = z.object({
   emailNotifyRegistrationOrgAdmins: z.boolean(),
   registrationNotificationEmail: optionalNotificationEmailSchema,
 });
+
+export const saveEventSettingsAction = orgAdminActionClient
+  .metadata({ actionName: "saveEventSettings" })
+  .inputSchema(eventSettingsSchema)
+  .action(async ({ parsedInput }) => {
+    const { organization } = await requireOrgAdminAccess();
+
+    await db
+      .update(organizations)
+      .set({
+        orgEventCreators: parsedInput.orgEventCreators,
+        eventGuestRetentionDays: parsedInput.eventGuestRetentionDays,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, organization.id));
+
+    return { success: true };
+  });
 
 export const saveEmailNotificationSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveEmailNotificationSettings" })

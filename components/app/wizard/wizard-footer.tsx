@@ -11,7 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-import type { StepGate } from "./types";
+import type { StepGate } from "@/components/app/wizard/types";
 
 /**
  * The wizard's single forward control. Everything it renders comes from the

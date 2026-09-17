@@ -3,16 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  MultiSelect,
-  MultiSelectContent,
-  MultiSelectGroup,
-  MultiSelectItem,
-  MultiSelectTrigger,
-  MultiSelectValue,
-} from "@/components/ui/multi-select";
-import { cn } from "@/lib/utils";
+import { StatusFilter } from "@/components/app/status-filter";
 import {
   MEMBER_STATUS_OPTIONS,
   serializeMemberStatusFilter,
@@ -20,7 +11,7 @@ import {
 import type { MembershipStatus } from "@/server/db/schema";
 
 /**
- * The members table's status filter.
+ * The members table's status filter: the generic `StatusFilter` plus URL sync.
  *
  * Every status except `deleted` is selected by default; ticking `deleted` is
  * how an admin reaches soft-deleted members, and unticking the rest is how they
@@ -72,56 +63,11 @@ export function MemberStatusFilter({
   };
 
   return (
-    <MultiSelect
-      multiple
-      items={MEMBER_STATUS_OPTIONS}
+    <StatusFilter
+      options={MEMBER_STATUS_OPTIONS}
       value={value}
-      onValueChange={(next) => handleChange(next as MembershipStatus[])}
-    >
-      <MultiSelectTrigger
-        className="min-w-44"
-        data-pending={isPending ? "" : undefined}
-        aria-label="Filter by status"
-      >
-        <MultiSelectValue>
-          {(selected: MembershipStatus[]) => (
-            <div className="flex min-w-0 items-center gap-2">
-              {/* Overlapping dots rather than a list of names: the trigger has
-                  to stay one line at six statuses, and the colours are already
-                  how the Status column reads. */}
-              <div className="flex -space-x-1 overflow-hidden">
-                {MEMBER_STATUS_OPTIONS.filter((option) =>
-                  selected.includes(option.value),
-                ).map((option) => (
-                  <span
-                    key={option.value}
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full ring-2 ring-background",
-                      option.dotClassName,
-                    )}
-                  />
-                ))}
-              </div>
-              <span className="truncate">Status</span>
-              <Badge variant="outline" className="ml-0.5">
-                {selected.length}/{MEMBER_STATUS_OPTIONS.length}
-              </Badge>
-            </div>
-          )}
-        </MultiSelectValue>
-      </MultiSelectTrigger>
-      <MultiSelectContent>
-        <MultiSelectGroup>
-          {MEMBER_STATUS_OPTIONS.map((option) => (
-            <MultiSelectItem key={option.value} value={option.value}>
-              <span
-                className={cn("size-2 shrink-0 rounded-full", option.dotClassName)}
-              />
-              <span>{option.label}</span>
-            </MultiSelectItem>
-          ))}
-        </MultiSelectGroup>
-      </MultiSelectContent>
-    </MultiSelect>
+      onChange={handleChange}
+      isPending={isPending}
+    />
   );
 }

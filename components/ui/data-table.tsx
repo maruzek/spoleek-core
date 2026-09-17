@@ -72,6 +72,8 @@ interface DataTableProps<TData, TValue> {
   initialColumnVisibility?: VisibilityState;
   /** Applied on mount, for filters restored from the URL on the server. */
   initialColumnFilters?: ColumnFiltersState;
+  /** Applied on mount; header clicks replace it. */
+  initialSorting?: SortingState;
   /**
    * Which rows may be selected. Use it to keep bulk actions off rows they
    * cannot act on — a deleted member, say — rather than filtering the
@@ -163,11 +165,12 @@ export function DataTable<TData, TValue>({
   emptyStateDescription = "Try adjusting your filters.",
   initialColumnVisibility = {},
   initialColumnFilters = [],
+  initialSorting = [],
   enableRowSelection,
   toolbarActions,
   onRowClick,
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = useState<SortingState>([]);
+  const [sorting, setSorting] = useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] =
     useState<ColumnFiltersState>(initialColumnFilters);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);

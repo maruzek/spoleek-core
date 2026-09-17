@@ -20,7 +20,6 @@ import {
 import {
   Field,
   FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -219,10 +218,6 @@ function MemberAssignmentDialogBody({
                     </InputGroupText>
                   </InputGroupAddon>
                 </InputGroup>
-                <FieldDescription>
-                  Start typing any part of a member&apos;s name or personal
-                  email to narrow the list.
-                </FieldDescription>
               </FieldContent>
             </Field>
           </FieldGroup>

@@ -16,7 +16,8 @@
     "db:seed:payments": "tsx --env-file=.env scripts/seed-payments-test.ts",
     "email:test": "tsx --env-file=.env scripts/send-payment-emails-test.ts",
     "email:dev": "email dev --dir emails",
-    "db:seed:report": "tsx --env-file=.env scripts/seed-report-test.ts"
+    "db:seed:report": "tsx --env-file=.env scripts/seed-report-test.ts",
+    "db:seed:events": "tsx --env-file=.env scripts/seed-events-test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
@@ -43,6 +44,7 @@
     "qrcode": "^1.5.4",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
+    "react-big-calendar": "^1.20.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "19.2.4",
     "react-email": "^6.0.0",
@@ -62,6 +64,7 @@
     "@types/pg": "^8.20.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
+    "@types/react-big-calendar": "^1.16.3",
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.1",
     "drizzle-kit": "^0.31.10",

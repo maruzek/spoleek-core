@@ -61,14 +61,7 @@ export const STEP_LABELS: Record<WizardStep, string> = {
  *
  * Precedence when several apply: `blocked` > `busy` > `pending`.
  */
-export type StepGate = {
-  /** Cannot advance at all, and why. */
-  blocked?: { reason: string };
-  /** Async work is running inside the step; advancing would abandon it. */
-  busy?: boolean;
-  /** Advancing is allowed but loses something; confirm names the cost. */
-  pending?: { summary: string; detail: string };
-};
+export type { StepGate } from "@/components/app/wizard/types";
 
 export type WorkspaceMatch = {
   workspaceUserId: string;

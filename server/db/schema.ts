@@ -100,6 +100,10 @@ export const emailKindEnum = pgEnum("email_kind", [
   // for it on the publish dialog. Never automatic: an accidental blast to the
   // whole membership of a political party is not recoverable socially.
   "policy_version_published",
+  // An event invitation, sent only when a manager explicitly asks for it on
+  // the send dialog after seeing the recipient count. Never automatic:
+  // publishing, editing or targeting an event sends nothing.
+  "event_invite",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
@@ -280,6 +284,56 @@ export const memberPaymentStatusEnum = pgEnum("member_payment_status", [
   "paid",
   "overdue",
   "cancelled",
+]);
+
+// ─── Events ─────────────────────────────────────────────────────────────────
+
+/**
+ * Who owns an event: the organization, one category, or one group. Ownership
+ * decides who may manage it and where it is listed — it is deliberately not
+ * the audience, which is a separate rule list (`event_audience`).
+ */
+export const eventOwnerTypeEnum = pgEnum("event_owner_type", [
+  "organization",
+  "category",
+  "group",
+]);
+
+export const eventVisibilityEnum = pgEnum("event_visibility", [
+  "public",
+  "org",
+  "targeted",
+]);
+
+export const eventStatusEnum = pgEnum("event_status", [
+  "draft",
+  "published",
+  "cancelled",
+]);
+
+export const eventAudienceKindEnum = pgEnum("event_audience_kind", [
+  "group",
+  "category",
+  "member",
+  "external",
+]);
+
+export const eventRsvpAnswerEnum = pgEnum("event_rsvp_answer", [
+  "yes",
+  "no",
+  "maybe",
+]);
+
+export const eventRsvpStandingEnum = pgEnum("event_rsvp_standing", [
+  "confirmed",
+  "reserve",
+]);
+
+/** Who may create organization-wide events (owner type `organization`). */
+export const orgEventCreatorsEnum = pgEnum("org_event_creators", [
+  "org_admins",
+  "category_admins",
+  "any_admin",
 ]);
 
 // ─── Yearly membership report ───────────────────────────────────────────────
@@ -656,6 +710,17 @@ export const organizations = pgTable(
     maximumAgeEffect: maximumAgeEffectEnum("maximum_age_effect")
       .notNull()
       .default("period_end"),
+    orgEventCreators: orgEventCreatorsEnum("org_event_creators")
+      .notNull()
+      .default("org_admins"),
+    /**
+     * Days after an event ends before its guest data (external invitees,
+     * RSVP tokens, guest names and emails) is shredded by the retention cron.
+     * Headcounts survive; identities do not.
+     */
+    eventGuestRetentionDays: integer("event_guest_retention_days")
+      .notNull()
+      .default(30),
     onboardingCompletedAt: timestamp("onboarding_completed_at", {
       withTimezone: true,
     }),
@@ -663,6 +728,10 @@ export const organizations = pgTable(
   },
   (table) => [
     uniqueIndex("organizations_slug_idx").on(table.slug),
+    check(
+      "organizations_event_guest_retention_check",
+      sql`${table.eventGuestRetentionDays} > 0`,
+    ),
     check(
       "organizations_renewal_month_check",
       sql`${table.membershipRenewalMonth} IS NULL OR (${table.membershipRenewalMonth} >= 1 AND ${table.membershipRenewalMonth} <= 12)`,
@@ -1497,6 +1566,10 @@ export const emailActivities = pgTable(
     inviteId: uuid("invite_id").references(() => memberInvites.id, {
       onDelete: "set null",
     }),
+    /** Set for `event_invite` so the per-event send log and copy lists agree. */
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
     resendOfEmailActivityId: uuid("resend_of_email_activity_id"),
     actorUserId: text("actor_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -1530,6 +1603,7 @@ export const emailActivities = pgTable(
     index("email_activities_org_kind_idx").on(table.orgId, table.kind),
     index("email_activities_org_sent_idx").on(table.orgId, table.sentAt),
     index("email_activities_org_member_idx").on(table.orgId, table.memberId),
+    index("email_activities_org_event_idx").on(table.orgId, table.eventId),
   ],
 );
 
@@ -1826,6 +1900,256 @@ export const membershipReportMembers = pgTable(
   ],
 );
 
+// ─── Events ─────────────────────────────────────────────────────────────────
+
+/**
+ * An event with a built-in RSVP.
+ *
+ * Owner and audience are separate on purpose. The owner (`ownerType` plus the
+ * one matching id) decides who manages the event and where it is listed; the
+ * audience (`event_audience`) decides who is invited. A troop's camp is owned
+ * by that troop but may invite a second troop and two parents — collapsing
+ * the two into one column would force either a fake owner or a fake invitee.
+ *
+ * Dates are optional so a "save the date" can be published before the
+ * schedule is known; the CHECK only insists that an end without a start is
+ * meaningless. `capacity` is the number of confirmed seats including guests;
+ * the reserve list is whoever said yes once it was full.
+ */
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** Derived from `title` with the same helper groups use; editable. */
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    /** Sanitized Tiptap output, same editor and sanitizer as policy versions. */
+    descriptionHtml: text("description_html"),
+    ownerType: eventOwnerTypeEnum("owner_type").notNull(),
+    ownerCategoryId: uuid("owner_category_id").references(
+      () => groupCategories.id,
+      { onDelete: "cascade" },
+    ),
+    ownerGroupId: uuid("owner_group_id").references(() => groups.id, {
+      onDelete: "cascade",
+    }),
+    visibility: eventVisibilityEnum("visibility").notNull().default("targeted"),
+    status: eventStatusEnum("status").notNull().default("draft"),
+    startsAt: timestamp("starts_at", { withTimezone: true }),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    allDay: boolean("all_day").notNull().default(false),
+    /** Set by the creator ("answer a week before"). Null means open until the event is over. */
+    rsvpDeadlineAt: timestamp("rsvp_deadline_at", { withTimezone: true }),
+    /** Confirmed seats including guests. Null means unlimited. */
+    capacity: integer("capacity"),
+    maxGuestsPerResponse: integer("max_guests_per_response").notNull().default(0),
+    locationName: text("location_name"),
+    locationAddress: text("location_address"),
+    /** WhatsApp / Facebook / etc. group for the event, shown to invitees. */
+    communicationLink: text("communication_link"),
+    createdByUserId: text("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("events_org_slug_idx").on(table.orgId, table.slug),
+    index("events_org_status_starts_idx").on(
+      table.orgId,
+      table.status,
+      table.startsAt,
+    ),
+    index("events_org_owner_group_idx").on(table.orgId, table.ownerGroupId),
+    index("events_org_owner_category_idx").on(table.orgId, table.ownerCategoryId),
+    // Exactly the id matching `ownerType` is set; `organization` sets neither.
+    check(
+      "events_owner_check",
+      sql`(${table.ownerType} = 'organization' AND ${table.ownerCategoryId} IS NULL AND ${table.ownerGroupId} IS NULL) OR (${table.ownerType} = 'category' AND ${table.ownerCategoryId} IS NOT NULL AND ${table.ownerGroupId} IS NULL) OR (${table.ownerType} = 'group' AND ${table.ownerGroupId} IS NOT NULL AND ${table.ownerCategoryId} IS NULL)`,
+    ),
+    check(
+      "events_dates_check",
+      sql`${table.endsAt} IS NULL OR (${table.startsAt} IS NOT NULL AND ${table.endsAt} >= ${table.startsAt})`,
+    ),
+    check("events_capacity_check", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
+    check("events_max_guests_check", sql`${table.maxGuestsPerResponse} >= 0`),
+  ],
+);
+
+/**
+ * Audience rules for a targeted event.
+ *
+ * Rules, not rows: eligibility is computed from `group_memberships` at read
+ * time, so a member who joins the troop after the invite went out is invited
+ * and one who leaves is not — there is no snapshot to drift. Rows are only
+ * read when `visibility = 'targeted'` but are kept for the other visibilities
+ * so toggling back and forth does not lose the list. `external` rules are not
+ * members and are reached only by RSVP token.
+ */
+export const eventAudience = pgTable(
+  "event_audience",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    kind: eventAudienceKindEnum("kind").notNull(),
+    groupId: uuid("group_id").references(() => groups.id, {
+      onDelete: "cascade",
+    }),
+    categoryId: uuid("category_id").references(() => groupCategories.id, {
+      onDelete: "cascade",
+    }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    externalEmail: text("external_email"),
+    externalName: text("external_name"),
+    ...timestamps,
+  },
+  (table) => [
+    // One partial unique index per kind stands in for a single unique over
+    // `(eventId, kind, coalesce(...))`, which Postgres cannot express directly.
+    uniqueIndex("event_audience_event_group_idx")
+      .on(table.eventId, table.groupId)
+      .where(sql`kind = 'group'`),
+    uniqueIndex("event_audience_event_category_idx")
+      .on(table.eventId, table.categoryId)
+      .where(sql`kind = 'category'`),
+    uniqueIndex("event_audience_event_member_idx")
+      .on(table.eventId, table.memberId)
+      .where(sql`kind = 'member'`),
+    uniqueIndex("event_audience_event_external_idx")
+      .on(table.eventId, sql`lower(${table.externalEmail})`)
+      .where(sql`kind = 'external'`),
+    index("event_audience_org_event_idx").on(table.orgId, table.eventId),
+    index("event_audience_member_idx").on(table.memberId),
+    check(
+      "event_audience_kind_check",
+      sql`(${table.kind} = 'group' AND ${table.groupId} IS NOT NULL AND ${table.categoryId} IS NULL AND ${table.memberId} IS NULL AND ${table.externalEmail} IS NULL) OR (${table.kind} = 'category' AND ${table.categoryId} IS NOT NULL AND ${table.groupId} IS NULL AND ${table.memberId} IS NULL AND ${table.externalEmail} IS NULL) OR (${table.kind} = 'member' AND ${table.memberId} IS NOT NULL AND ${table.groupId} IS NULL AND ${table.categoryId} IS NULL AND ${table.externalEmail} IS NULL) OR (${table.kind} = 'external' AND ${table.externalEmail} IS NOT NULL AND ${table.groupId} IS NULL AND ${table.categoryId} IS NULL AND ${table.memberId} IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * One RSVP per person per event.
+ *
+ * A responder is either a member (`memberId`) or a guest (`guestEmail`), never
+ * both, so a member who also answers anonymously on the public page is two
+ * rows — the manager can see and merge that, the schema cannot. `standing` is
+ * only meaningful for `yes`; other answers are stored as `confirmed` so the
+ * seat count is a single `WHERE answer = 'yes' AND standing = 'confirmed'`.
+ * Guest identity columns are nullable so the retention cron can shred them
+ * while keeping the headcount.
+ */
+export const eventResponses = pgTable(
+  "event_responses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    guestEmail: text("guest_email"),
+    guestName: text("guest_name"),
+    answer: eventRsvpAnswerEnum("answer").notNull(),
+    /** Upper bound enforced in the action against `events.maxGuestsPerResponse`. */
+    guestCount: integer("guest_count").notNull().default(0),
+    standing: eventRsvpStandingEnum("standing").notNull().default("confirmed"),
+    /** First answer; reserve order is this ascending. Not bumped on change. */
+    respondedAt: timestamp("responded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Set on manual promotion from the reserve list. */
+    confirmedByUserId: text("confirmed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("event_responses_event_member_idx")
+      .on(table.eventId, table.memberId)
+      .where(sql`member_id IS NOT NULL`),
+    uniqueIndex("event_responses_event_guest_email_idx")
+      .on(table.eventId, sql`lower(${table.guestEmail})`)
+      .where(sql`guest_email IS NOT NULL`),
+    index("event_responses_org_event_idx").on(table.orgId, table.eventId),
+    index("event_responses_member_idx").on(table.memberId),
+    index("event_responses_event_answer_standing_idx").on(
+      table.eventId,
+      table.answer,
+      table.standing,
+    ),
+    // Guest rows keep their answer after shredding, so the "exactly one of"
+    // rule is relaxed to "at most one": a row with neither is an anonymised
+    // guest, never a member.
+    check(
+      "event_responses_responder_check",
+      sql`${table.memberId} IS NULL OR ${table.guestEmail} IS NULL`,
+    ),
+    check("event_responses_guest_count_check", sql`${table.guestCount} >= 0`),
+  ],
+);
+
+/**
+ * Login-free RSVP links for shadow members, non-activated members and
+ * external guests.
+ *
+ * There is no `expiresAt`: validity is derived from the live event (published,
+ * before the deadline, not over) with a 90-day fallback from `issuedAt` when
+ * the event has no dates. A stored expiry would silently outlive a moved
+ * deadline or cut off a postponed event. One live token per holder per event;
+ * re-issuing replaces the row.
+ */
+export const eventRsvpTokens = pgTable(
+  "event_rsvp_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => tenantMembers.id, {
+      onDelete: "cascade",
+    }),
+    externalEmail: text("external_email"),
+    /** sha256 of 32 random bytes; the raw token is shown once and never stored. */
+    tokenHash: text("token_hash").notNull(),
+    issuedAt: timestamp("issued_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("event_rsvp_tokens_hash_idx").on(table.tokenHash),
+    uniqueIndex("event_rsvp_tokens_event_member_idx")
+      .on(table.eventId, table.memberId)
+      .where(sql`member_id IS NOT NULL`),
+    uniqueIndex("event_rsvp_tokens_event_external_idx")
+      .on(table.eventId, sql`lower(${table.externalEmail})`)
+      .where(sql`external_email IS NOT NULL`),
+    index("event_rsvp_tokens_org_event_idx").on(table.orgId, table.eventId),
+    check(
+      "event_rsvp_tokens_holder_check",
+      sql`(${table.memberId} IS NOT NULL AND ${table.externalEmail} IS NULL) OR (${table.memberId} IS NULL AND ${table.externalEmail} IS NOT NULL)`,
+    ),
+  ],
+);
+
 /**
  * Fixed-window counters for public, unauthenticated endpoints.
  *
@@ -1885,6 +2209,10 @@ export const schema = {
   membershipReports,
   membershipReportGroups,
   membershipReportMembers,
+  events,
+  eventAudience,
+  eventResponses,
+  eventRsvpTokens,
   rateLimitBuckets,
 };
 
@@ -1969,3 +2297,14 @@ export type WorkspaceGroupDrift = typeof workspaceGroupDrift.$inferSelect;
 export type EmailActivity = typeof emailActivities.$inferSelect;
 export type EmailActivityEvent = typeof emailActivityEvents.$inferSelect;
 export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
+export type EventOwnerType = typeof eventOwnerTypeEnum.enumValues[number];
+export type EventVisibility = typeof eventVisibilityEnum.enumValues[number];
+export type EventStatus = typeof eventStatusEnum.enumValues[number];
+export type EventAudienceKind = typeof eventAudienceKindEnum.enumValues[number];
+export type EventRsvpAnswer = typeof eventRsvpAnswerEnum.enumValues[number];
+export type EventRsvpStanding = typeof eventRsvpStandingEnum.enumValues[number];
+export type OrgEventCreators = typeof orgEventCreatorsEnum.enumValues[number];
+export type Event = typeof events.$inferSelect;
+export type EventAudienceRule = typeof eventAudience.$inferSelect;
+export type EventResponse = typeof eventResponses.$inferSelect;
+export type EventRsvpToken = typeof eventRsvpTokens.$inferSelect;

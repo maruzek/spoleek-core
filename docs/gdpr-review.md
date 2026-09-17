@@ -183,7 +183,10 @@ statutory period. Write the decision into `docs/legal-policies.md` §11's retent
 
 ### H2 · Nothing has a retention period except soft-deleted members
 
-`MEMBER_SOFT_DELETE_RETENTION_DAYS = 30` is the only retention rule in the codebase. Growing
+`MEMBER_SOFT_DELETE_RETENTION_DAYS = 30` and `organizations.event_guest_retention_days`
+(default 30, enforced by `/api/internal/shred-event-guests`, which removes event RSVP tokens,
+external invitees and guest names/emails after an event) are the only retention rules in the
+codebase. Growing
 without limit: `email_activities`, `email_activity_events`, `member_auth_events`, `sessions`,
 `verifications`, `workspace_sync_operations` (including succeeded ones), `workspace_group_drift`.
 

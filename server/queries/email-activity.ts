@@ -81,6 +81,8 @@ export async function listOrganizationEmailActivities(
     /** Narrow to one member so the member record and the org dashboard render
      *  from identical rows instead of two divergent shapes. */
     memberId?: string;
+    /** Narrow to one event's send log. */
+    eventId?: string;
   },
 ) {
   const rows = await db
@@ -126,6 +128,7 @@ export async function listOrganizationEmailActivities(
         options?.memberId
           ? eq(emailActivities.memberId, options.memberId)
           : undefined,
+        options?.eventId ? eq(emailActivities.eventId, options.eventId) : undefined,
       ),
     )
     .orderBy(emailActivities.lastStatusAt);
@@ -262,6 +265,10 @@ export async function getOrganizationEmailActivityDetail(orgId: string, activity
 /** One member's outbound email history, in the same row shape the dashboard uses. */
 export async function listMemberEmailActivities(orgId: string, memberId: string) {
   return listOrganizationEmailActivities(orgId, { memberId });
+}
+
+export async function listEventEmailActivities(orgId: string, eventId: string) {
+  return listOrganizationEmailActivities(orgId, { eventId });
 }
 
 export type EmailActivityRow = Awaited<
