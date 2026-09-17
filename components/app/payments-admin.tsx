@@ -168,7 +168,6 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
       p.type === "event" ? "event" : "membership fee",
       p.eventTitle,
       p.periodLabel,
-      paymentStatusLabel[p.status],
       p.memberGroups.map((g) => g.name).join(" "),
       p.variableSymbol,
       formatFeeAmount(p.amount, p.currency),
@@ -365,7 +364,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         columns={columns as any}
         data={visiblePayments}
         searchText={paymentSearchText}
-        searchPlaceholder="Search member, event, status, group, VS, date…"
+        searchPlaceholder="Search member, event, group, VS, date…"
         emptyStateTitle="No payment records"
         emptyStateDescription="Generate payment records for the current renewal period or wait for the nightly cron."
         onRowClick={(payment) => setDetailPayment(payment)}
