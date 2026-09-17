@@ -103,6 +103,8 @@ export function EventWizardDialog({
   const [saving, setSaving] = useState(false);
   // Turning the price off with charged responses asks first.
   const [confirmUnpaid, setConfirmUnpaid] = useState(false);
+  // Closing with unsaved edits (Escape, X) asks first.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   // Reset when (re)opened, during render so the first frame is already fresh.
   const [wasOpen, setWasOpen] = useState(open);
@@ -116,8 +118,23 @@ export function EventWizardDialog({
       setVisited(new Set());
       setSaving(false);
       setConfirmUnpaid(false);
+      setConfirmDiscard(false);
     }
   }
+
+  // Dirty = the draft or member rules differ from what the wizard opened with.
+  const initial = useMemo(
+    () => JSON.stringify({ draft: event ?? emptyDraft(), rules: audience ?? [] }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot per open
+    [open],
+  );
+  const dirty = JSON.stringify({ draft, rules }) !== initial;
+
+  const requestClose = useCallback(() => {
+    if (saving) return;
+    if (dirty) setConfirmDiscard(true);
+    else onOpenChange(false);
+  }, [saving, dirty, onOpenChange]);
 
   const patch = useCallback((p: Partial<EventDraft>) => setDraft((d) => ({ ...d, ...p })), []);
 
@@ -223,15 +240,13 @@ export function EventWizardDialog({
     activeStep === "review" ? (isEdit ? "Save changes" : "Create draft") : activeStep === "payment" ? "Review" : "Continue";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : requestClose())}>
       <DialogContent
         className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
-        onInteractOutside={(e) => {
-          if (saving) e.preventDefault();
-          // Nested dialogs/popovers (audience picker, hover cards) must not close us.
-          if (e.target instanceof Element && e.target.closest('[data-slot="dialog-content"],[data-slot="popover-content"]'))
-            e.preventDefault();
-        }}
+        // Never close on outside clicks: the dialog resizes between steps, so a
+        // click aimed at "Continue" can land on the overlay and discard the draft.
+        // The X button and Escape still close it.
+        onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => saving && e.preventDefault()}
       >
         <DialogHeader className="shrink-0 border-b px-6 py-4">
@@ -337,6 +352,28 @@ export function EventWizardDialog({
               }}
             >
               Make it free
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isEdit ? "Your edits to this event" : "This event"} will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmDiscard(false);
+                onOpenChange(false);
+              }}
+            >
+              Discard
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

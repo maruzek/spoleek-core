@@ -2,7 +2,11 @@ import { AppPage } from "@/components/app/app-page";
 import { PaymentsAdmin } from "@/components/app/payments-admin";
 import { PaymentsFinancialHealth } from "@/components/app/payments-financial-health";
 import { requireAdminAccess } from "@/server/queries/access";
-import { getPaymentStats, listMemberIdsInGroups, listPaymentsForOrg } from "@/server/queries/payments";
+import {
+  getPaymentStats,
+  listMemberIdsInGroups,
+  listPaymentsForOrg,
+} from "@/server/queries/payments";
 import { listScopedGroupIds } from "@/server/queries/access";
 
 export default async function AdminPaymentsPage() {
@@ -15,18 +19,26 @@ export default async function AdminPaymentsPage() {
   if (isFullAdmin || !access.member) {
     payments = await listPaymentsForOrg(access.organization.id);
   } else {
-    const groupIds = await listScopedGroupIds(access.organization.id, access.member.id);
-    const memberIds = await listMemberIdsInGroups(access.organization.id, groupIds);
+    const groupIds = await listScopedGroupIds(
+      access.organization.id,
+      access.member.id,
+    );
+    const memberIds = await listMemberIdsInGroups(
+      access.organization.id,
+      groupIds,
+    );
     payments = await listPaymentsForOrg(access.organization.id, { memberIds });
   }
 
-  const stats = isFullAdmin ? await getPaymentStats(access.organization.id) : null;
+  const stats = isFullAdmin
+    ? await getPaymentStats(access.organization.id)
+    : null;
   const currency = payments.find((p) => p.currency)?.currency ?? "CZK";
 
   return (
     <AppPage
       eyebrow="Administration"
-      title="Payments."
+      title="Payments"
       description="Membership fees and event fees: who owes what, who has paid, and what is owed back."
     >
       {stats && <PaymentsFinancialHealth stats={stats} currency={currency} />}
