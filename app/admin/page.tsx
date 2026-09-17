@@ -1,84 +1,47 @@
-import Link from "next/link";
-
 import { AppPage } from "@/components/app/app-page";
+import { AdminDashboard } from "@/components/app/dashboard/admin-dashboard";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { orgFormatLocale } from "@/lib/i18n";
 import { requireAdminAccess } from "@/server/queries/access";
+import { getAdminDashboardData } from "@/server/queries/dashboard";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const { adminAccessLevel, capabilities } = await requireAdminAccess();
+  const context = await requireAdminAccess();
+  const data = await getAdminDashboardData(context);
 
-  const cards = [
-    {
-      title: "Members",
-      description:
-        adminAccessLevel === "full"
-          ? "Approve, link, and manage member records across the organization."
-          : capabilities.canManageScopedMembers
-            ? "Manage members assigned to the groups you administer in delegated categories."
-            : "Member management becomes available when one of your administered categories enables delegated member admin.",
-      href:
-        capabilities.canManageMembers || capabilities.canManageScopedMembers
-          ? "/admin/members"
-          : undefined,
-      cta:
-        capabilities.canManageMembers || capabilities.canManageScopedMembers
-          ? "Open members"
-          : "No delegated member scope yet",
-    },
-    {
-      title: "Groups",
-      description:
-        "Use the shared admin shell to manage groups, categories, and delegated management flows.",
-      href: "/admin/groups",
-      cta: "Open groups",
-    },
-    {
-      title: "Events",
-      description:
-        "Events, forms, payments, and exports will live alongside member operations in this area.",
-      href: "/admin/events",
-      cta: "Open events",
-    },
-  ];
+  const locale = orgFormatLocale(context.organization.locale);
+  const dateline = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(data.now);
+
+  const firstName =
+    context.member?.firstName?.trim() || context.viewer.name.split(" ")[0] || "";
+
+  const summary = [
+    data.attention.length === 0
+      ? "nothing needs you"
+      : `${data.attention.length} ${data.attention.length === 1 ? "thing needs" : "things need"} you`,
+    `${data.upcoming.length} coming up`,
+    `${data.activity.length} ${data.activity.length === 1 ? "update" : "updates"} this week`,
+  ].join(" · ");
 
   return (
     <AppPage
-      eyebrow="Administration"
-      title="Run your organization from one shared operations space."
-      description="Org admins and delegated group admins now share the same admin shell. Full organization control stays with org admins, while scoped leader permissions can plug into the same structure safely."
+      eyebrow={dateline}
+      title={firstName ? `${firstName}, here is where things stand.` : "Here is where things stand."}
+      description={summary}
       actions={
-        <Badge variant={adminAccessLevel === "full" ? "default" : "secondary"}>
-          {adminAccessLevel === "full" ? "Full admin access" : "Scoped admin access"}
+        <Badge variant={context.adminAccessLevel === "full" ? "default" : "secondary"}>
+          {context.adminAccessLevel === "full" ? "Full admin access" : "Scoped admin access"}
         </Badge>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-3">
-        {cards.map((card) => (
-          <Card key={card.title}>
-            <CardHeader>
-              <CardTitle>{card.title}</CardTitle>
-              <CardDescription>{card.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {card.href ? (
-                <Button asChild variant="outline">
-                  <Link href={card.href}>{card.cta}</Link>
-                </Button>
-              ) : (
-                <p className="text-sm text-muted-foreground">{card.cta}</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <AdminDashboard data={data} />
     </AppPage>
   );
 }
