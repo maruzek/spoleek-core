@@ -73,6 +73,8 @@ export function GroupCategoryForm({
   onCancel,
   submitLabel,
   cancelLabel = "Cancel",
+  id,
+  hideFooter = false,
 }: {
   category?: Partial<GroupCategoryFormValues> | null;
   isPending: boolean;
@@ -81,6 +83,9 @@ export function GroupCategoryForm({
   onCancel?: () => void;
   submitLabel?: string;
   cancelLabel?: string;
+  /** Lets a dialog place its own submit button (`<Button form={id}>`) in a sticky footer. */
+  id?: string;
+  hideFooter?: boolean;
 }) {
   const {
     organization: { membershipManagementMode: orgMembershipMode },
@@ -109,6 +114,7 @@ export function GroupCategoryForm({
 
   return (
     <form
+      id={id}
       className="flex flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
@@ -615,18 +621,20 @@ export function GroupCategoryForm({
         </div>
       </FieldGroup>
 
-      <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
-        {onCancel ? (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            {cancelLabel}
+      {hideFooter ? null : (
+        <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+          {onCancel ? (
+            <Button type="button" variant="outline" onClick={onCancel}>
+              {cancelLabel}
+            </Button>
+          ) : null}
+          <Button type="submit" disabled={isPending}>
+            {isPending
+              ? "Saving..."
+              : submitLabel ?? (category?.id ? "Save category" : "Create category")}
           </Button>
-        ) : null}
-        <Button type="submit" disabled={isPending}>
-          {isPending
-            ? "Saving..."
-            : submitLabel ?? (category?.id ? "Save category" : "Create category")}
-        </Button>
-      </div>
+        </div>
+      )}
     </form>
   );
 }

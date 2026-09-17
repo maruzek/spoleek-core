@@ -19,6 +19,7 @@ import {
   UndoIcon,
   UploadIcon,
   UserRoundCheckIcon,
+  UserRoundMinusIcon,
   UserRoundXIcon,
 } from "lucide-react";
 
@@ -80,6 +81,18 @@ import {
 } from "./member-approve-workspace-dialog";
 import { MemberSheet } from "./member-sheet";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
+
+/**
+ * Set when the table is embedded on a group's page. The columns, filters and
+ * row behaviour stay exactly those of the members dashboard; only the
+ * toolbar's create/import actions give way to the group's own, and each row
+ * gains a "remove from group" action.
+ */
+export type MemberAdminGroupContext = {
+  groupId: string;
+  onAddMembers: () => void;
+  onRemoveMember: (member: { id: string; name: string }) => void;
+};
 
 type WorkspaceModuleProp = {
   enabled: boolean;
@@ -223,6 +236,7 @@ export function MemberAdmin({
   workspaceProvisionFields = [],
   groupsById,
   orgUnitCategoryId,
+  groupContext,
 }: {
   access: MemberAdminAccess;
   members: MemberRow[];
@@ -244,6 +258,7 @@ export function MemberAdmin({
     }
   >;
   orgUnitCategoryId?: string | null;
+  groupContext?: MemberAdminGroupContext;
 }) {
   const { formatDateTime } = useFormatters();
 
@@ -911,6 +926,22 @@ export function MemberAdmin({
                     : "Send invite"}
                 </Button>
               ) : null}
+              {groupContext && member.status !== "deleted" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    groupContext.onRemoveMember({
+                      id: member.id,
+                      name: getMemberDisplayName(member),
+                    })
+                  }
+                >
+                  <UserRoundMinusIcon data-icon="inline-start" />
+                  Remove
+                </Button>
+              ) : null}
               <Button size="sm" variant="outline" asChild>
                 <Link href={`/admin/members/${member.id}`}>
                   <PencilIcon data-icon="inline-start" />
@@ -940,6 +971,7 @@ export function MemberAdmin({
     resendInviteAction,
     restoreAction,
     workspaceReady,
+    groupContext,
   ]);
 
   const initialColumnVisibility = useMemo(() => {
@@ -990,20 +1022,33 @@ export function MemberAdmin({
           </Button>
         ) : null}
         <MailingListAction
-          scope={{ kind: "members-admin" }}
+          scope={
+            groupContext
+              ? { kind: "group-members", contextId: groupContext.groupId }
+              : { kind: "members-admin" }
+          }
           table={table}
           getMemberId={(member) => member.id}
           showWorkspaceOptions={workspaceReady}
         />
-        <Button variant="outline" onClick={() => setImportOpen(true)}>
-          <UploadIcon data-icon="inline-start" />
-          Import
-        </Button>
-        <Button onClick={() => setSheetOpen(true)}>
-          <PlusIcon data-icon="inline-start" />
-          {access.level === "full" ? "New member" : "New scoped member"}
-        </Button>
-        {selectedCount > 0 ? (
+        {groupContext ? (
+          <Button onClick={groupContext.onAddMembers}>
+            <PlusIcon data-icon="inline-start" />
+            Add member
+          </Button>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <UploadIcon data-icon="inline-start" />
+              Import
+            </Button>
+            <Button onClick={() => setSheetOpen(true)}>
+              <PlusIcon data-icon="inline-start" />
+              {access.level === "full" ? "New member" : "New scoped member"}
+            </Button>
+          </>
+        )}
+        {selectedCount > 0 && !groupContext ? (
           <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
             <Button
               type="button"
@@ -1069,11 +1114,13 @@ export function MemberAdmin({
         searchKey="member"
         initialSearch={initialSearch}
         searchPlaceholder="Search members..."
-        emptyStateTitle="No members found"
+        emptyStateTitle={groupContext ? "No members in this group" : "No members found"}
         emptyStateDescription={
-          access.level === "full"
-            ? "Create members or invite them via the portal."
-            : "Create members directly into the groups you administer."
+          groupContext
+            ? "Add the first member to this group."
+            : access.level === "full"
+              ? "Create members or invite them via the portal."
+              : "Create members directly into the groups you administer."
         }
         initialColumnVisibility={initialColumnVisibility}
         initialColumnFilters={[{ id: "status", value: initialStatusFilter }]}

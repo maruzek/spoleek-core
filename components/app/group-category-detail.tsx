@@ -7,25 +7,39 @@ import { createColumnHelper } from "@tanstack/react-table";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import { PlusIcon, ShieldIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ClipboardListIcon,
+  CoinsIcon,
+  PencilIcon,
+  PinIcon,
+  PlusIcon,
+  ShieldIcon,
+  XIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import { GroupSheet } from "@/components/app/group-sheet";
+import { GroupDialog } from "@/components/app/group-dialog";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import type { GroupFormValues } from "@/lib/groups";
+import { describeCategoryMembership, describeJoinPolicy } from "@/lib/group-category-display";
+import { groupJoinPolicyOptions, type GroupFormValues } from "@/lib/groups";
+import { matchesSearch } from "@/lib/search";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, SortableHeader } from "@/components/ui/data-table";
+import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   assignCategoryAdminAction,
   removeCategoryAdminAction,
@@ -94,6 +108,14 @@ type CategoryDetailProps = {
 
 const columnHelper = createColumnHelper<CategoryDetailProps["groups"][number]>();
 
+const joinPolicyLabel = Object.fromEntries(
+  groupJoinPolicyOptions.map((option) => [option.value, option.label]),
+) as Record<CategoryDetailProps["groups"][number]["joinPolicy"], string>;
+
+function initials(member: { firstName: string; lastName: string }) {
+  return `${member.firstName.charAt(0)}${member.lastName.charAt(0)}`.toUpperCase() || "?";
+}
+
 export function GroupCategoryDetail({
   category,
   groups,
@@ -146,80 +168,86 @@ export function GroupCategoryDetail({
 
   const groupColumns = useMemo(
     () => [
-      columnHelper.display({
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value: boolean | "indeterminate") =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
-        cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value: boolean | "indeterminate") => row.toggleSelected(!!value)}
-            aria-label="Select row"
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-      }),
-      columnHelper.accessor(
-        (row) => [row.name, row.slug, row.description ?? ""].filter(Boolean).join(" "),
-        {
-          id: "group",
-          header: "Group",
-          cell: ({ row }) => (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-foreground">{row.original.name}</span>
-              <span className="text-sm text-muted-foreground">
-                {row.original.description ?? row.original.slug}
-              </span>
-            </div>
+      columnHelper.accessor((row) => row.name, {
+        id: "group",
+        meta: { label: "Group" },
+        header: ({ column }) => <SortableHeader column={column}>Group</SortableHeader>,
+        filterFn: (row, _id, value: string) =>
+          matchesSearch(
+            [row.original.name, row.original.slug, row.original.description ?? ""].join(" "),
+            value ?? "",
           ),
-        },
-      ),
+        cell: ({ row }) => (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Link
+              href={`/admin/groups/${category.id}/${row.original.id}`}
+              className="truncate font-medium text-foreground hover:underline"
+            >
+              {row.original.name}
+            </Link>
+            <span className="truncate text-xs text-muted-foreground">
+              {row.original.description ?? row.original.slug}
+            </span>
+          </div>
+        ),
+      }),
       columnHelper.accessor("joinPolicy", {
-        header: "Join policy",
-        cell: (info) => <Badge variant="secondary">{info.getValue().replaceAll("_", " ")}</Badge>,
+        meta: { label: "Join policy" },
+        header: ({ column }) => <SortableHeader column={column}>Join policy</SortableHeader>,
+        sortingFn: (a, b) =>
+          joinPolicyLabel[a.original.joinPolicy].localeCompare(joinPolicyLabel[b.original.joinPolicy]),
+        cell: (info) => <Badge variant="outline">{joinPolicyLabel[info.getValue()]}</Badge>,
       }),
       columnHelper.accessor("memberCount", {
-        header: "Members",
-        cell: (info) => info.getValue(),
+        meta: { label: "Members" },
+        header: ({ column }) => <SortableHeader column={column}>Members</SortableHeader>,
+        cell: (info) =>
+          info.getValue() > 0 ? (
+            <span className="tabular-nums">{info.getValue()}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
       }),
       columnHelper.accessor("adminCount", {
-        header: "Group admins",
-        cell: (info) => info.getValue(),
+        meta: { label: "Group admins" },
+        header: ({ column }) => <SortableHeader column={column}>Group admins</SortableHeader>,
+        cell: (info) =>
+          info.getValue() > 0 ? (
+            <span className="tabular-nums">{info.getValue()}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
       }),
       columnHelper.accessor("isActive", {
+        meta: { label: "Status" },
         header: "Status",
+        enableSorting: false,
         cell: (info) => (
-          <Badge variant={info.getValue() ? "default" : "secondary"}>
-            {info.getValue() ? "Active" : "Archived"}
-          </Badge>
+          <Status variant={info.getValue() ? "success" : "default"}>
+            <StatusIndicator />
+            <StatusLabel>{info.getValue() ? "Active" : "Archived"}</StatusLabel>
+          </Status>
         ),
       }),
       columnHelper.display({
         id: "actions",
         header: "",
+        enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-1">
             <Button
               type="button"
-              size="sm"
-              variant="outline"
+              size="icon-sm"
+              variant="ghost"
+              aria-label={`Edit ${row.original.name}`}
               onClick={() => setGroupSheetState({ open: true, group: row.original })}
             >
-              Edit
+              <PencilIcon />
             </Button>
-            <Button asChild size="sm" variant="ghost">
-              <Link href={`/admin/groups/${category.id}/${row.original.id}`}>Open</Link>
+            <Button asChild size="icon-sm" variant="ghost" aria-label={`Open ${row.original.name}`}>
+              <Link href={`/admin/groups/${category.id}/${row.original.id}`}>
+                <ArrowRightIcon />
+              </Link>
             </Button>
           </div>
         ),
@@ -234,60 +262,107 @@ export function GroupCategoryDetail({
       !categoryAdmins.some((admin) => admin.memberId === member.id),
   );
 
+  const surfaces = [
+    category.showInRegistration && {
+      key: "registration",
+      icon: ClipboardListIcon,
+      label: "Registration",
+      hint: "Asked at sign-up",
+    },
+    category.isPinnedToNavigation && {
+      key: "pinned",
+      icon: PinIcon,
+      label: "Pinned",
+      hint: "Listed under Groups in the sidebar",
+    },
+    category.managesMembershipFees && {
+      key: "fees",
+      icon: CoinsIcon,
+      label: "Fees",
+      hint: "Membership fees are collected per group in this category",
+    },
+  ].filter((surface): surface is Exclude<typeof surface, false> => Boolean(surface));
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader>
-            <CardTitle>{category.name}</CardTitle>
+            <CardTitle>About this category</CardTitle>
             <CardDescription>
-              {category.description ?? "This category controls a slice of the organization structure."}
+              {category.description ?? `Members are sorted into ${category.name} through its groups.`}
             </CardDescription>
+            <CardAction>
+              <Status variant={category.isActive ? "success" : "default"}>
+                <StatusIndicator />
+                <StatusLabel>{category.isActive ? "Active" : "Archived"}</StatusLabel>
+              </Status>
+            </CardAction>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Badge variant={category.isActive ? "default" : "secondary"}>
-              {category.isActive ? "Active" : "Archived"}
-            </Badge>
-            <Badge variant="secondary">{category.selectionMode}</Badge>
-            {category.selectionRequired ? <Badge variant="outline">Required</Badge> : null}
-            {category.maxSelections ? (
-              <Badge variant="outline">Max {category.maxSelections}</Badge>
-            ) : null}
-            {category.showInRegistration ? <Badge variant="outline">Registration</Badge> : null}
-            {category.isPinnedToNavigation ? <Badge variant="outline">Pinned</Badge> : null}
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-sm">
+              {describeCategoryMembership(category)}{" "}
+              <span className="text-muted-foreground">
+                {describeJoinPolicy(category.defaultJoinPolicy)}
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {surfaces.map(({ key, icon: Icon, label, hint }) => (
+                <Tooltip key={key}>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="cursor-default text-muted-foreground">
+                      <Icon data-icon="inline-start" aria-hidden />
+                      {label}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{hint}</TooltipContent>
+                </Tooltip>
+              ))}
+              <span className="ml-auto self-center font-mono text-xs text-muted-foreground">
+                {category.slug}
+              </span>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>Category admins</CardTitle>
-            <CardDescription>
-              These members can manage every group inside this category.
-            </CardDescription>
+            <CardDescription>Can manage every group inside this category.</CardDescription>
+            {canManageCategoryAdmins ? (
+              <CardAction>
+                <Button size="sm" variant="outline" onClick={() => setAdminSheetOpen(true)}>
+                  <ShieldIcon data-icon="inline-start" />
+                  Add
+                </Button>
+              </CardAction>
+            ) : null}
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-1">
             {categoryAdmins.length > 0 ? (
               categoryAdmins.map((admin) => (
                 <div
                   key={admin.assignmentId}
-                  className="flex items-start justify-between gap-3 rounded-lg border p-3"
+                  className="group/admin -mx-2 flex items-center gap-3 rounded-lg px-2 py-1.5"
                 >
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-foreground">
+                  <Avatar size="sm">
+                    <AvatarFallback>{initials(admin)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium text-foreground">
                       {getMemberDisplayName(admin)}
                     </span>
-                    <span className="text-sm text-muted-foreground">
-                      {admin.email ?? "No email"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Assigned {formatDateTime(admin.assignedAt)}
+                    <span className="truncate text-xs text-muted-foreground">
+                      {admin.email ?? "No email"} · since {formatDateTime(admin.assignedAt)}
                     </span>
                   </div>
                   {canManageCategoryAdmins ? (
                     <Button
                       type="button"
-                      size="sm"
+                      size="icon-sm"
                       variant="ghost"
+                      aria-label={`Remove ${getMemberDisplayName(admin)}`}
+                      className="text-muted-foreground"
                       onClick={() =>
                         removeCategoryAdmin.execute({
                           categoryId: category.id,
@@ -296,14 +371,14 @@ export function GroupCategoryDetail({
                       }
                       disabled={removeCategoryAdmin.isPending}
                     >
-                      Remove
+                      <XIcon />
                     </Button>
                   ) : null}
                 </div>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">
-                No category admins assigned yet.
+                No category admins yet — every group here is managed by organisation admins.
               </p>
             )}
           </CardContent>
@@ -322,31 +397,18 @@ export function GroupCategoryDetail({
             ? "Create the first active group inside this category."
             : "No groups you can manage are assigned in this category."
         }
-        toolbarActions={() => {
-          if (!canManageCategoryAdmins && !canCreateGroups) {
-            return null;
-          }
-
-          return (
-            <div className="flex items-center gap-2">
-              {canManageCategoryAdmins ? (
-                <Button variant="outline" onClick={() => setAdminSheetOpen(true)}>
-                  <ShieldIcon data-icon="inline-start" />
-                  Add category admin
-                </Button>
-              ) : null}
-              {canCreateGroups ? (
-                <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
-                  <PlusIcon data-icon="inline-start" />
-                  New group
-                </Button>
-              ) : null}
-            </div>
-          );
-        }}
+        onRowClick={(row) => router.push(`/admin/groups/${category.id}/${row.id}`)}
+        toolbarActions={() =>
+          canCreateGroups ? (
+            <Button onClick={() => setGroupSheetState({ open: true, group: null })}>
+              <PlusIcon data-icon="inline-start" />
+              New group
+            </Button>
+          ) : null
+        }
       />
 
-      <GroupSheet
+      <GroupDialog
         open={groupSheetState.open}
         categoryId={category.id}
         group={groupSheetState.group}

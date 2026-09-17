@@ -853,14 +853,28 @@ export async function getWorkspaceModuleState(
 
 export async function getMembersAdminPageData(
   editMemberId: string | null,
-  options?: { includeDeleted?: boolean },
+  options?: {
+    includeDeleted?: boolean;
+    /**
+     * Narrow the roster to one group, so a group's page can render the very
+     * same members table as the dashboard. The caller has already authorised
+     * the viewer for that group; the scope still wins when it is narrower.
+     */
+    groupId?: string;
+  },
 ) {
   const scope = await resolveMemberManagementScope();
+  const visibleGroupIds =
+    options?.groupId == null
+      ? scope.managedGroupIds
+      : scope.managedGroupIds == null || scope.managedGroupIds.includes(options.groupId)
+        ? [options.groupId]
+        : [];
 
   const [members, customFields, memberCategories, manageableGroupCategories, selectedMember, workspace] =
     await Promise.all([
       listTenantMembers(scope.organizationId, {
-        visibleGroupIds: scope.managedGroupIds,
+        visibleGroupIds,
         includeDeleted: options?.includeDeleted,
       }),
       listMemberCustomFields(scope.organizationId),

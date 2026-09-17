@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { GroupCategorySheet } from "@/components/app/group-category-sheet";
+import { GroupCategoryDialog } from "@/components/app/group-category-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
@@ -296,7 +296,7 @@ export function GroupCategoriesAdmin({
         )}
       />
 
-      <GroupCategorySheet
+      <GroupCategoryDialog
         key={sheetState.category?.id ?? "new-category"}
         open={sheetState.open}
         category={sheetState.category}

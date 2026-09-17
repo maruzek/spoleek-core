@@ -4,6 +4,9 @@ import { AppPage } from "@/components/app/app-page";
 import { GroupDetail } from "@/components/app/group-detail";
 import { requireGroupManagementAccess } from "@/server/queries/access";
 import { getGroupDetailData } from "@/server/queries/groups";
+import { getMembersAdminPageData } from "@/server/queries/members";
+import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
+import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 import { listWorkspaceGroupDrift } from "@/server/queries/workspace-group-drift";
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
 import { getAppOrganization } from "@/server/queries/app";
@@ -23,8 +26,10 @@ export default async function AdminGroupPage({
     requireGroupManagementAccess(groupId),
     getAppOrganization(),
   ]);
-  const [detail, workspaceLinks, workspaceDrift, reportView] = await Promise.all([
+  const [detail, membersTable, workspaceLinks, workspaceDrift, reportView] = await Promise.all([
     getGroupDetailData(access.organization.id, groupId),
+    // The Members tab is the dashboard's table narrowed to this group.
+    getMembersAdminPageData(null, { groupId }),
     listGroupWorkspaceLinks(access.organization.id, { groupId }),
     listWorkspaceGroupDrift(access.organization.id, {
       groupId,
@@ -41,15 +46,43 @@ export default async function AdminGroupPage({
     notFound();
   }
 
+  const enabledProvisionFields = (membersTable.workspace.provisionFields ?? [])
+    .filter((f) => f.enabled)
+    .flatMap((f) => {
+      const def = WORKSPACE_FIELD_MAP.get(f.fieldKey);
+      if (!def) return [];
+      const field: EnabledProvisionField = {
+        fieldKey: f.fieldKey,
+        enabled: f.enabled,
+        required: f.required,
+        source: f.source,
+        label: def.label,
+        type: def.type,
+        placeholder: def.placeholder,
+        description: def.description,
+      };
+      return [field];
+    });
+
   return (
     <AppPage
-      eyebrow="Groups"
+      eyebrow={detail.group.categoryName}
       title={detail.group.name}
-      description="Manage the member roster, delegated admins, and settings for this group."
+      description={detail.group.description ?? undefined}
     >
       <GroupDetail
         group={detail.group}
         members={detail.members}
+        membersTable={{
+          access: membersTable.access,
+          members: membersTable.members,
+          customFields: membersTable.customFields,
+          memberCategories: membersTable.memberCategories,
+          manageableGroupCategories: membersTable.manageableGroupCategories,
+          workspace: membersTable.workspace,
+          workspaceProvisionFields: enabledProvisionFields,
+          orgUnitCategoryId: membersTable.workspace.orgUnitCategoryId,
+        }}
         admins={detail.admins}
         assignableMembers={detail.assignableMembers}
         workspaceLinks={workspaceLinks}

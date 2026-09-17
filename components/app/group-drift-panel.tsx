@@ -21,6 +21,7 @@ import {
   describeDriftMemberType,
 } from "@/lib/workspace-group-drift";
 import { Badge } from "@/components/ui/badge";
+import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
@@ -199,17 +200,26 @@ export function GroupDriftPanel({
         header: "Status",
         cell: ({ row }) =>
           row.original.status === "ignored" ? (
-            <Badge variant="outline">Ignored</Badge>
+            <Status>
+              <StatusIndicator />
+              <StatusLabel>Ignored</StatusLabel>
+            </Status>
           ) : row.original.matchedMemberId ? (
-            <Badge variant="secondary">Known member</Badge>
+            <Status variant="info">
+              <StatusIndicator />
+              <StatusLabel>Known member</StatusLabel>
+            </Status>
           ) : (
-            <Badge variant="secondary">Unknown</Badge>
+            <Status variant="warning">
+              <StatusIndicator />
+              <StatusLabel>Unknown</StatusLabel>
+            </Status>
           ),
       }),
       columnHelper.accessor("role", {
         header: "Google role",
         cell: (info) => (
-          <Badge variant={info.getValue() === "member" ? "secondary" : "default"}>
+          <Badge variant="outline" className="capitalize">
             {info.getValue()}
           </Badge>
         ),

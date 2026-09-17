@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { useFormatters } from "@/components/locale-provider";
 
 import { createColumnHelper } from "@tanstack/react-table";
@@ -12,6 +12,7 @@ import {
   PlusIcon,
   Settings2Icon,
   ShieldIcon,
+  ShieldOffIcon,
   UsersIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -23,9 +24,12 @@ import type { GroupReportTabView } from "@/server/queries/membership-reports";
 import { GroupReportCard } from "@/components/app/group-report-card";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
 import { MailingListAction } from "@/components/app/mailing-list-action";
+import { MemberAdmin } from "@/components/app/member-admin";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
+import { getMemberStatusVariant } from "@/lib/member-status-display";
 import type { GroupFormValues } from "@/lib/groups";
+import type { MembershipStatus } from "@/server/db/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,8 +49,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DataTable } from "@/components/ui/data-table";
+import { DataTable, SortableHeader } from "@/components/ui/data-table";
+import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   assignGroupAdminAction,
@@ -122,6 +126,18 @@ type GroupDetailProps = {
     linkedUserName: string | null;
     createdAt: Date;
   }>;
+  /** Everything the members dashboard needs, already narrowed to this group. */
+  membersTable: Pick<
+    ComponentProps<typeof MemberAdmin>,
+    | "access"
+    | "members"
+    | "customFields"
+    | "memberCategories"
+    | "manageableGroupCategories"
+    | "workspace"
+    | "workspaceProvisionFields"
+    | "orgUnitCategoryId"
+  >;
   workspaceLinks: GroupWorkspaceLinkRow[];
   workspaceDrift: WorkspaceDriftRow[];
   workspaceDomain: string | null;
@@ -153,6 +169,7 @@ export function GroupDetail({
   members,
   admins,
   assignableMembers,
+  membersTable,
   workspaceLinks,
   workspaceDrift,
   workspaceDomain,
@@ -217,120 +234,52 @@ export function GroupDetail({
     },
   });
 
-  const memberColumns = useMemo(
+  const adminColumns = useMemo(
     () => [
-      memberColumnHelper.display({
-        id: "select",
-        header: ({ table }) => (
-          <Checkbox
-            checked={
-              table.getIsAllPageRowsSelected() ||
-              (table.getIsSomePageRowsSelected() && "indeterminate")
-            }
-            onCheckedChange={(value: boolean | "indeterminate") =>
-              table.toggleAllPageRowsSelected(!!value)
-            }
-            aria-label="Select all"
-          />
-        ),
+      memberColumnHelper.accessor((row) => getMemberDisplayName(row), {
+        id: "member",
+        meta: { label: "Member" },
+        header: ({ column }) => <SortableHeader column={column}>Member</SortableHeader>,
+        filterFn: (row, _id, value: string) =>
+          [row.original.firstName, row.original.lastName, row.original.email ?? ""]
+            .join(" ")
+            .toLowerCase()
+            .includes((value ?? "").trim().toLowerCase()),
         cell: ({ row }) => (
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(value: boolean | "indeterminate") =>
-              row.toggleSelected(!!value)
-            }
-            aria-label="Select row"
-          />
-        ),
-        enableSorting: false,
-        enableHiding: false,
-      }),
-      memberColumnHelper.accessor(
-        (row) =>
-          [row.firstName, row.lastName, row.email ?? ""]
-            .filter(Boolean)
-            .join(" "),
-        {
-          id: "member",
-          header: "Member",
-          cell: ({ row }) => (
-            <div className="flex flex-col gap-1">
-              <span className="font-medium text-foreground">
-                {getMemberDisplayName(row.original)}
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {row.original.email ?? "No email"}
-              </span>
-            </div>
-          ),
-        },
-      ),
-      memberColumnHelper.accessor("status", {
-        header: "Status",
-        cell: (info) => <Badge variant="secondary">{info.getValue()}</Badge>,
-      }),
-      memberColumnHelper.accessor("groupRole", {
-        header: "Role",
-        cell: (info) => (
-          <Badge
-            variant={
-              info.getValue() === "group_admin" ? "default" : "secondary"
-            }
-          >
-            {info.getValue().replaceAll("_", " ")}
-          </Badge>
-        ),
-      }),
-      memberColumnHelper.accessor("assignedAt", {
-        header: "Assigned",
-        cell: (info) => (
-          <span className="text-muted-foreground">
-            {formatDateTime(info.getValue())}
-          </span>
-        ),
-      }),
-      memberColumnHelper.display({
-        id: "actions",
-        header: "",
-        cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                setRemovalState({
-                  kind: "member",
-                  memberId: row.original.memberId,
-                  label: getMemberDisplayName(row.original),
-                })
-              }
-            >
-              Remove
-            </Button>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium text-foreground">
+              {getMemberDisplayName(row.original)}
+            </span>
+            <span className="truncate text-xs text-muted-foreground">
+              {row.original.email ?? "No email"}
+            </span>
           </div>
         ),
       }),
-    ],
-    [formatDateTime],
-  );
-
-  const adminColumns = useMemo(
-    () => [
-      ...memberColumns.slice(0, 4),
-      memberColumnHelper.accessor("assignedAt", {
-        header: "Promoted",
+      memberColumnHelper.accessor("status", {
+        meta: { label: "Status" },
+        header: "Status",
+        enableSorting: false,
         cell: (info) => (
-          <span className="text-muted-foreground">
-            {formatDateTime(info.getValue())}
-          </span>
+          <Status variant={getMemberStatusVariant(info.getValue() as MembershipStatus)}>
+            <StatusIndicator />
+            <StatusLabel className="capitalize">{info.getValue()}</StatusLabel>
+          </Status>
+        ),
+      }),
+      memberColumnHelper.accessor("assignedAt", {
+        meta: { label: "Promoted" },
+        header: ({ column }) => <SortableHeader column={column}>Promoted</SortableHeader>,
+        cell: (info) => (
+          <span className="text-sm text-muted-foreground">{formatDateTime(info.getValue())}</span>
         ),
       }),
       memberColumnHelper.display({
         id: "adminActions",
         header: "",
+        enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end">
             <Button
               type="button"
               size="sm"
@@ -343,13 +292,14 @@ export function GroupDetail({
                 })
               }
             >
+              <ShieldOffIcon data-icon="inline-start" />
               Demote
             </Button>
           </div>
         ),
       }),
     ],
-    [formatDateTime, memberColumns],
+    [formatDateTime],
   );
 
   const availableMembers = assignableMembers.filter(
@@ -365,24 +315,6 @@ export function GroupDetail({
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>{group.name}</CardTitle>
-          <CardDescription>
-            {group.description ?? `Group inside ${group.categoryName}.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Badge variant={group.isActive ? "default" : "secondary"}>
-            {group.isActive ? "Active" : "Archived"}
-          </Badge>
-          <Badge variant="secondary">
-            {group.joinPolicy.replaceAll("_", " ")}
-          </Badge>
-          <Badge variant="outline">{group.categoryName}</Badge>
-        </CardContent>
-      </Card>
-
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">
@@ -439,27 +371,14 @@ export function GroupDetail({
         ) : null}
 
         <TabsContent value="members" className="flex flex-col gap-4 pt-4">
-          <DataTable
-            data={members}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            columns={memberColumns as any}
-            searchKey="member"
-            searchPlaceholder="Search members..."
-            emptyStateTitle="No members assigned"
-            emptyStateDescription="Add the first member to this group."
-            toolbarActions={(table) => (
-              <div className="flex items-center gap-2">
-                <MailingListAction
-                  scope={{ kind: "group-members", contextId: group.id }}
-                  table={table}
-                  getMemberId={(member) => member.memberId}
-                />
-                <Button onClick={() => setMemberSheetOpen(true)}>
-                  <PlusIcon data-icon="inline-start" />
-                  Add member
-                </Button>
-              </div>
-            )}
+          <MemberAdmin
+            {...membersTable}
+            groupContext={{
+              groupId: group.id,
+              onAddMembers: () => setMemberSheetOpen(true),
+              onRemoveMember: ({ id, name }) =>
+                setRemovalState({ kind: "member", memberId: id, label: name }),
+            }}
           />
         </TabsContent>
 
@@ -470,6 +389,7 @@ export function GroupDetail({
             columns={adminColumns as any}
             searchKey="member"
             searchPlaceholder="Search group admins..."
+            onRowClick={(admin) => router.push(`/admin/members/${admin.memberId}`)}
             emptyStateTitle="No group admins assigned"
             emptyStateDescription="Promote trusted members to group admins here."
             toolbarActions={(table) => (
@@ -499,25 +419,16 @@ export function GroupDetail({
         ) : null}
 
         <TabsContent value="settings" className="flex flex-col gap-6 pt-4">
-          <Card className="overflow-hidden max-w-2xl mx-auto w-full">
+          {/* The one centred surface in the app: a long form reads better as a
+              column than stretched across the full width. */}
+          <Card className="mx-auto w-full max-w-2xl overflow-hidden">
             <CardHeader>
               <CardTitle>Group settings</CardTitle>
               <CardDescription>
-                Edit metadata, join policy, and archive state for this group.
+                Last saved {formatDateTime(group.updatedAt)}.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={group.isActive ? "default" : "secondary"}>
-                  {group.isActive ? "Active" : "Archived"}
-                </Badge>
-                <Badge variant="secondary">
-                  {group.joinPolicy.replaceAll("_", " ")}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  Last updated {formatDateTime(group.updatedAt)}
-                </span>
-              </div>
+            <CardContent>
               <GroupForm
                 key={`${group.id}-${group.updatedAt.toISOString()}`}
                 categoryId={group.categoryId}
@@ -544,7 +455,7 @@ export function GroupDetail({
             </CardContent>
           </Card>
 
-          <div className="max-w-2xl mx-auto w-full">
+          <div className="mx-auto w-full max-w-2xl">
             <GroupWorkspaceLinksCard
               groupId={group.id}
               links={workspaceLinks}

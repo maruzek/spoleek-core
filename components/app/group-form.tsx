@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
-import { Loader2Icon } from "lucide-react";
+import { FolderTreeIcon, Loader2Icon } from "lucide-react";
 
 import {
   groupJoinPolicyOptions,
@@ -25,6 +25,7 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
+import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -115,6 +116,8 @@ export function GroupForm({
   onCancel,
   submitLabel,
   cancelLabel = "Cancel",
+  id,
+  hideFooter = false,
 }: {
   categoryId: string;
   group?: Partial<GroupFormValues> | null;
@@ -131,6 +134,9 @@ export function GroupForm({
   onCancel?: () => void;
   submitLabel?: string;
   cancelLabel?: string;
+  /** Lets a dialog place its own submit button (`<Button form={id}>`) in a sticky footer. */
+  id?: string;
+  hideFooter?: boolean;
 }) {
   const {
     organization: { fees: orgFeeDefaults },
@@ -161,19 +167,20 @@ export function GroupForm({
       : [];
 
   // ── Workspace: org units ──
-  const getOrgUnitsAction = useAction(getWorkspaceOrgUnitsAction);
-  const [orgUnits, setOrgUnits] = useState<WorkspaceOrgUnit[]>([]);
-  const orgUnitsFetchedRef = useRef(false);
-
-  const ensureOrgUnitsFetched = useCallback(async () => {
-    if (orgUnitsFetchedRef.current) return;
-    orgUnitsFetchedRef.current = true;
-    const result = await getOrgUnitsAction.executeAsync({});
-    setOrgUnits(result?.data ?? []);
-  }, [getOrgUnitsAction]);
+  // Fetched as soon as the field is on screen rather than on first open, so
+  // the menu never pops up half-empty and then jumps when the paths arrive.
+  const showOrgUnitField = Boolean(workspaceConnected && isWorkspaceOrgUnitCategory);
+  const { execute: fetchOrgUnits, result: orgUnitsResult, status: orgUnitsStatus } =
+    useAction(getWorkspaceOrgUnitsAction);
+  useEffect(() => {
+    if (showOrgUnitField) fetchOrgUnits({});
+  }, [showOrgUnitField, fetchOrgUnits]);
+  const orgUnits: WorkspaceOrgUnit[] = orgUnitsResult.data ?? [];
+  const orgUnitsLoading = orgUnitsStatus === "idle" || orgUnitsStatus === "executing";
 
   return (
     <form
+      id={id}
       className="flex flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault();
@@ -235,7 +242,10 @@ export function GroupForm({
                     getFieldError("slug").length > 0)
                 }
               >
-                <FieldLabel htmlFor="group-slug">Slug *</FieldLabel>
+                <FieldLabel htmlFor="group-slug">
+                  Slug *
+                  <FieldHint>Used in URLs. Group slugs are unique across the organization.</FieldHint>
+                </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-slug"
@@ -251,9 +261,6 @@ export function GroupForm({
                         getFieldError("slug").length > 0)
                     }
                   />
-                  <FieldDescription>
-                    Group URLs are unique across the organization.
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -293,10 +300,10 @@ export function GroupForm({
         <form.Field name="joinPolicy">
           {(formField) => (
             <FieldSet>
-              <FieldLegend>Join policy</FieldLegend>
-              <FieldDescription>
-                Choose how members can enter or leave this group.
-              </FieldDescription>
+              <FieldLegend className="flex items-center gap-2">
+                Join policy
+                <FieldHint>How members enter or leave this group.</FieldHint>
+              </FieldLegend>
               <RadioGroup
                 value={formField.state.value}
                 onValueChange={(value) =>
@@ -330,7 +337,10 @@ export function GroupForm({
           <form.Field name="sortOrder">
             {(formField) => (
               <Field>
-                <FieldLabel htmlFor="group-sort-order">Sort order</FieldLabel>
+                <FieldLabel htmlFor="group-sort-order">
+                  Sort order
+                  <FieldHint>Lower numbers come first wherever this category&apos;s groups are listed.</FieldHint>
+                </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-sort-order"
@@ -361,12 +371,18 @@ export function GroupForm({
         </div>
       </FieldGroup>
       <FieldSet>
-        <FieldLegend>Notifications</FieldLegend>
-        <FieldDescription>
-          {categoryNotifiesOnRegistration
-            ? "This group's admins are emailed when an applicant picks this group on the join form."
-            : "This category does not notify anyone about new applications yet — turn that on in the category settings to use what follows."}
-        </FieldDescription>
+        <FieldLegend className="flex items-center gap-2">
+          Notifications
+          <FieldHint>
+            This group&apos;s admins are emailed when an applicant picks this group on the join form.
+          </FieldHint>
+        </FieldLegend>
+        {categoryNotifiesOnRegistration ? null : (
+          <FieldDescription>
+            This category does not notify anyone about new applications yet — turn that on in the
+            category settings to use what follows.
+          </FieldDescription>
+        )}
 
         <div className="flex flex-col gap-5">
           {linkedWorkspaceGroupEmail ? (
@@ -388,6 +404,7 @@ export function GroupForm({
               <Field data-invalid={getFieldError("notificationEmail").length > 0}>
                 <FieldLabel htmlFor="group-notification-email">
                   Extra address
+                  <FieldHint>Optional. Always emailed alongside whoever is resolved above.</FieldHint>
                 </FieldLabel>
                 <FieldContent>
                   <Input
@@ -405,9 +422,6 @@ export function GroupForm({
                     }
                     aria-invalid={getFieldError("notificationEmail").length > 0}
                   />
-                  <FieldDescription>
-                    Optional. Always emailed alongside whoever is resolved above.
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -477,12 +491,13 @@ export function GroupForm({
 
       {workspaceConnected && isWorkspaceOrgUnitCategory ? (
         <FieldSet>
-          <FieldLegend>Workspace integration</FieldLegend>
-          <FieldDescription>
-            Members of this group are moved into the org unit below when they
-            are assigned. Google group membership is managed separately, under
-            Linked Google groups.
-          </FieldDescription>
+          <FieldLegend className="flex items-center gap-2">
+            Workspace integration
+            <FieldHint>
+              Members of this group are moved into the org unit below when they are assigned.
+              Google group membership is managed separately, under Linked Google groups.
+            </FieldHint>
+          </FieldLegend>
 
           {isWorkspaceOrgUnitCategory ? (
             <form.Field name="workspaceOrgUnitPath">
@@ -497,28 +512,37 @@ export function GroupForm({
                       onValueChange={(v) =>
                         formField.handleChange(v === "__none__" ? null : v)
                       }
-                      onOpenChange={(open) => {
-                        if (open) void ensureOrgUnitsFetched();
-                      }}
                       disabled={!canManageWorkspaceIntegration}
                     >
-                      <SelectTrigger id="group-workspace-ou">
-                        {getOrgUnitsAction.isPending ? (
-                          <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
-                        ) : (
-                          <SelectValue placeholder="Select org unit…" />
-                        )}
+                      <SelectTrigger id="group-workspace-ou" className="w-full">
+                        {/* The value is rendered by hand: Radix only knows the
+                            label of an item that exists, and the saved path is
+                            valid before the list has arrived. */}
+                        <SelectValue placeholder="Select org unit…">
+                          <FolderTreeIcon className="text-muted-foreground" aria-hidden />
+                          <span className={formField.state.value ? "font-mono" : "text-muted-foreground"}>
+                            {formField.state.value ?? "None"}
+                          </span>
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">None</SelectItem>
-                        {orgUnits.map((ou) => (
-                          <SelectItem
-                            key={ou.orgUnitPath}
-                            value={ou.orgUnitPath}
-                          >
-                            {ou.orgUnitPath}
-                          </SelectItem>
-                        ))}
+                        {orgUnitsLoading ? (
+                          <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
+                            <Loader2Icon className="size-4 animate-spin" aria-hidden />
+                            Loading org units…
+                          </div>
+                        ) : orgUnits.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No org units found in Workspace.
+                          </div>
+                        ) : (
+                          orgUnits.map((ou) => (
+                            <SelectItem key={ou.orgUnitPath} value={ou.orgUnitPath} className="font-mono">
+                              {ou.orgUnitPath}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     {formField.state.value ? (
@@ -540,11 +564,13 @@ export function GroupForm({
 
       {categoryManagesFees ? (
         <FieldSet>
-          <FieldLegend>Membership fee overrides</FieldLegend>
-          <FieldDescription>
-            Leave fields empty to use the organization defaults. Fill in only
-            the values this group should override.
-          </FieldDescription>
+          <FieldLegend className="flex items-center gap-2">
+            Membership fee overrides
+            <FieldHint>
+              Leave a field empty to use the organization default. Fill in only the values this
+              group should override.
+            </FieldHint>
+          </FieldLegend>
 
           <div className="grid gap-5 md:grid-cols-2">
             <form.Field name="feeRenewalMonth">
@@ -559,6 +585,12 @@ export function GroupForm({
                 >
                   <FieldLabel htmlFor="group-fee-renewal-month">
                     Renewal month
+                    <FieldHint>{formatOrgDefault(
+                        orgFeeDefaults?.renewalMonth != null
+                          ? (MONTH_NAMES[orgFeeDefaults.renewalMonth - 1] ?? "")
+                          : "",
+                        orgFeeDefaults?.renewalMonth,
+                      )}</FieldHint>
                   </FieldLabel>
                   <FieldContent>
                     <Select
@@ -582,14 +614,6 @@ export function GroupForm({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FieldDescription>
-                      {formatOrgDefault(
-                        orgFeeDefaults?.renewalMonth != null
-                          ? (MONTH_NAMES[orgFeeDefaults.renewalMonth - 1] ?? "")
-                          : "",
-                        orgFeeDefaults?.renewalMonth,
-                      )}
-                    </FieldDescription>
                     <FieldError
                       errors={[
                         ...getClientFieldErrors(
@@ -617,6 +641,12 @@ export function GroupForm({
                 >
                   <FieldLabel htmlFor="group-fee-renewal-day">
                     Renewal day
+                    <FieldHint>{formatOrgDefault(
+                        orgFeeDefaults?.renewalDay != null
+                          ? String(orgFeeDefaults.renewalDay)
+                          : "",
+                        orgFeeDefaults?.renewalDay,
+                      )}</FieldHint>
                   </FieldLabel>
                   <FieldContent>
                     <Input
@@ -637,14 +667,6 @@ export function GroupForm({
                           : ""
                       }
                     />
-                    <FieldDescription>
-                      {formatOrgDefault(
-                        orgFeeDefaults?.renewalDay != null
-                          ? String(orgFeeDefaults.renewalDay)
-                          : "",
-                        orgFeeDefaults?.renewalDay,
-                      )}
-                    </FieldDescription>
                     <FieldError
                       errors={[
                         ...getClientFieldErrors(
@@ -671,7 +693,15 @@ export function GroupForm({
                     getFieldError("feeAmount").length > 0)
                 }
               >
-                <FieldLabel htmlFor="group-fee-amount">Fee amount</FieldLabel>
+                <FieldLabel htmlFor="group-fee-amount">
+                    Fee amount
+                    <FieldHint>{formatOrgDefault(
+                      orgFeeDefaults?.feeAmount != null
+                        ? `${feeToMajorUnits(orgFeeDefaults.feeAmount)} ${orgFeeDefaults.feeCurrency}`
+                        : "",
+                      orgFeeDefaults?.feeAmount,
+                    )}</FieldHint>
+                  </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-fee-amount"
@@ -690,14 +720,6 @@ export function GroupForm({
                         : ""
                     }
                   />
-                  <FieldDescription>
-                    {formatOrgDefault(
-                      orgFeeDefaults?.feeAmount != null
-                        ? `${feeToMajorUnits(orgFeeDefaults.feeAmount)} ${orgFeeDefaults.feeCurrency}`
-                        : "",
-                      orgFeeDefaults?.feeAmount,
-                    )}
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(
@@ -724,8 +746,14 @@ export function GroupForm({
                 }
               >
                 <FieldLabel htmlFor="group-fee-payment-window">
-                  Payment window (days)
-                </FieldLabel>
+                    Payment window (days)
+                    <FieldHint>{formatOrgDefault(
+                      orgFeeDefaults?.paymentWindowDays != null
+                        ? `${orgFeeDefaults.paymentWindowDays} days`
+                        : "",
+                      orgFeeDefaults?.paymentWindowDays,
+                    )}</FieldHint>
+                  </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-fee-payment-window"
@@ -745,14 +773,6 @@ export function GroupForm({
                         : ""
                     }
                   />
-                  <FieldDescription>
-                    {formatOrgDefault(
-                      orgFeeDefaults?.paymentWindowDays != null
-                        ? `${orgFeeDefaults.paymentWindowDays} days`
-                        : "",
-                      orgFeeDefaults?.paymentWindowDays,
-                    )}
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -779,8 +799,12 @@ export function GroupForm({
                 }
               >
                 <FieldLabel htmlFor="group-fee-bank-account">
-                  Bank account (IBAN)
-                </FieldLabel>
+                    Bank account (IBAN)
+                    <FieldHint>{formatOrgDefault(
+                      orgFeeDefaults?.feeBankAccount ?? "",
+                      orgFeeDefaults?.feeBankAccount,
+                    )}</FieldHint>
+                  </FieldLabel>
                 <FieldContent>
                   <Input
                     id="group-fee-bank-account"
@@ -798,12 +822,6 @@ export function GroupForm({
                     autoComplete="off"
                     spellCheck={false}
                   />
-                  <FieldDescription>
-                    {formatOrgDefault(
-                      orgFeeDefaults?.feeBankAccount ?? "",
-                      orgFeeDefaults?.feeBankAccount,
-                    )}
-                  </FieldDescription>
                   <FieldError
                     errors={[
                       ...getClientFieldErrors(formField.state.meta.errors).map(
@@ -821,18 +839,20 @@ export function GroupForm({
         </FieldSet>
       ) : null}
 
-      <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
-        {onCancel ? (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            {cancelLabel}
+      {hideFooter ? null : (
+        <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+          {onCancel ? (
+            <Button type="button" variant="outline" onClick={onCancel}>
+              {cancelLabel}
+            </Button>
+          ) : null}
+          <Button type="submit" disabled={isPending}>
+            {isPending
+              ? "Saving\u2026"
+              : (submitLabel ?? (group?.id ? "Save group" : "Create group"))}
           </Button>
-        ) : null}
-        <Button type="submit" disabled={isPending}>
-          {isPending
-            ? "Saving\u2026"
-            : (submitLabel ?? (group?.id ? "Save group" : "Create group"))}
-        </Button>
-      </div>
+        </div>
+      )}
     </form>
   );
 }

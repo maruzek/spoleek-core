@@ -65,8 +65,10 @@ function Stat({
       data-slot="stat"
       className={cn(
         "grid grid-cols-[1fr_auto] content-start gap-x-4 gap-y-1 rounded-xl bg-card p-4 text-left text-card-foreground ring-1 ring-foreground/10",
-        // Inside a strip the group owns the frame.
-        "in-data-[variant=strip]:rounded-none in-data-[variant=strip]:ring-0 in-data-[variant=inset]:rounded-none in-data-[variant=inset]:ring-0 in-data-[variant=inset]:bg-muted/30",
+        // Inside a strip the group owns the frame. The inset tint is opaque:
+        // the group's background is the hairline colour, and a translucent
+        // stat over it read as a much darker grey than intended.
+        "in-data-[variant=strip]:rounded-none in-data-[variant=strip]:ring-0 in-data-[variant=inset]:rounded-none in-data-[variant=inset]:ring-0 in-data-[variant=inset]:bg-[color-mix(in_oklab,var(--muted)_45%,var(--card))]",
         // Clickable stats (rendered as a button via `asChild`) behave like tiles.
         "transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&:is(button,a)]:cursor-pointer [&:is(button,a)]:hover:bg-muted/50",
         "**:data-[slot=stat-label]:col-start-1 **:data-[slot=stat-value]:col-start-1",
