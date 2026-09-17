@@ -103,6 +103,7 @@ export function EventAdminDetail({
   paymentDefaults,
   audience,
   eligibleCount,
+  notRespondedCount: notResponded,
   responses,
   counts,
   recipients,
@@ -120,6 +121,8 @@ export function EventAdminDetail({
   paymentDefaults: PaymentDefaults;
   audience: AudienceRow[];
   eligibleCount: number;
+  /** Invited people who have not answered — see `countNoAnswer`. */
+  notRespondedCount: number;
   responses: EventResponseRow[];
   counts: EventCounts;
   recipients: Record<EventRecipientFilter, EventRecipient[]>;
@@ -186,7 +189,6 @@ export function EventAdminDetail({
 
   const externalCount = audience.filter((r) => r.kind === "external").length;
   const audienceRuleCount = audience.length;
-  const notResponded = recipients.not_responded.length;
 
   const nextStep = getEventNextStep({
     event,

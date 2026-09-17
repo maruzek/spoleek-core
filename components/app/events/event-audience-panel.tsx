@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
-import { FolderIcon, GlobeIcon, Loader2Icon, MailIcon, PlusIcon, UserRoundIcon, UsersIcon, XIcon } from "lucide-react";
+import { GlobeIcon, Loader2Icon, MailIcon, PlusIcon, UsersIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { AudienceRuleList, type AudienceKind, audienceDraftKey } from "@/components/app/events/audience-rule-list";
 import { EventAudienceDialog, type AudienceDraft } from "@/components/app/events/event-audience-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,27 +50,6 @@ function toRule(d: Draft): AudienceRuleInput {
       return { kind: "external", externalEmail: d.externalEmail, externalName: d.externalName };
   }
 }
-
-function draftKey(d: AudienceRuleInput) {
-  switch (d.kind) {
-    case "group":
-      return `group:${d.groupId}`;
-    case "category":
-      return `category:${d.categoryId}`;
-    case "member":
-      return `member:${d.memberId}`;
-    case "external":
-      return `external:${d.externalEmail}`;
-  }
-}
-
-const KIND_META = {
-  category: { label: "Categories", one: "category", icon: FolderIcon, hint: "every group in the category" },
-  group: { label: "Groups", one: "group", icon: UsersIcon, hint: "" },
-  member: { label: "Members", one: "member", icon: UserRoundIcon, hint: "" },
-} as const;
-
-type MemberKind = keyof typeof KIND_META;
 
 const VISIBILITY_COPY = {
   public: {
@@ -148,7 +128,7 @@ export function EventAudiencePanel({
   const router = useRouter();
   const [drafts, setDrafts] = useState<Draft[]>(() => rules.map(toDraft).filter((d): d is Draft => d != null));
   const [dirty, setDirty] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [picker, setPicker] = useState<{ open: boolean; kind?: AudienceKind }>({ open: false });
   const [externalText, setExternalText] = useState("");
 
   const externals = rules.filter((r) => r.kind === "external");
@@ -181,26 +161,24 @@ export function EventAudiencePanel({
     },
   });
 
-  const chosen = useMemo(() => new Set(drafts.map(draftKey)), [drafts]);
+  const chosen = useMemo(() => new Set(drafts.map(audienceDraftKey)), [drafts]);
 
   const addMany = (incoming: Draft[]) => {
     setDrafts((current) => {
-      const have = new Set(current.map(draftKey));
-      const fresh = incoming.filter((d) => !have.has(draftKey(d)));
+      const have = new Set(current.map(audienceDraftKey));
+      const fresh = incoming.filter((d) => !have.has(audienceDraftKey(d)));
       return fresh.length > 0 ? [...current, ...fresh] : current;
     });
     if (incoming.length > 0) setDirty(true);
   };
   const remove = (key: string) => {
-    setDrafts((current) => current.filter((d) => draftKey(d) !== key));
+    setDrafts((current) => current.filter((d) => audienceDraftKey(d) !== key));
     setDirty(true);
   };
   const discard = () => {
     setDrafts(rules.map(toDraft).filter((d): d is Draft => d != null));
     setDirty(false);
   };
-
-  const byKind = (kind: MemberKind) => drafts.filter((d) => d.kind === kind);
 
   return (
     <div className="flex flex-col gap-6">
@@ -220,50 +198,26 @@ export function EventAudiencePanel({
       <section className="rounded-xl border">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
           <div>
-            <h3 className="text-sm font-semibold">Members</h3>
+            <h3 className="font-sans text-sm font-semibold">Members</h3>
             <p className="text-xs text-muted-foreground">
               <span className="font-medium tabular-nums text-foreground">{eligibleCount}</span> eligible right now
               {dirty ? " · counts update after saving" : ""}
             </p>
           </div>
 
-          <Button size="sm" variant="outline" onClick={() => setPickerOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setPicker({ open: true })}>
             <PlusIcon data-icon="inline-start" />
             Add rule
           </Button>
         </header>
 
-        <div className="flex flex-col gap-4 p-4">
-          {drafts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No rules yet. {visibility === "targeted" ? "Nobody can see this event until you add one." : "Everyone counts as invited."}
-            </p>
-          ) : (
-            (["category", "group", "member"] as MemberKind[]).map((kind) => {
-              const items = byKind(kind);
-              if (items.length === 0) return null;
-              const meta = KIND_META[kind];
-              return (
-                <div key={kind} className="flex flex-col gap-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    {meta.label} <span className="font-normal tabular-nums">{items.length}</span>
-                  </p>
-                  <ul className="flex flex-wrap gap-2">
-                    {items.map((d) => (
-                      <RuleChip
-                        key={draftKey(d)}
-                        icon={meta.icon}
-                        label={d.label}
-                        hint={meta.hint || undefined}
-                        onRemove={() => remove(draftKey(d))}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              );
-            })
-          )}
-        </div>
+        <AudienceRuleList
+          rules={drafts}
+          emptyText={`No rules yet. ${visibility === "targeted" ? "Nobody can see this event until you add one." : "Everyone counts as invited."}`}
+          disabled={saveAction.isPending}
+          onRemove={remove}
+          onAdd={(kind) => setPicker({ open: true, kind })}
+        />
 
         {dirty ? (
           <footer className="flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t bg-amber-500/5 px-4 py-2.5">
@@ -286,16 +240,17 @@ export function EventAudiencePanel({
       </section>
 
       <EventAudienceDialog
-        open={pickerOpen}
+        open={picker.open}
         eventId={eventId}
         excludeKeys={chosen}
-        onOpenChange={setPickerOpen}
+        initialKind={picker.kind}
+        onOpenChange={(open) => setPicker((p) => ({ ...p, open }))}
         onAdd={addMany}
       />
 
       <section className="rounded-xl border">
         <header className="border-b px-4 py-3">
-          <h3 className="text-sm font-semibold">
+          <h3 className="font-sans text-sm font-semibold">
             External invitees{" "}
             {externals.length > 0 ? (
               <span className="font-normal tabular-nums text-muted-foreground">{externals.length}</span>

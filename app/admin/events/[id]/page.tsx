@@ -1,6 +1,7 @@
 import { EventAdminDetail } from "@/components/app/events/event-admin-detail";
 import type { AudienceRow } from "@/components/app/events/event-audience-panel";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
+import { countNoAnswer } from "@/lib/events/no-answer";
 import { eventRecipientFilterSchema, type EventRecipientFilter } from "@/lib/events/schemas";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { listManageableOwners, requireEventManagementAccess } from "@/server/queries/access";
@@ -54,6 +55,12 @@ export default async function AdminEventPage({
   );
   const recipients = Object.fromEntries(recipientEntries) as Record<EventRecipientFilter, EventRecipient[]>;
 
+  const notRespondedCount = countNoAnswer({
+    eligibleMemberIds: eligibleIds,
+    externalEmails: audience.flatMap(({ rule }) => (rule.externalEmail ? [rule.externalEmail.toLowerCase()] : [])),
+    responses,
+  });
+
   const audienceRows: AudienceRow[] = audience.map(({ rule, groupName, categoryName, memberFirstName, memberLastName }) => ({
     id: rule.id,
     kind: rule.kind,
@@ -92,6 +99,7 @@ export default async function AdminEventPage({
         }}
         audience={audienceRows}
         eligibleCount={eligibleIds.size}
+        notRespondedCount={notRespondedCount}
         responses={responses}
         counts={counts}
         recipients={recipients}
