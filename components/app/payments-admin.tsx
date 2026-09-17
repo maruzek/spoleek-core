@@ -6,7 +6,7 @@ import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CheckIcon, RefreshCwIcon, UndoIcon, UsersIcon } from "lucide-react";
+import { CalendarIcon, CheckIcon, IdCardIcon, RefreshCwIcon, UndoIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { comparePaymentStatus, formatFeeAmount, getPaymentTitle } from "@/lib/payments";
+import { comparePaymentStatus, formatFeeAmount } from "@/lib/payments";
 import {
   bulkMarkPaymentsPaidAction,
   generatePaymentsAction,
@@ -245,18 +245,34 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.accessor("periodLabel", {
       header: ({ column }) => <SortableHeader column={column}>Payment</SortableHeader>,
       meta: { label: "Payment" },
-      cell: ({ row }) =>
-        row.original.type === "event" && row.original.eventId ? (
+      // Same naming as the member's card: the kind, then what it is for.
+      cell: ({ row }) => {
+        const isEvent = row.original.type === "event";
+        const label = (
+          <span className="flex items-center gap-2">
+            {isEvent ? (
+              <CalendarIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            ) : (
+              <IdCardIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            )}
+            <span className="truncate">
+              <span className="text-muted-foreground">{isEvent ? "Event" : "Membership"} · </span>
+              {isEvent ? (row.original.eventTitle ?? row.original.periodLabel) : row.original.periodLabel}
+            </span>
+          </span>
+        );
+        return isEvent && row.original.eventId ? (
           <Link
-            href={`/admin/events/${row.original.eventId}`}
+            href={`/admin/events/${row.original.eventId}?tab=responses`}
             className="underline-offset-4 hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            {getPaymentTitle(row.original.type, row.original.eventTitle ?? row.original.periodLabel)}
+            {label}
           </Link>
         ) : (
-          getPaymentTitle(row.original.type, row.original.periodLabel)
-        ),
+          label
+        );
+      },
     }),
     columnHelper.accessor("amount", {
       header: ({ column }) => <SortableHeader column={column}>Amount</SortableHeader>,

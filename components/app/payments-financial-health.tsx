@@ -94,7 +94,8 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* `items-start` so a short debt list does not stretch to the chart's height. */}
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
         {donutData.length > 0 && (
           <Card>
             <CardHeader className="pb-2">
@@ -102,15 +103,15 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
                 Payment status distribution
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ChartContainer config={chartConfig} className="mx-auto max-h-[220px]">
+            <CardContent className="flex items-center gap-6">
+              <ChartContainer config={chartConfig} className="aspect-square h-[160px] shrink-0">
                 <RechartsPrimitive.PieChart>
                   <RechartsPrimitive.Pie
                     data={donutData}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={55}
-                    outerRadius={90}
+                    innerRadius={48}
+                    outerRadius={76}
                     paddingAngle={2}
                   />
                   <ChartTooltip
@@ -125,14 +126,15 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
                   />
                 </RechartsPrimitive.PieChart>
               </ChartContainer>
-              <div className="mt-3 flex justify-center gap-4">
+              <dl className="flex flex-col gap-2">
                 {donutData.map((d) => (
-                  <div key={d.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="size-2 rounded-full" style={{ backgroundColor: d.fill }} />
-                    {chartConfig[d.name as keyof typeof chartConfig]?.label}
+                  <div key={d.name} className="flex items-center gap-2 text-sm">
+                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: d.fill }} />
+                    <dt className="text-muted-foreground">{chartConfig[d.name as keyof typeof chartConfig]?.label}</dt>
+                    <dd className="font-medium tabular-nums">{d.value}</dd>
                   </div>
                 ))}
-              </div>
+              </dl>
             </CardContent>
           </Card>
         )}
