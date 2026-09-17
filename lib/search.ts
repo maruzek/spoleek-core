@@ -9,8 +9,20 @@ export function foldForSearch(value: string): string {
   return value
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    .replace(/[đłøı]/gi, (char) => STROKE_LETTERS[char] ?? char)
     .toLowerCase();
 }
+
+/**
+ * Letters with a stroke are single code points, so NFD leaves them alone.
+ * Kept in step with the SQL map in `server/lib/search-sql.ts` (tested).
+ */
+const STROKE_LETTERS: Record<string, string> = {
+  đ: "d", Đ: "D",
+  ł: "l", Ł: "L",
+  ø: "o", Ø: "O",
+  ı: "i",
+};
 
 /** `true` when every whitespace-separated word of `query` occurs in `haystack`, accents ignored. */
 export function matchesSearch(haystack: string, query: string): boolean {

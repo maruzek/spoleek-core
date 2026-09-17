@@ -75,6 +75,8 @@ interface DataTableProps<TData, TValue> {
    */
   searchText?: (row: TData) => string;
   searchPlaceholder?: string;
+  /** Applied on mount, for a search restored from the URL. */
+  initialSearch?: string;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
   initialColumnVisibility?: VisibilityState;
@@ -172,6 +174,7 @@ export function DataTable<TData, TValue>({
   searchKey,
   searchText,
   searchPlaceholder = "Filter...",
+  initialSearch = "",
   emptyStateTitle = "No results found",
   emptyStateDescription = "Try adjusting your filters.",
   initialColumnVisibility = {},
@@ -183,11 +186,14 @@ export function DataTable<TData, TValue>({
   rowClassName,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>(initialSorting);
-  const [columnFilters, setColumnFilters] =
-    useState<ColumnFiltersState>(initialColumnFilters);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(() =>
+    initialSearch && searchKey && !searchText
+      ? [...initialColumnFilters, { id: searchKey, value: initialSearch }]
+      : initialColumnFilters,
+  );
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
   const [rowSelection, setRowSelection] = useState({});
-  const [globalFilter, setGlobalFilter] = useState("");
+  const [globalFilter, setGlobalFilter] = useState(searchText ? initialSearch : "");
 
   const table = useReactTable({
     data,

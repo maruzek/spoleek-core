@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getViewerAppContext } from "@/server/queries/access";
 import { AppShellProvider } from "@/components/app/app-shell-provider";
+import { CommandPalette } from "@/components/app/command-palette";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export async function AuthenticatedAppLayout({
@@ -38,6 +39,7 @@ export async function AuthenticatedAppLayout({
               <AppBreadcrumbs />
             </div>
             <div className="flex items-center gap-2 px-4 md:px-6">
+              <CommandPalette />
               <ThemeToggle />
             </div>
           </header>

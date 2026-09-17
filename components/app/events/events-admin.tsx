@@ -58,6 +58,7 @@ import {
 } from "@/lib/events/display";
 import { matchesSearch } from "@/lib/search";
 import { cn } from "@/lib/utils";
+import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { deleteEventsAction } from "@/server/actions/events";
 import type { EventStatus } from "@/server/db/schema";
 import type { EventListItem } from "@/server/queries/events";
@@ -119,6 +120,7 @@ export function EventsAdmin({
   const router = useRouter();
   const { locale } = useFormatters();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { initialSearch } = usePaletteIntent("new", () => setSheetOpen(true));
   const [view, setView] = useState<View>("list");
   const [window, setWindow] = useState<TimeWindow>("upcoming");
   const [calendarQuery, setCalendarQuery] = useState("");
@@ -447,6 +449,7 @@ export function EventsAdmin({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         searchKey="event"
+        initialSearch={initialSearch}
         searchPlaceholder="Search events..."
         emptyStateTitle={emptyTitle}
         emptyStateDescription={emptyDescription}

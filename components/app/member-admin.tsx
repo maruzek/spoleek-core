@@ -79,6 +79,7 @@ import {
   type WorkspaceApprovalMember,
 } from "./member-approve-workspace-dialog";
 import { MemberSheet } from "./member-sheet";
+import { usePaletteIntent } from "@/hooks/use-palette-intent";
 
 type WorkspaceModuleProp = {
   enabled: boolean;
@@ -277,6 +278,8 @@ export function MemberAdmin({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const { initialSearch } = usePaletteIntent("new", () => setSheetOpen(true));
+  usePaletteIntent("import", () => setImportOpen(true));
   const [workspaceApproveMember, setWorkspaceApproveMember] =
     useState<WorkspaceApprovalMember | null>(null);
   // The member whose Workspace account is being set up right after creation.
@@ -1064,6 +1067,7 @@ export function MemberAdmin({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         searchKey="member"
+        initialSearch={initialSearch}
         searchPlaceholder="Search members..."
         emptyStateTitle="No members found"
         emptyStateDescription={

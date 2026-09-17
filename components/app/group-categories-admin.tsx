@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
+import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { saveGroupCategoryAction } from "@/server/actions/groups";
 import type { GroupCategoryFormValues } from "@/lib/groups";
 import type { MembershipManagementMode } from "@/server/db/schema";
@@ -57,6 +58,9 @@ export function GroupCategoriesAdmin({
     open: false,
     category: null,
   });
+  const { initialSearch } = usePaletteIntent("new", () =>
+    setSheetState({ open: true, category: null }),
+  );
 
   const saveAction = useAction(saveGroupCategoryAction, {
     onSuccess({ data }) {
@@ -180,6 +184,7 @@ export function GroupCategoriesAdmin({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         searchKey="category"
+        initialSearch={initialSearch}
         searchPlaceholder="Search categories..."
         emptyStateTitle="No group categories yet"
         emptyStateDescription="Start by defining the top-level structure your organization uses."

@@ -175,6 +175,7 @@ export function WorkspaceSettingsCard({
         <Switch
           checked={moduleEnabled}
           onCheckedChange={setModuleEnabled}
+          id="workspace-module"
           aria-label="Enable Workspace module"
         />
       </div>
@@ -327,7 +328,7 @@ export function WorkspaceSettingsCard({
       {state.connected ? (
         <div className="flex flex-col gap-3 rounded-xl border p-4">
           <div className="flex flex-col gap-1">
-            <Label>Org unit category</Label>
+            <Label id="workspace-org-unit">Org unit category</Label>
             <p className="text-xs text-muted-foreground">
               Members must belong to exactly one group in this category. When
               assigned, their Workspace account is moved to that group&apos;s

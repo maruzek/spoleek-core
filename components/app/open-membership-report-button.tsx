@@ -6,6 +6,7 @@ import { useAction } from "next-safe-action/hooks";
 import { toast } from "sonner";
 import { PlayIcon } from "lucide-react";
 
+import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { openMembershipReportAction } from "@/server/actions/membership-reports";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ export function OpenMembershipReportButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  usePaletteIntent("open-report", () => setOpen(true));
 
   const openReport = useAction(openMembershipReportAction, {
     onSuccess({ data }) {

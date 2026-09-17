@@ -11,6 +11,7 @@ import { PlusIcon, ShieldIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { GroupSheet } from "@/components/app/group-sheet";
+import { usePaletteIntent } from "@/hooks/use-palette-intent";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import type { GroupFormValues } from "@/lib/groups";
@@ -114,6 +115,7 @@ export function GroupCategoryDetail({
     group: null,
   });
   const [adminSheetOpen, setAdminSheetOpen] = useState(false);
+  usePaletteIntent("new", () => setGroupSheetState({ open: true, group: null }));
 
   const saveGroup = useAction(saveGroupAction, {
     onSuccess({ data }) {

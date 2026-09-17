@@ -159,7 +159,10 @@ export function MembershipSettingsCard({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <p
+          id="membership-mode-heading"
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        >
           Membership mode
         </p>
         <RadioGroup

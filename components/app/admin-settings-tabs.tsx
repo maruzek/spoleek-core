@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BellIcon,
   CalendarIcon,
@@ -97,13 +97,31 @@ export function AdminSettingsTabs({
   defaultTab,
 }: AdminSettingsTabsProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabValue>(toValidTab(defaultTab));
+  const searchParams = useSearchParams();
+  // The URL owns the active tab: the ⌘K palette (and any deep link) switches
+  // tabs by changing `?tab=`, which must work while already on this page.
+  const activeTab = toValidTab(searchParams.get("tab") ?? defaultTab);
 
   function handleTabChange(value: string) {
     const tab = toValidTab(value);
-    setActiveTab(tab);
     router.replace(`/admin/settings?tab=${tab}`, { scroll: false });
   }
+
+  // `#anchor` names one setting inside the tab (see SETTINGS_INDEX in
+  // lib/command-palette.ts). Scroll it into view once the tab has rendered;
+  // a control hidden behind a switch simply is not there, and the tab is the
+  // landing spot.
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(hash);
+      if (!target) return;
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, searchParams]);
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange}>

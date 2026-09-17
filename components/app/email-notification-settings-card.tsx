@@ -84,6 +84,7 @@ export function EmailNotificationSettingsCard({
           <Switch
             checked={notifyRenewalHeadsup}
             onCheckedChange={setNotifyRenewalHeadsup}
+            id="notify-renewal-headsup"
             aria-label="Enable renewal head-up email"
           />
         </div>
@@ -118,6 +119,7 @@ export function EmailNotificationSettingsCard({
           <Switch
             checked={notifyOverdue}
             onCheckedChange={setNotifyOverdue}
+            id="notify-overdue"
             aria-label="Enable overdue reminder email"
           />
         </div>
@@ -134,6 +136,7 @@ export function EmailNotificationSettingsCard({
           <Switch
             checked={notifyPaymentConfirmed}
             onCheckedChange={setNotifyPaymentConfirmed}
+            id="notify-payment-confirmed"
             aria-label="Enable payment receipt email"
           />
         </div>
@@ -157,6 +160,7 @@ export function EmailNotificationSettingsCard({
           <Switch
             checked={notifyReportReminder}
             onCheckedChange={setNotifyReportReminder}
+            id="notify-report-reminder"
             aria-label="Enable yearly report reminders"
           />
         </div>
@@ -174,6 +178,7 @@ export function EmailNotificationSettingsCard({
           <Switch
             checked={notifyRegistration}
             onCheckedChange={setNotifyRegistration}
+            id="notify-registration"
             aria-label="Enable new application alert"
           />
         </div>
