@@ -5,6 +5,7 @@ import { db } from "@/server/db";
 import {
   eventResponses,
   events,
+  groupCategories,
   groupMemberships,
   groups,
   memberPayments,
@@ -41,7 +42,14 @@ export type PaymentStats = {
   }>;
 };
 
-export type PaymentMemberGroup = { id: string; name: string };
+export type PaymentMemberGroup = {
+  id: string;
+  name: string;
+  /** For sectioning the group filter; the category's sort order keeps sections in admin order. */
+  categoryId: string;
+  categoryName: string;
+  categorySortOrder: number;
+};
 
 export type PaymentRow = MemberPayment & {
   memberFirstName: string | null;
@@ -94,9 +102,13 @@ async function getGroupsByMember(
       memberId: groupMemberships.memberId,
       groupId: groups.id,
       groupName: groups.name,
+      categoryId: groupCategories.id,
+      categoryName: groupCategories.name,
+      categorySortOrder: groupCategories.sortOrder,
     })
     .from(groupMemberships)
     .innerJoin(groups, eq(groupMemberships.groupId, groups.id))
+    .innerJoin(groupCategories, eq(groups.categoryId, groupCategories.id))
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
@@ -109,7 +121,13 @@ async function getGroupsByMember(
 
   for (const row of rows) {
     const list = byMember.get(row.memberId) ?? [];
-    list.push({ id: row.groupId, name: row.groupName });
+    list.push({
+      id: row.groupId,
+      name: row.groupName,
+      categoryId: row.categoryId,
+      categoryName: row.categoryName,
+      categorySortOrder: row.categorySortOrder,
+    });
     byMember.set(row.memberId, list);
   }
 

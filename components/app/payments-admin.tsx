@@ -18,15 +18,21 @@ import {
 } from "@/components/app/payments/payment-status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxSeparator,
+} from "@/components/ui/combobox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { InputGroupAddon } from "@/components/ui/input-group";
 import { comparePaymentStatus, formatFeeAmount, PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
 import { STATUS_DOT_CLASSES, STATUS_TEXT_CLASSES } from "@/lib/status-dot";
 import { cn } from "@/lib/utils";
@@ -109,8 +115,8 @@ function PaymentSummary({
   );
 }
 
-/** Sentinel for "no group filter" — Radix Select cannot hold an empty value. */
-const ALL_GROUPS = "__all__";
+type GroupOption = { id: string; name: string };
+type GroupSection = { id: string; name: string; sortOrder: number; items: GroupOption[] };
 
 type TypeFilter = "all" | MemberPaymentType;
 
@@ -179,7 +185,7 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
-  const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
+  const [group, setGroup] = useState<GroupOption | null>(null);
   const [type, setType] = useState<TypeFilter>("all");
   const [status, setStatus] = useState<StatusFilter>(null);
 
@@ -188,13 +194,23 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   // Options come from the rows on screen rather than from every group in the
   // org, so the dropdown can never offer a group that would filter to nothing.
-  const groupOptions = useMemo(() => {
-    const byId = new Map<string, string>();
+  // Sectioned by category, in the admin's category order.
+  const groupSections = useMemo<GroupSection[]>(() => {
+    const sections = new Map<string, GroupSection>();
     for (const payment of payments) {
-      for (const group of payment.memberGroups) byId.set(group.id, group.name);
+      for (const g of payment.memberGroups) {
+        const section =
+          sections.get(g.categoryId) ??
+          { id: g.categoryId, name: g.categoryName, sortOrder: g.categorySortOrder, items: [] };
+        if (!section.items.some((item) => item.id === g.id)) section.items.push({ id: g.id, name: g.name });
+        sections.set(g.categoryId, section);
+      }
     }
-    return [...byId].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    return [...sections.values()]
+      .map((section) => ({ ...section, items: section.items.sort((a, b) => a.name.localeCompare(b.name)) }))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   }, [payments]);
+  const groupCount = groupSections.reduce((n, s) => n + s.items.length, 0);
 
   // Type and group narrow the set the chips count; the status chip then
   // narrows the table only.
@@ -202,10 +218,8 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     () =>
       payments
         .filter((payment) => type === "all" || payment.type === type)
-        .filter(
-          (payment) => groupId === ALL_GROUPS || payment.memberGroups.some((g) => g.id === groupId),
-        ),
-    [payments, groupId, type],
+        .filter((payment) => !group || payment.memberGroups.some((g) => g.id === group.id)),
+    [payments, group, type],
   );
   const visiblePayments = useMemo(
     () => (status ? scopedPayments.filter((p) => p.status === status) : scopedPayments),
@@ -392,21 +406,42 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
                   <ToggleGroupItem value="event">Events</ToggleGroupItem>
                 </ToggleGroup>
               )}
-              {groupOptions.length > 0 && (
-                <Select value={groupId} onValueChange={setGroupId}>
-                  <SelectTrigger className="w-[200px]" aria-label="Filter by group">
-                    <UsersIcon data-icon="inline-start" />
-                    <SelectValue placeholder="All groups" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL_GROUPS}>All groups</SelectItem>
-                    {groupOptions.map((group) => (
-                      <SelectItem key={group.id} value={group.id}>
-                        {group.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {groupCount > 0 && (
+                <Combobox
+                  items={groupSections}
+                  value={group}
+                  onValueChange={(next: GroupOption | null) => setGroup(next)}
+                  itemToStringLabel={(item: GroupOption) => item.name}
+                >
+                  <ComboboxInput
+                    className="w-52"
+                    placeholder="All groups"
+                    aria-label="Filter by group"
+                    showClear={group != null}
+                  >
+                    <InputGroupAddon>
+                      <UsersIcon />
+                    </InputGroupAddon>
+                  </ComboboxInput>
+                  <ComboboxContent alignOffset={-28} className="w-60">
+                    <ComboboxEmpty>No group matches.</ComboboxEmpty>
+                    <ComboboxList>
+                      {(section: GroupSection, index: number) => (
+                        <ComboboxGroup key={section.id} items={section.items}>
+                          <ComboboxLabel>{section.name}</ComboboxLabel>
+                          <ComboboxCollection>
+                            {(item: GroupOption) => (
+                              <ComboboxItem key={item.id} value={item}>
+                                {item.name}
+                              </ComboboxItem>
+                            )}
+                          </ComboboxCollection>
+                          {index < groupSections.length - 1 && <ComboboxSeparator />}
+                        </ComboboxGroup>
+                      )}
+                    </ComboboxList>
+                  </ComboboxContent>
+                </Combobox>
               )}
               {selected.length > 0 && (
                 <Button
