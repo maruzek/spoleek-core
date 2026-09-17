@@ -1,23 +1,25 @@
 import { AppPage } from "@/components/app/app-page";
-import { AppPlaceholder } from "@/components/app/app-placeholder";
+import { PortalGroups } from "@/components/app/portal/portal-groups";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { getPortalGroupsData } from "@/server/queries/portal-groups";
+
+export const dynamic = "force-dynamic";
 
 export default async function PortalGroupsPage() {
-  await requireCurrentMemberAccess({
+  const { member, organization } = await requireCurrentMemberAccess({
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });
 
+  const data = await getPortalGroupsData({ organization, memberId: member.id });
+
   return (
     <AppPage
       eyebrow="Member portal"
-      title="Your group memberships will appear here."
-      description="Members will be able to see their current groups, categories, and delegated-structure context without stepping into administrative tools."
+      title="My groups."
+      description={`Your groups in ${organization.name}, who leads them, and what is next.`}
     >
-      <AppPlaceholder
-        title="Personal group view ready"
-        description="This portal route is ready for the member-facing group overview."
-      />
+      <PortalGroups data={data} />
     </AppPage>
   );
 }
