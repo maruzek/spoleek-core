@@ -159,6 +159,25 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
   const formatDue = (date: Date) =>
     date.getHours() === 0 && date.getMinutes() === 0 ? formatDate(date) : formatDateTime(date);
 
+  // One haystack per row so a single box finds a payment by anything shown in
+  // it. Dates go in formatted, so "30. 9." matches what the user reads.
+  const paymentSearchText = (p: PaymentRow) =>
+    [
+      p.memberName,
+      p.memberId ? "" : "guest",
+      p.type === "event" ? "event" : "membership fee",
+      p.eventTitle,
+      p.periodLabel,
+      paymentStatusLabel[p.status],
+      p.memberGroups.map((g) => g.name).join(" "),
+      p.variableSymbol,
+      formatFeeAmount(p.amount, p.currency),
+      formatDue(p.dueAt),
+      p.paidAt ? formatDate(p.paidAt) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
   const router = useRouter();
   const [detailPayment, setDetailPayment] = useState<PaymentRow | null>(null);
   const [groupId, setGroupId] = useState<string>(ALL_GROUPS);
@@ -345,8 +364,8 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         columns={columns as any}
         data={visiblePayments}
-        searchKey="memberName"
-        searchPlaceholder="Filter by member..."
+        searchText={paymentSearchText}
+        searchPlaceholder="Search member, event, status, group, VS, date…"
         emptyStateTitle="No payment records"
         emptyStateDescription="Generate payment records for the current renewal period or wait for the nightly cron."
         onRowClick={(payment) => setDetailPayment(payment)}
