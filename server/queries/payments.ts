@@ -30,16 +30,6 @@ export type PaymentStats = {
   >;
   collectionRate: number;
   projectedIncomeCents: number;
-  debtAging: Array<{
-    /** Null for a guest's event payment. */
-    memberId: string | null;
-    memberName: string;
-    periodLabel: string;
-    amountCents: number;
-    currency: string;
-    dueAt: Date;
-    daysOverdue: number;
-  }>;
 };
 
 export type PaymentMemberGroup = {
@@ -325,36 +315,7 @@ export async function getPaymentStats(orgId: string): Promise<PaymentStats> {
   const collectionRate = eligible > 0 ? Math.round((paid.totalCents / eligible) * 100) : 0;
   const projectedIncomeCents = pending.totalCents + overdue.totalCents;
 
-  const now = new Date();
-  const overdueRows = await db
-    .select({
-      memberId: memberPayments.memberId,
-      firstName: tenantMembers.firstName,
-      lastName: tenantMembers.lastName,
-      email: tenantMembers.email,
-      guestName: eventResponses.guestName,
-      periodLabel: memberPayments.periodLabel,
-      amount: memberPayments.amount,
-      currency: memberPayments.currency,
-      dueAt: memberPayments.dueAt,
-    })
-    .from(memberPayments)
-    .leftJoin(tenantMembers, eq(memberPayments.memberId, tenantMembers.id))
-    .leftJoin(eventResponses, eq(memberPayments.responseId, eventResponses.id))
-    .where(and(eq(memberPayments.orgId, orgId), eq(memberPayments.status, "overdue")))
-    .orderBy(asc(memberPayments.dueAt));
-
-  const debtAging = overdueRows.map((r) => ({
-    memberId: r.memberId,
-    memberName: payerName(r),
-    periodLabel: r.periodLabel,
-    amountCents: r.amount,
-    currency: r.currency,
-    dueAt: r.dueAt,
-    daysOverdue: Math.floor((now.getTime() - r.dueAt.getTime()) / (1000 * 60 * 60 * 24)),
-  }));
-
-  return { paid, pending, overdue, refundDue, byType, collectionRate, projectedIncomeCents, debtAging };
+  return { paid, pending, overdue, refundDue, byType, collectionRate, projectedIncomeCents };
 }
 
 export type MemberOverdueFees = {

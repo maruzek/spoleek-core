@@ -6,7 +6,7 @@ import { useFormatters } from "@/components/locale-provider";
 import { useRouter } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import { createColumnHelper } from "@tanstack/react-table";
-import { CalendarIcon, CheckIcon, IdCardIcon, RefreshCwIcon, UndoIcon, UsersIcon } from "lucide-react";
+import { CalendarIcon, CheckIcon, IdCardIcon, RefreshCwIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { PaymentActions } from "@/components/app/payments/payment-actions";
@@ -120,46 +120,6 @@ type GroupSection = { id: string; name: string; sortOrder: number; items: GroupO
 
 type TypeFilter = "all" | MemberPaymentType;
 
-/**
- * Paid event payments whose RSVP was withdrawn. The rows themselves sit at the
- * top of the table (refund_due sorts first) with an orange tint; this strip
- * only totals them and jumps the filter there. Nothing settles them
- * automatically.
- */
-function RefundsDue({
-  refunds,
-  active,
-  onShow,
-}: {
-  refunds: PaymentRow[];
-  active: boolean;
-  onShow: () => void;
-}) {
-  if (refunds.length === 0) return null;
-
-  const total = refunds.reduce((sum, r) => sum + r.amount, 0);
-  const currency = refunds[0]?.currency ?? "";
-  const sameCurrency = refunds.every((r) => r.currency === currency);
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-orange-500/40 bg-orange-500/5 px-4 py-2.5">
-      <UndoIcon className="size-4 text-orange-600 dark:text-orange-400" aria-hidden />
-      <p className="text-sm font-medium">
-        {refunds.length === 1 ? "1 refund due" : `${refunds.length} refunds due`}
-        {sameCurrency ? <span className="font-normal text-muted-foreground"> · {formatFeeAmount(total, currency)}</span> : null}
-      </p>
-      <p className="text-xs text-muted-foreground">
-        Paid, then withdrawn, demoted to the reserve list or removed. Return the money, then mark it refunded.
-      </p>
-      {!active ? (
-        <Button size="sm" variant="outline" className="ml-auto" onClick={onShow}>
-          Show
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[]; isFullAdmin: boolean }) {
   const { formatDate, formatDateTime } = useFormatters();
   const formatDue = (date: Date) =>
@@ -189,7 +149,6 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
   const [type, setType] = useState<TypeFilter>("all");
   const [status, setStatus] = useState<StatusFilter>(null);
 
-  const refunds = useMemo(() => payments.filter((p) => p.status === "refund_due"), [payments]);
   const hasEventPayments = useMemo(() => payments.some((p) => p.type === "event"), [payments]);
 
   // Options come from the rows on screen rather than from every group in the
@@ -371,7 +330,6 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
 
   return (
     <div className="flex flex-col gap-4">
-      <RefundsDue refunds={refunds} active={status === "refund_due"} onShow={() => setStatus("refund_due")} />
       <PaymentSummary payments={scopedPayments} status={status} onStatusChange={setStatus} />
       <DataTable
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

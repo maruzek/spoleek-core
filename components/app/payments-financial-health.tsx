@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { PaymentStats } from "@/server/queries/payments";
 import { feeToMajorUnits, PAYMENT_STATUS_COLORS } from "@/lib/payments";
 import { useFormatLocale } from "@/components/locale-provider";
-import { cn } from "@/lib/utils";
 
 function formatCents(cents: number, currency: string, locale: string): string {
   return new Intl.NumberFormat(locale, {
@@ -19,8 +18,6 @@ function formatCents(cents: number, currency: string, locale: string): string {
 function paymentCount(count: number): string {
   return `${count} payment${count !== 1 ? "s" : ""}`;
 }
-
-const DEBT_ROWS = 5;
 
 export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: PaymentStats; currency?: string }) {
   const locale = useFormatLocale();
@@ -36,7 +33,6 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
   const barTotal = segments.reduce((sum, s) => sum + s.totalCents, 0);
 
   const collectible = stats.paid.totalCents + stats.pending.totalCents + stats.overdue.totalCents;
-  const oldestDays = stats.debtAging[0]?.daysOverdue ?? 0;
 
   return (
     <div className="mb-8 space-y-4">
@@ -117,43 +113,6 @@ export function PaymentsFinancialHealth({ stats, currency = "CZK" }: { stats: Pa
         </Card>
       )}
 
-      {stats.debtAging.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-baseline justify-between font-sans text-sm font-medium text-muted-foreground">
-              <span>Debt aging — longest overdue</span>
-              {stats.debtAging.length > DEBT_ROWS ? (
-                <span className="text-xs font-normal">top {DEBT_ROWS} of {stats.debtAging.length}</span>
-              ) : null}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {stats.debtAging.slice(0, DEBT_ROWS).map((row, i) => (
-                <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-6 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{row.memberName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{row.periodLabel}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium tabular-nums text-destructive">
-                      {formatCents(row.amountCents, row.currency, locale)}
-                    </p>
-                    <p className="text-xs tabular-nums text-muted-foreground">{row.daysOverdue}d overdue</p>
-                  </div>
-                  {/* Age relative to the oldest debt on the list, so the top row is always full. */}
-                  <div className="col-span-2 h-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn("h-full rounded-full", row.daysOverdue >= 30 ? "bg-destructive" : "bg-orange-500")}
-                      style={{ width: `${Math.max(4, (row.daysOverdue / Math.max(oldestDays, 1)) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
