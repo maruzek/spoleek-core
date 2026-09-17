@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "@tanstack/react-form";
 
 import {
@@ -9,6 +10,7 @@ import {
   type GroupCategoryFormValues,
 } from "@/lib/groups";
 import { useAppShell } from "@/components/app/app-shell-provider";
+import { flattenSchemaErrors } from "@/lib/form-errors";
 import { slugify } from "@/lib/slugify";
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { Button } from "@/components/ui/button";
@@ -96,15 +98,23 @@ export function GroupCategoryForm({
       const parsed = groupCategorySchema.safeParse(value);
 
       if (!parsed.success) {
+        setSchemaErrors(flattenSchemaErrors(parsed.error));
         return;
       }
 
+      setSchemaErrors({});
       await onSubmit(parsed.data);
     },
   });
 
-  const getFieldError = (fieldName: keyof GroupCategoryFormValues): string[] =>
-    validationErrors?.[fieldName]?._errors ?? [];
+  // Schema failures found on the client (including cross-field rules from
+  // `superRefine`, which per-field validators never see) are surfaced through
+  // the same channel as server validation errors, so the field shows them.
+  const [schemaErrors, setSchemaErrors] = useState<Partial<Record<keyof GroupCategoryFormValues, string[]>>>({});
+  const getFieldError = (fieldName: keyof GroupCategoryFormValues): string[] => [
+    ...(schemaErrors[fieldName] ?? []),
+    ...(validationErrors?.[fieldName]?._errors ?? []),
+  ];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
       ? errors.filter(

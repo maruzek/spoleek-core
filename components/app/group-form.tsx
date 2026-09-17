@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "@tanstack/react-form";
 import { useAction } from "next-safe-action/hooks";
 import { FolderTreeIcon, Loader2Icon } from "lucide-react";
@@ -11,6 +11,7 @@ import {
   type GroupFormValues,
 } from "@/lib/groups";
 import { useAppShell } from "@/components/app/app-shell-provider";
+import { flattenSchemaErrors } from "@/lib/form-errors";
 import { slugify } from "@/lib/slugify";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,15 +151,23 @@ export function GroupForm({
       });
 
       if (!parsed.success) {
+        setSchemaErrors(flattenSchemaErrors(parsed.error));
         return;
       }
 
+      setSchemaErrors({});
       await onSubmit(parsed.data);
     },
   });
 
-  const getFieldError = (fieldName: keyof GroupFormValues): string[] =>
-    validationErrors?.[fieldName]?._errors ?? [];
+  // Schema failures found on the client (including cross-field rules from
+  // `superRefine`, which per-field validators never see) are surfaced through
+  // the same channel as server validation errors, so the field shows them.
+  const [schemaErrors, setSchemaErrors] = useState<Partial<Record<keyof GroupFormValues, string[]>>>({});
+  const getFieldError = (fieldName: keyof GroupFormValues): string[] => [
+    ...(schemaErrors[fieldName] ?? []),
+    ...(validationErrors?.[fieldName]?._errors ?? []),
+  ];
   const getClientFieldErrors = (errors: unknown) =>
     Array.isArray(errors)
       ? errors.filter(
