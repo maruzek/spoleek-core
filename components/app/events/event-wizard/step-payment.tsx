@@ -85,81 +85,86 @@ export function StepPayment({
         </Alert>
       ) : null}
 
-      <div className={paid ? "grid gap-6 md:grid-cols-[minmax(0,1fr)_17rem]" : undefined}>
+      {/* Fixed columns: the form never reflows when the preview appears. */}
+      <div className="grid gap-6 md:grid-cols-[24rem_17rem]">
         <FieldGroup>
-        <Field data-invalid={err("priceAmount").length > 0 || err("priceCurrency").length > 0}>
-          <FieldLabel htmlFor="ew-price">Price per person</FieldLabel>
-          <FieldContent>
-            <CurrencyInput
-              id="ew-price"
-              amount={draft.priceAmount ?? null}
-              currency={draft.priceCurrency ?? defaults.currency}
-              placeholder="Free"
-              invalid={err("priceAmount").length > 0}
-              onAmountChange={(priceAmount) =>
-                onChange({
-                  priceAmount,
-                  paid: priceAmount != null,
-                  // First price typed: start from the organization's currency.
-                  ...(priceAmount != null && !draft.priceCurrency ? { priceCurrency: defaults.currency } : {}),
-                })
-              }
-              onCurrencyChange={(priceCurrency) => onChange({ priceCurrency })}
-            />
-            <FieldDescription>Guests pay the same as members.</FieldDescription>
-            <FieldError errors={[...err("priceAmount"), ...err("priceCurrency")]} />
-          </FieldContent>
-        </Field>
+          <Field data-invalid={err("priceAmount").length > 0 || err("priceCurrency").length > 0}>
+            <FieldLabel htmlFor="ew-price">Price per person</FieldLabel>
+            <FieldContent>
+              <CurrencyInput
+                id="ew-price"
+                amount={draft.priceAmount ?? null}
+                currency={draft.priceCurrency ?? defaults.currency}
+                placeholder="Free"
+                invalid={err("priceAmount").length > 0}
+                onAmountChange={(priceAmount) =>
+                  onChange({
+                    priceAmount,
+                    paid: priceAmount != null,
+                    // First price typed: start from the organization's currency.
+                    ...(priceAmount != null && !draft.priceCurrency ? { priceCurrency: defaults.currency } : {}),
+                  })
+                }
+                onCurrencyChange={(priceCurrency) => onChange({ priceCurrency })}
+              />
+              <FieldDescription>Guests pay the same as members.</FieldDescription>
+              <FieldError errors={[...err("priceAmount"), ...err("priceCurrency")]} />
+            </FieldContent>
+          </Field>
 
-        <Field data-invalid={err("priceBankAccount").length > 0}>
-          <FieldLabel htmlFor="ew-bank">Bank account</FieldLabel>
-          <FieldContent>
-            <Input
-              id="ew-bank"
-              placeholder={bankPlaceholder}
-              disabled={!paid}
-              value={draft.priceBankAccount ?? ""}
-              onChange={(e) => onChange({ priceBankAccount: e.target.value || null })}
-            />
-            <FieldDescription>
-              {defaultAccount
-                ? `Empty means the organization's fee account (${defaultAccount}).`
-                : "The organization has no fee account yet, so a priced event needs one here before it can be published."}
-            </FieldDescription>
-            <FieldError errors={err("priceBankAccount")} />
-          </FieldContent>
-        </Field>
+          <Field data-invalid={err("priceBankAccount").length > 0}>
+            <FieldLabel htmlFor="ew-bank">Bank account</FieldLabel>
+            <FieldContent>
+              <Input
+                id="ew-bank"
+                placeholder={bankPlaceholder}
+                disabled={!paid}
+                value={draft.priceBankAccount ?? ""}
+                onChange={(e) => onChange({ priceBankAccount: e.target.value || null })}
+              />
+              <FieldDescription>
+                {defaultAccount
+                  ? `Empty means the organization's fee account (${defaultAccount}).`
+                  : "The organization has no fee account yet, so a priced event needs one here before it can be published."}
+              </FieldDescription>
+              <FieldError errors={err("priceBankAccount")} />
+            </FieldContent>
+          </Field>
 
-        <Field data-invalid={err("paymentDueAt").length > 0}>
-          <FieldLabel htmlFor="ew-due">Pay by</FieldLabel>
-          <FieldContent>
-            <DateTimeField
-              id="ew-due"
-              value={draft.paymentDueAt ?? null}
-              dateOnly
-              disabled={!paid}
-              onChange={(paymentDueAt) => onChange({ paymentDueAt })}
-            />
-            <FieldDescription>
-              {draft.rsvpDeadlineAt
-                ? "Empty means the RSVP deadline."
-                : draft.startsAt
-                  ? "Empty means the start of the event."
-                  : "Empty means 14 days after the answer."}{" "}
-              Unpaid payments turn overdue afterwards; places are never released automatically.
-            </FieldDescription>
-            <FieldError errors={err("paymentDueAt")} />
-          </FieldContent>
-        </Field>
-      </FieldGroup>
-      {preview ? (
+          <Field data-invalid={err("paymentDueAt").length > 0}>
+            <FieldLabel htmlFor="ew-due">Pay by</FieldLabel>
+            <FieldContent>
+              <DateTimeField
+                id="ew-due"
+                value={draft.paymentDueAt ?? null}
+                dateOnly
+                disabled={!paid}
+                onChange={(paymentDueAt) => onChange({ paymentDueAt })}
+              />
+              <FieldDescription>
+                {draft.rsvpDeadlineAt
+                  ? "Empty means the RSVP deadline."
+                  : draft.startsAt
+                    ? "Empty means the start of the event."
+                    : "Empty means 14 days after the answer."}{" "}
+                Unpaid payments turn overdue afterwards; places are never released automatically.
+              </FieldDescription>
+              <FieldError errors={err("paymentDueAt")} />
+            </FieldContent>
+          </Field>
+  </FieldGroup>
         <div className="flex flex-col gap-2 md:pt-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What members see</p>
-          <div className="pointer-events-none" aria-hidden>
-            {preview}
-          </div>
+          {preview ? (
+            <div className="pointer-events-none" aria-hidden>
+              {preview}
+            </div>
+          ) : (
+            <div className="flex h-40 items-center justify-center rounded-xl border border-dashed px-4 text-center text-sm text-muted-foreground">
+              Enter a price to preview the payment card.
+            </div>
+          )}
         </div>
-      ) : null}
       </div>
     </div>
   );

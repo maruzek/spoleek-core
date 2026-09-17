@@ -247,14 +247,15 @@ export function EventWizardDialog({
 
         <div className="shrink-0 border-b px-6 py-3">
           <Stepper value={activeStep} onValueChange={(v) => goTo(v as WizardStep)} className="gap-0">
-            <StepperList className="gap-1">
+            <StepperList className="justify-center gap-1">
               {STEPS.map((step, idx) => (
-                <StepperItem key={step} value={step} className="shrink">
+                // `flex-none` + fixed separators: equal gaps whatever the label length.
+                <StepperItem key={step} value={step} className="flex-none">
                   <StepperTrigger className="flex items-center gap-1.5 px-2 py-1">
                     <StepperIndicator className="size-5 rounded-full text-[10px]" />
                     <StepperTitle className="hidden text-xs sm:block">{STEP_LABELS[step]}</StepperTitle>
                   </StepperTrigger>
-                  {idx < STEPS.length - 1 && <StepperSeparator className="mx-1 h-px flex-1 bg-border" />}
+                  {idx < STEPS.length - 1 && <StepperSeparator className="mx-1 h-px w-8 flex-none" />}
                 </StepperItem>
               ))}
             </StepperList>
