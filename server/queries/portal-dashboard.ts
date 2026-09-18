@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { isRsvpOpen } from "@/lib/events/rsvp";
 import { orgFormatLocale } from "@/lib/i18n";
@@ -44,6 +44,21 @@ const AREA_LINKS: Record<PortalArea, { title: string; href: string }> = {
   forms: { title: "Forms", href: "/portal/forms" },
   payments: { title: "Payments", href: "/portal/payments" },
 };
+
+async function countPendingJoinRequests(orgId: string, memberId: string) {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(groupMemberships)
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        eq(groupMemberships.memberId, memberId),
+        eq(groupMemberships.status, "pending"),
+      ),
+    );
+
+  return row?.count ?? 0;
+}
 
 async function listMemberGroups(orgId: string, memberId: string) {
   const rows = await db
@@ -92,11 +107,12 @@ export async function getPortalDashboardData(params: {
   const ahead = new Date(now.getTime() + AHEAD_DAYS * DAY_MS);
   const locale = orgFormatLocale(organization.locale);
 
-  const [payments, forms, events, memberGroups, fields, answers] = await Promise.all([
+  const [payments, forms, events, memberGroups, pendingRequests, fields, answers] = await Promise.all([
     listPaymentsForMember(orgId, member.id),
     listFormsForViewer({ orgId, memberId: member.id }),
     listEventsForViewer({ orgId, memberId: member.id }),
     listMemberGroups(orgId, member.id),
+    countPendingJoinRequests(orgId, member.id),
     listActiveMemberCustomFields(orgId, ["registration", "post_approval", "optional"]),
     getMemberCustomFieldAnswerMap(orgId, member.id),
   ]);
@@ -272,6 +288,7 @@ export async function getPortalDashboardData(params: {
     memberSince: member.linkedAt ?? member.createdAt,
     contactEmail: resolveMemberEmailForOrg({ member, organization }),
     groups: memberGroups,
+    pendingRequests,
     fee: organization.membershipFeeEnabled
       ? latestFee
         ? {

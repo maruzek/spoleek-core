@@ -1,6 +1,12 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { isRsvpOpen } from "@/lib/events/rsvp";
+import {
+  type PortalAvailableAction,
+  type PortalLeaveBlockedReason,
+  resolveAvailableAction,
+  resolveLeave,
+} from "@/lib/groups/portal-actions";
 import { orgFormatLocale } from "@/lib/i18n";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { formatMoney, getPaymentTitle } from "@/lib/payments";
@@ -46,6 +52,21 @@ export type PortalGroup = {
   leaders: PortalGroupPerson[];
   nextEvent: { id: string; slug: string; title: string; startsAt: Date } | null;
   notices: PortalGroupNotice[];
+  /** Whether the member may leave on their own; the reason key when not. */
+  canLeave: boolean;
+  leaveBlockedReason: PortalLeaveBlockedReason | null;
+  /** True when the viewer is this group's only active admin — the leave dialog warns. */
+  isLastAdmin: boolean;
+};
+
+/** A group the member is not in, with the one thing they can do about it. */
+export type PortalAvailableGroup = {
+  id: string;
+  name: string;
+  description: string | null;
+  joinPolicy: GroupJoinPolicy;
+  leaders: PortalGroupPerson[];
+  action: PortalAvailableAction;
 };
 
 export type PortalGroupCategory = {
@@ -55,6 +76,8 @@ export type PortalGroupCategory = {
   selectionMode: "single" | "multiple";
   /** Groups the viewer belongs to, in the category's own order. */
   mine: PortalGroup[];
+  /** Groups the viewer could join, request, or is waiting on. */
+  available: PortalAvailableGroup[];
   /** Whether the category has any active group at all. */
   hasGroups: boolean;
 };
@@ -86,6 +109,9 @@ export async function getPortalGroupsData(params: {
         name: groupCategories.name,
         description: groupCategories.description,
         selectionMode: groupCategories.selectionMode,
+        maxSelections: groupCategories.maxSelections,
+        selectionRequired: groupCategories.selectionRequired,
+        showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
       })
       .from(groupCategories)
       .where(and(eq(groupCategories.orgId, orgId), eq(groupCategories.isActive, true)))
@@ -104,16 +130,37 @@ export async function getPortalGroupsData(params: {
     db
       // Deliberately no activeMembership(): this page renders the member's
       // pending / declined requests as well, so it reads every status.
-      .select({ groupId: groupMemberships.groupId, role: groupMemberships.role })
+      .select({
+        groupId: groupMemberships.groupId,
+        role: groupMemberships.role,
+        status: groupMemberships.status,
+        requestedAt: groupMemberships.requestedAt,
+        decidedAt: groupMemberships.decidedAt,
+        declineReason: groupMemberships.declineReason,
+        requestsBlocked: groupMemberships.requestsBlocked,
+      })
       .from(groupMemberships)
       .where(and(eq(groupMemberships.orgId, orgId), eq(groupMemberships.memberId, memberId))),
   ]);
 
-  const myRole = new Map(myMemberships.map((row) => [row.groupId, row.role]));
+  const myRowByGroup = new Map(myMemberships.map((row) => [row.groupId, row]));
+  const myRole = new Map(
+    myMemberships.filter((row) => row.status === "active").map((row) => [row.groupId, row.role]),
+  );
   const myGroupIds = [...myRole.keys()];
 
-  const [leaderRows, viewerEvents, payments] = await Promise.all([
-    myGroupIds.length > 0
+  // Leaders are shown on the member's own cards and on "ask a leader" cards,
+  // so they are loaded for every visible group in one go.
+  const visibleGroupIds = groupRows
+    .filter((group) => {
+      if (myRole.has(group.id) || myRowByGroup.has(group.id)) return true;
+      if (group.joinPolicy !== "admin_only") return true;
+      return categoryRows.some((c) => c.id === group.categoryId && c.showGroupsToNonMembers);
+    })
+    .map((group) => group.id);
+
+  const [leaderRows, adminCountRows, viewerEvents, payments] = await Promise.all([
+    visibleGroupIds.length > 0
       ? db
           .select({
             groupId: groupMemberships.groupId,
@@ -131,12 +178,31 @@ export async function getPortalGroupsData(params: {
             and(
               eq(groupMemberships.orgId, orgId),
               activeMembership(),
-              inArray(groupMemberships.groupId, myGroupIds),
+              inArray(groupMemberships.groupId, visibleGroupIds),
               eq(groupMemberships.role, "group_admin"),
               eq(tenantMembers.status, "active"),
             ),
           )
           .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName))
+      : Promise.resolve([]),
+    // Counts every active admin, not only the active-status people above, so
+    // "you are the last leader" is judged on the roster as the admin sees it.
+    myGroupIds.length > 0
+      ? db
+          .select({
+            groupId: groupMemberships.groupId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(groupMemberships)
+          .where(
+            and(
+              eq(groupMemberships.orgId, orgId),
+              activeMembership(),
+              inArray(groupMemberships.groupId, myGroupIds),
+              eq(groupMemberships.role, "group_admin"),
+            ),
+          )
+          .groupBy(groupMemberships.groupId)
       : Promise.resolve([]),
     listEventsForViewer({ orgId, memberId }),
     listPaymentsForMember(orgId, memberId),
@@ -152,6 +218,8 @@ export async function getPortalGroupsData(params: {
     };
     leadersByGroup.set(row.groupId, [...(leadersByGroup.get(row.groupId) ?? []), person]);
   }
+
+  const adminCountByGroup = new Map(adminCountRows.map((row) => [row.groupId, row.count]));
 
   const now = new Date();
   const locale = orgFormatLocale(organization.locale);
@@ -220,24 +288,60 @@ export async function getPortalGroupsData(params: {
   const categories: PortalGroupCategory[] = categoryRows
     .map((category) => {
       const inCategory = groupRows.filter((group) => group.categoryId === category.id);
+      const myActiveInCategory = inCategory
+        .filter((group) => myRole.has(group.id))
+        .map((group) => ({ id: group.id, name: group.name, joinPolicy: group.joinPolicy }));
+
       const mine: PortalGroup[] = inCategory
         .filter((group) => myRole.has(group.id))
-        .map((group) => ({
-          id: group.id,
-          name: group.name,
-          description: group.description,
-          joinPolicy: group.joinPolicy,
-          role: myRole.get(group.id) ?? "member",
-          leaders: leadersByGroup.get(group.id) ?? [],
-          nextEvent: nextEventByGroup.get(group.id) ?? null,
-          notices: noticesByGroup.get(group.id) ?? [],
-        }));
+        .map((group) => {
+          const role = myRole.get(group.id) ?? "member";
+          const leave = resolveLeave(group, category, myActiveInCategory);
+          return {
+            id: group.id,
+            name: group.name,
+            description: group.description,
+            joinPolicy: group.joinPolicy,
+            role,
+            leaders: leadersByGroup.get(group.id) ?? [],
+            nextEvent: nextEventByGroup.get(group.id) ?? null,
+            notices: noticesByGroup.get(group.id) ?? [],
+            canLeave: leave.canLeave,
+            leaveBlockedReason: leave.reason,
+            isLastAdmin: role === "group_admin" && (adminCountByGroup.get(group.id) ?? 0) <= 1,
+          };
+        });
+
+      const available: PortalAvailableGroup[] = inCategory
+        .filter((group) => !myRole.has(group.id))
+        .flatMap((group) => {
+          const row = myRowByGroup.get(group.id) ?? null;
+          const action = resolveAvailableAction({
+            group,
+            row: row && row.status !== "active" ? row : null,
+            category,
+            myActiveInCategory,
+          });
+          if (!action) return [];
+          return [
+            {
+              id: group.id,
+              name: group.name,
+              description: group.description,
+              joinPolicy: group.joinPolicy,
+              leaders: leadersByGroup.get(group.id) ?? [],
+              action,
+            },
+          ];
+        });
+
       return {
         id: category.id,
         name: category.name,
         description: category.description,
         selectionMode: category.selectionMode,
         mine,
+        available,
         hasGroups: inCategory.length > 0,
       };
     })

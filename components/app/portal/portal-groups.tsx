@@ -1,21 +1,75 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRightIcon, CalendarDaysIcon, MailIcon, ShieldIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  CalendarDaysIcon,
+  MailIcon,
+  MoreHorizontalIcon,
+  ShieldIcon,
+} from "lucide-react";
 
-import { useFormatters } from "@/components/locale-provider";
+import { useDictionary, useFormatters } from "@/components/locale-provider";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
+import { AvailableActionSlot, LeaveMenuItem } from "@/components/app/portal/portal-group-actions";
 import { cn } from "@/lib/utils";
 import type {
+  PortalAvailableGroup,
   PortalGroup,
   PortalGroupCategory,
+  PortalGroupPerson,
   PortalGroupsData,
 } from "@/server/queries/portal-groups";
 
-// ─── One group ──────────────────────────────────────────────────────────────
+// ─── Shared bits ────────────────────────────────────────────────────────────
+
+function Leaders({ leaders }: { leaders: PortalGroupPerson[] }) {
+  const t = useDictionary().portalGroups;
+
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-xs text-muted-foreground">
+        {leaders.length === 1 ? t.leader : t.leaders}
+      </dt>
+      <dd className="flex min-w-0 flex-col items-end gap-0.5 text-right">
+        {leaders.length === 0 ? (
+          <span className="text-muted-foreground">{t.notAssignedYet}</span>
+        ) : (
+          leaders.map((leader) => (
+            <span key={leader.id} className="flex max-w-full items-center gap-2">
+              <span className={cn("truncate", leader.isYou && "text-primary")}>
+                {leader.name}
+                {leader.isYou ? ` ${t.you}` : ""}
+              </span>
+              {leader.email && !leader.isYou ? (
+                <a
+                  href={`mailto:${leader.email}`}
+                  aria-label={t.writeTo(leader.name)}
+                  title={leader.email}
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <MailIcon className="size-3.5" aria-hidden />
+                </a>
+              ) : null}
+            </span>
+          ))
+        )}
+      </dd>
+    </div>
+  );
+}
+
+// ─── One group of mine ──────────────────────────────────────────────────────
 
 function GroupCard({ group, index }: { group: PortalGroup; index: number }) {
+  const t = useDictionary().portalGroups;
   const { formatDateTime } = useFormatters();
   const r = reveal(index);
 
@@ -34,12 +88,24 @@ function GroupCard({ group, index }: { group: PortalGroup; index: number }) {
             <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{group.description}</p>
           ) : null}
         </div>
-        {group.role === "group_admin" ? (
-          <Badge variant="secondary" className="shrink-0">
-            <ShieldIcon data-icon="inline-start" />
-            You lead this
-          </Badge>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {group.role === "group_admin" ? (
+            <Badge variant="secondary">
+              <ShieldIcon data-icon="inline-start" />
+              {t.youLeadThis}
+            </Badge>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" className="-mr-1.5 -mt-1 text-muted-foreground" aria-label={t.moreActions}>
+                <MoreHorizontalIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-56">
+              <LeaveMenuItem group={group} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {group.notices.length > 0 ? (
@@ -58,37 +124,9 @@ function GroupCard({ group, index }: { group: PortalGroup; index: number }) {
       ) : null}
 
       <dl className="flex flex-col gap-1.5 border-t border-border pt-3 text-sm">
+        <Leaders leaders={group.leaders} />
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="shrink-0 text-xs text-muted-foreground">
-            {group.leaders.length === 1 ? "Leader" : "Leaders"}
-          </dt>
-          <dd className="flex min-w-0 flex-col items-end gap-0.5 text-right">
-            {group.leaders.length === 0 ? (
-              <span className="text-muted-foreground">Not assigned yet</span>
-            ) : (
-              group.leaders.map((leader) => (
-                <span key={leader.id} className="flex max-w-full items-center gap-2">
-                  <span className={cn("truncate", leader.isYou && "text-primary")}>
-                    {leader.name}
-                    {leader.isYou ? " (you)" : ""}
-                  </span>
-                  {leader.email && !leader.isYou ? (
-                    <a
-                      href={`mailto:${leader.email}`}
-                      aria-label={`Write to ${leader.name}`}
-                      title={leader.email}
-                      className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      <MailIcon className="size-3.5" aria-hidden />
-                    </a>
-                  ) : null}
-                </span>
-              ))
-            )}
-          </dd>
-        </div>
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="shrink-0 text-xs text-muted-foreground">Next up</dt>
+          <dt className="shrink-0 text-xs text-muted-foreground">{t.nextUp}</dt>
           <dd className="min-w-0 text-right">
             {group.nextEvent ? (
               <Link
@@ -106,11 +144,52 @@ function GroupCard({ group, index }: { group: PortalGroup; index: number }) {
                 />
               </Link>
             ) : (
-              <span className="text-muted-foreground">Nothing planned</span>
+              <span className="text-muted-foreground">{t.nothingPlanned}</span>
             )}
           </dd>
         </div>
       </dl>
+    </li>
+  );
+}
+
+// ─── One group I could join ─────────────────────────────────────────────────
+
+/**
+ * Lighter than an own-group card on purpose: dashed ring, no notices or next
+ * event, one action area. Pending and declined cards carry a tinted edge so a
+ * request in flight reads at a glance among the ones still open.
+ */
+function AvailableGroupCard({ group, index }: { group: PortalAvailableGroup; index: number }) {
+  const r = reveal(index);
+  const kind = group.action.kind;
+
+  return (
+    <li
+      className={cn(
+        "flex flex-col gap-3 rounded-xl border border-dashed border-foreground/20 bg-card/60 p-4 text-card-foreground",
+        kind === "pending" && "border-solid border-orange-400/60 bg-orange-50/40 dark:bg-orange-950/20",
+        kind === "declined" && "border-solid border-foreground/10 bg-muted/30",
+        r.className,
+      )}
+      style={r.style}
+    >
+      <div className="min-w-0">
+        <h3 className="truncate font-sans text-base font-semibold text-foreground">{group.name}</h3>
+        {group.description ? (
+          <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{group.description}</p>
+        ) : null}
+      </div>
+
+      {group.leaders.length > 0 || kind === "ask_leader" ? (
+        <dl className="flex flex-col gap-1.5 text-sm">
+          <Leaders leaders={group.leaders} />
+        </dl>
+      ) : null}
+
+      <div className="mt-auto border-t border-dashed border-border pt-3">
+        <AvailableActionSlot group={group} action={group.action} />
+      </div>
     </li>
   );
 }
@@ -124,6 +203,12 @@ function CategorySection({
   category: PortalGroupCategory;
   startIndex: number;
 }) {
+  const t = useDictionary().portalGroups;
+  const single = category.selectionMode === "single";
+  const canPick = category.available.some(
+    (group) => group.action.kind === "join" || group.action.kind === "request",
+  );
+
   return (
     <section>
       <SectionHeading count={category.mine.length} hint={category.description ?? undefined}>
@@ -131,8 +216,7 @@ function CategorySection({
       </SectionHeading>
       {category.mine.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
-          You are not in {category.selectionMode === "single" ? "a" : "any"} {category.name} group.
-          Groups are assigned by the organization — ask an admin if you think you belong in one.
+          {t.notInAny(category.name, single)} {canPick ? t.pickOneBelow : t.askAdmin}
         </p>
       ) : (
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -141,17 +225,42 @@ function CategorySection({
           ))}
         </ul>
       )}
+
+      {category.available.length > 0 ? (
+        <div className="mt-5">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h3 className="font-sans text-sm font-semibold text-muted-foreground">{t.availableHeading}</h3>
+            <span className="text-xs text-muted-foreground">{t.availableHint(single)}</span>
+          </div>
+          <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {category.available.map((group, index) => (
+              <AvailableGroupCard
+                key={group.id}
+                group={group}
+                index={startIndex + Math.max(category.mine.length, 1) + index}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 // ─── Page body ──────────────────────────────────────────────────────────────
 
+/** Cards a category occupies in the reveal sequence: its own, its available, or the one empty note. */
+function cardCount(category: PortalGroupCategory) {
+  return Math.max(category.mine.length, 1) + category.available.length;
+}
+
 export function PortalGroups({ data }: { data: PortalGroupsData }) {
+  const t = useDictionary().portalGroups;
+
   if (data.categories.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-        The organization has not set up any groups yet.
+        {t.noGroupsYet}
       </p>
     );
   }
@@ -162,9 +271,7 @@ export function PortalGroups({ data }: { data: PortalGroupsData }) {
         <CategorySection
           key={category.id}
           category={category}
-          startIndex={data.categories
-            .slice(0, categoryIndex)
-            .reduce((sum, c) => sum + Math.max(c.mine.length, 1), 0)}
+          startIndex={data.categories.slice(0, categoryIndex).reduce((sum, c) => sum + cardCount(c), 0)}
         />
       ))}
     </div>

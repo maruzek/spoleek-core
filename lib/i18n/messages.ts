@@ -472,6 +472,82 @@ const en = {
   },
 
   /** The admin ⌘K palette and the header search that opens it. */
+  /** The member portal's "My groups" page and its self-service actions. */
+  portalGroups: {
+    youLeadThis: "You lead this",
+    leader: "Leader",
+    leaders: "Leaders",
+    notAssignedYet: "Not assigned yet",
+    you: "(you)",
+    writeTo: (name: string) => `Write to ${name}`,
+    nextUp: "Next up",
+    nothingPlanned: "Nothing planned",
+    noGroupsYet: "The organization has not set up any groups yet.",
+    notInAny: (categoryName: string, single: boolean) =>
+      `You are not in ${single ? "a" : "any"} ${categoryName} group.`,
+    pickOneBelow: "Pick one below.",
+    askAdmin: "Groups are assigned by the organization — ask an admin if you think you belong in one.",
+    availableHeading: "Groups you can join",
+    availableHint: (single: boolean): string =>
+      single ? "You can be in one group here." : "You can be in several groups here.",
+    moreActions: "More actions",
+    // Actions
+    join: "Join",
+    switchTo: "Switch",
+    request: "Ask to join",
+    requestAgain: "Ask again",
+    withdraw: "Withdraw",
+    leave: "Leave group",
+    askLeader: "Ask a leader",
+    askLeaderHint: "Only a leader can add you to this group. Write to one of them.",
+    // States
+    pendingTitle: (requestedAt: string) => `Requested ${requestedAt}`,
+    pendingDetail: "Waiting for a leader.",
+    declinedTitle: (decidedAt: string) => `Declined ${decidedAt}`,
+    declinedNoReason: "The leaders did not add a reason.",
+    declinedBlocked: "Further requests are closed for now — talk to a leader.",
+    blocked: {
+      ask_leader_to_switch: "Ask a leader to switch you.",
+      leave_current_first: "Leave your current group first.",
+      max_selections_reached: "Leave a group first — you are at the limit here.",
+    },
+    leaveBlocked: {
+      policy: "Only a leader can remove you from this group.",
+      selection_required: "You need to stay in one group of this kind. Switch instead.",
+    },
+    // Dialogs
+    switchTitle: (from: string, to: string) => `Switch to ${to}?`,
+    switchBody: (from: string, to: string) =>
+      `You will leave ${from} and join ${to}. Events and notices from ${from} will disappear from your portal.`,
+    requestTitle: (groupName: string) => `Ask to join ${groupName}`,
+    requestBody: "A leader will see your request and decide. You can add a short note.",
+    requestMessageLabel: "Message (optional)",
+    requestMessagePlaceholder: "Why you'd like to join, or anything the leaders should know.",
+    charactersLeft: (count: number) => `${count} left`,
+    send: "Send request",
+    withdrawTitle: "Withdraw your request?",
+    withdrawBody: (groupName: string) =>
+      `The leaders of ${groupName} will no longer see it. You can ask again later.`,
+    leaveTitle: (groupName: string) => `Leave ${groupName}?`,
+    leaveBody: "Its events, notices and messages will disappear from your portal.",
+    leaveAdminWarning:
+      "You lead this group. If you leave, it may have no leader until an org admin appoints one.",
+    leaveLastAdminWarning:
+      "You are the only leader of this group. If you leave, nobody will be left to lead it.",
+    cancel: "Cancel",
+    confirm: "Confirm",
+    // Toasts
+    joined: (groupName: string) => `You are now in ${groupName}.`,
+    switched: (groupName: string) => `You switched to ${groupName}.`,
+    requested: (groupName: string) => `Request sent to the leaders of ${groupName}.`,
+    withdrawn: "Request withdrawn.",
+    left: (groupName: string) => `You left ${groupName}.`,
+    failed: "That did not work. Try again.",
+    // Dashboard
+    requestsWaiting: (count: number) =>
+      count === 1 ? "1 request waiting for a leader" : `${count} requests waiting for a leader`,
+  },
+
   commandPalette: {
     searchButton: "Search…",
     title: "Command palette",
@@ -1172,6 +1248,75 @@ const cs: Dictionary = {
       showDetails: "Zobrazit platební údaje",
       noAccount: "Organizace zatím nemá nastavený bankovní účet — zeptejte se pořadatele, jak zaplatit.",
     },
+  },
+
+  portalGroups: {
+    youLeadThis: "Vedete tuto skupinu",
+    leader: "Vedoucí",
+    leaders: "Vedoucí",
+    notAssignedYet: "Zatím nikdo",
+    you: "(vy)",
+    writeTo: (name: string) => `Napsat ${name}`,
+    nextUp: "Nejbližší akce",
+    nothingPlanned: "Nic naplánováno",
+    noGroupsYet: "Organizace zatím žádné skupiny nezaložila.",
+    notInAny: (categoryName: string) => `Nejste v žádné skupině typu ${categoryName}.`,
+    pickOneBelow: "Vyberte si níže.",
+    askAdmin: "Do skupin zařazuje organizace — pokud si myslíte, že do některé patříte, ozvěte se správci.",
+    availableHeading: "Skupiny, do kterých se můžete přidat",
+    availableHint: (single: boolean) =>
+      single ? "Zde můžete být jen v jedné skupině." : "Zde můžete být ve více skupinách.",
+    moreActions: "Další akce",
+    join: "Přidat se",
+    switchTo: "Přejít",
+    request: "Požádat o vstup",
+    requestAgain: "Požádat znovu",
+    withdraw: "Stáhnout žádost",
+    leave: "Odejít ze skupiny",
+    askLeader: "Oslovit vedoucího",
+    askLeaderHint: "Do této skupiny vás může přidat jen vedoucí. Napište některému z nich.",
+    pendingTitle: (requestedAt: string) => `Požádáno ${requestedAt}`,
+    pendingDetail: "Čeká na vedoucího.",
+    declinedTitle: (decidedAt: string) => `Zamítnuto ${decidedAt}`,
+    declinedNoReason: "Vedoucí nepřipojili důvod.",
+    declinedBlocked: "Další žádosti jsou zatím uzavřené — domluvte se s vedoucím.",
+    blocked: {
+      ask_leader_to_switch: "O přesun požádejte vedoucího.",
+      leave_current_first: "Nejdříve odejděte ze své současné skupiny.",
+      max_selections_reached: "Nejdříve z některé skupiny odejděte — jste na limitu.",
+    },
+    leaveBlocked: {
+      policy: "Z této skupiny vás může odebrat jen vedoucí.",
+      selection_required: "V jedné skupině tohoto typu musíte zůstat. Místo toho přejděte do jiné.",
+    },
+    switchTitle: (from: string, to: string) => `Přejít do skupiny ${to}?`,
+    switchBody: (from: string, to: string) =>
+      `Odejdete ze skupiny ${from} a přidáte se do skupiny ${to}. Akce a oznámení skupiny ${from} z vašeho portálu zmizí.`,
+    requestTitle: (groupName: string) => `Požádat o vstup do skupiny ${groupName}`,
+    requestBody: "Vedoucí vaši žádost uvidí a rozhodne. Můžete připojit krátkou zprávu.",
+    requestMessageLabel: "Zpráva (nepovinné)",
+    requestMessagePlaceholder: "Proč se chcete přidat nebo cokoli, co by vedoucí měli vědět.",
+    charactersLeft: (count: number) => `Zbývá ${count} ${csCharacters(count)}`,
+    send: "Odeslat žádost",
+    withdrawTitle: "Stáhnout žádost?",
+    withdrawBody: (groupName: string) =>
+      `Vedoucí skupiny ${groupName} ji už neuvidí. Později můžete požádat znovu.`,
+    leaveTitle: (groupName: string) => `Odejít ze skupiny ${groupName}?`,
+    leaveBody: "Její akce, oznámení a zprávy z vašeho portálu zmizí.",
+    leaveAdminWarning:
+      "Tuto skupinu vedete. Pokud odejdete, může zůstat bez vedoucího, dokud správce organizace nejmenuje nového.",
+    leaveLastAdminWarning:
+      "Jste jediný vedoucí této skupiny. Pokud odejdete, nezůstane nikdo, kdo by ji vedl.",
+    cancel: "Zrušit",
+    confirm: "Potvrdit",
+    joined: (groupName: string) => `Jste ve skupině ${groupName}.`,
+    switched: (groupName: string) => `Přešli jste do skupiny ${groupName}.`,
+    requested: (groupName: string) => `Žádost odeslána vedoucím skupiny ${groupName}.`,
+    withdrawn: "Žádost stažena.",
+    left: (groupName: string) => `Odešli jste ze skupiny ${groupName}.`,
+    failed: "To se nepodařilo. Zkuste to znovu.",
+    requestsWaiting: (count: number) =>
+      `${count} ${csPlural(count, "žádost čeká", "žádosti čekají", "žádostí čeká")} na vedoucího`,
   },
 
   commandPalette: {

@@ -12,7 +12,7 @@ import {
   UserRoundIcon,
 } from "lucide-react";
 
-import { useFormatLocale, useFormatters } from "@/components/locale-provider";
+import { useDictionary, useFormatLocale, useFormatters } from "@/components/locale-provider";
 import {
   AllClear,
   DayHeading,
@@ -217,6 +217,7 @@ function MembershipSection({
   startIndex: number;
 }) {
   const { formatDate } = useFormatters();
+  const t = useDictionary().portalGroups;
   const r = reveal(startIndex);
 
   return (
@@ -283,6 +284,18 @@ function MembershipSection({
               ))}
             </ul>
           )}
+          {membership.pendingRequests > 0 ? (
+            <Link
+              href="/portal/groups"
+              className="mt-1 inline-flex items-center gap-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <span className="relative flex size-2 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-orange-500/60" />
+                <span className="relative inline-flex size-2 rounded-full bg-orange-500" />
+              </span>
+              {t.requestsWaiting(membership.pendingRequests)}
+            </Link>
+          ) : null}
         </div>
       </ScrollList>
     </section>

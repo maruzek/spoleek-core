@@ -61,6 +61,8 @@ export type MembershipSummary = {
   /** The address the organization writes to, after preference resolution. */
   contactEmail: string | null;
   groups: { id: string; name: string; categoryName: string; isAdmin: boolean }[];
+  /** Join requests the member has sent that no leader has decided yet. */
+  pendingRequests: number;
   /** The current period's fee, when fees are on: paid, due, or nothing issued. */
   fee: { label: string; status: "paid" | "pending" | "overdue" | "none" } | null;
 };
