@@ -23,6 +23,7 @@ import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/
 import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { PortalFormCard } from "@/components/app/forms/portal-form-card";
 import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
+import { CopyButton } from "@/components/app/copy-button";
 import { GroupAnnouncementEditor } from "@/components/app/portal/group-announcement-editor";
 import { GroupResourcesEditor } from "@/components/app/portal/group-resources-editor";
 import { AvailableActionSlot, LeaveMenuItem } from "@/components/app/portal/portal-group-actions";
@@ -734,8 +735,8 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
   const tg = useDictionary().portalGroups;
   const { leaders, roster } = detail;
   const leaderIds = new Set(leaders.map((leader) => leader.id));
-  const members = roster?.filter((person) => !leaderIds.has(person.id)) ?? null;
   const leaderEmails = leaders.filter((leader) => leader.email && !leader.isYou).map((leader) => leader.email!);
+  const members = roster?.filter((person) => !leaderIds.has(person.id)) ?? null;
 
   return (
     <div className="flex max-w-4xl flex-col gap-6">
@@ -744,13 +745,8 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
           <SectionHeading
             count={leaders.length}
             hint={
-              leaderEmails.length > 0 ? (
-                <Button asChild variant="outline" size="sm">
-                  <a href={`mailto:${leaderEmails.join(",")}`}>
-                    <MailIcon data-icon="inline-start" />
-                    {t.emailLeaders}
-                  </a>
-                </Button>
+              leaderEmails.length > 1 ? (
+                <CopyButton variant="outline" value={leaderEmails.join(", ")} label={t.copyLeaderEmails} />
               ) : undefined
             }
           >
@@ -765,14 +761,15 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
                 image={null}
                 isYou={leader.isYou}
                 leader
+                email={leader.email}
                 trailing={
                   leader.email && !leader.isYou ? (
-                    <Button asChild variant="ghost" size="sm" className="-mr-2 text-muted-foreground">
-                      <a href={`mailto:${leader.email}`} aria-label={tg.writeTo(leader.name)} title={leader.email}>
-                        <MailIcon data-icon="inline-start" />
-                        {t.write}
-                      </a>
-                    </Button>
+                    <CopyButton
+                      value={leader.email}
+                      iconOnly
+                      label={tg.copyEmailOf(leader.name)}
+                      className="-mr-1 text-muted-foreground"
+                    />
                   ) : null
                 }
               />
@@ -813,6 +810,7 @@ function PersonRow({
   image,
   isYou,
   leader = false,
+  email = null,
   trailing,
 }: {
   index: number;
@@ -820,6 +818,8 @@ function PersonRow({
   image: string | null;
   isYou: boolean;
   leader?: boolean;
+  /** Shown under the name — leaders only; the roster never carries one. */
+  email?: string | null;
   trailing?: ReactNode;
 }) {
   const t = useDictionary().portalGroupPage;
@@ -843,9 +843,15 @@ function PersonRow({
           {isYou ? ` ${t.you}` : ""}
         </span>
         {leader ? (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <ShieldIcon className="size-3" aria-hidden />
+          <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldIcon className="size-3 shrink-0" aria-hidden />
             {t.leaderBadge}
+            {email ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate font-mono">{email}</span>
+              </>
+            ) : null}
           </span>
         ) : null}
       </span>

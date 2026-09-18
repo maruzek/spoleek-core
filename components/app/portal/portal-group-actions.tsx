@@ -8,12 +8,12 @@ import {
   ArrowLeftRightIcon,
   ClockIcon,
   LogOutIcon,
-  MailIcon,
   PlusIcon,
   SendIcon,
   XIcon,
 } from "lucide-react";
 
+import { CopyButton } from "@/components/app/copy-button";
 import { useDictionary, useFormatters } from "@/components/locale-provider";
 import {
   AlertDialog,
@@ -303,14 +303,7 @@ export function AvailableActionSlot({
       return (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground">{t.askLeaderHint}</p>
-          {first?.email ? (
-            <Button size="sm" variant="outline" asChild>
-              <a href={`mailto:${first.email}`}>
-                <MailIcon data-icon="inline-start" />
-                {t.askLeader}
-              </a>
-            </Button>
-          ) : null}
+          {first?.email ? <CopyButton size="sm" variant="outline" value={first.email} label={t.askLeader} /> : null}
         </div>
       );
     }

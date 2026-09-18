@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ArrowRightIcon,
   CalendarDaysIcon,
-  MailIcon,
   MoreHorizontalIcon,
   ShieldIcon,
 } from "lucide-react";
@@ -17,6 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CopyButton } from "@/components/app/copy-button";
 import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
 import { AvailableActionSlot, LeaveMenuItem } from "@/components/app/portal/portal-group-actions";
 import { cn } from "@/lib/utils";
@@ -49,14 +49,12 @@ function Leaders({ leaders }: { leaders: PortalGroupPerson[] }) {
                 {leader.isYou ? ` ${t.you}` : ""}
               </span>
               {leader.email && !leader.isYou ? (
-                <a
-                  href={`mailto:${leader.email}`}
-                  aria-label={t.writeTo(leader.name)}
-                  title={leader.email}
-                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <MailIcon className="size-3.5" aria-hidden />
-                </a>
+                <CopyButton
+                  value={leader.email}
+                  iconOnly
+                  label={t.copyEmailOf(leader.name)}
+                  className="-my-1 size-6 shrink-0 text-muted-foreground"
+                />
               ) : null}
             </span>
           ))
