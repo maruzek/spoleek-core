@@ -54,6 +54,7 @@ function toDefaultValues(
     isActive: category?.isActive ?? true,
     isPinnedToNavigation: category?.isPinnedToNavigation ?? false,
     showGroupsToNonMembers: category?.showGroupsToNonMembers ?? false,
+    groupPagesVisibleToAllMembers: category?.groupPagesVisibleToAllMembers ?? false,
     showInRegistration: category?.showInRegistration ?? false,
     showInMembersTable: category?.showInMembersTable ?? false,
     groupAdminsManageMembers: category?.groupAdminsManageMembers ?? false,

@@ -2,6 +2,7 @@ import type {
   GroupCategorySelectionMode,
   GroupJoinPolicy,
   GroupMembershipStatus,
+  GroupPageVisibility,
 } from "@/server/db/schema";
 
 /**
@@ -151,4 +152,68 @@ export function resolveLeave(
   }
 
   return { canLeave: true, reason: null };
+}
+
+// ─── Group page access ──────────────────────────────────────────────────────
+
+export type GroupPageVisibilityGroup = {
+  isActive: boolean;
+  pageVisibility: GroupPageVisibility;
+};
+
+export type GroupPageVisibilityCategory = {
+  isActive: boolean;
+  groupPagesVisibleToAllMembers: boolean;
+};
+
+export type GroupPageAccessInput = {
+  /** The viewer's row for this group in any status, or null. */
+  rowStatus: GroupMembershipStatus | null;
+  group: GroupPageVisibilityGroup;
+  category: GroupPageVisibilityCategory;
+};
+
+export type EffectiveGroupPageVisibility = Exclude<GroupPageVisibility, "inherit">;
+
+export type GroupPageAccessLevel = "member" | "visitor";
+
+export type GroupPageAccess = {
+  /** `null` means the page does not exist for this viewer — the route 404s, never 403s. */
+  level: GroupPageAccessLevel | null;
+  effectiveVisibility: EffectiveGroupPageVisibility;
+};
+
+/** The group's `pageVisibility` unless `inherit`, then the category flag. */
+export function resolveEffectiveVisibility(
+  group: Pick<GroupPageVisibilityGroup, "pageVisibility">,
+  category: Pick<GroupPageVisibilityCategory, "groupPagesVisibleToAllMembers">,
+): EffectiveGroupPageVisibility {
+  if (group.pageVisibility !== "inherit") return group.pageVisibility;
+  return category.groupPagesVisibleToAllMembers ? "all_members" : "members_only";
+}
+
+/**
+ * Who the viewer is on a group's portal page.
+ *
+ * Only an `active` row is a member; `pending` and `declined` rows are visitors
+ * like anyone else, so a members-only page stays invisible to someone whose
+ * request was turned down. An inactive group or category has no page at all,
+ * even for its members — the card is not shown either.
+ */
+export function resolveGroupPageAccess(input: GroupPageAccessInput): GroupPageAccess {
+  const effectiveVisibility = resolveEffectiveVisibility(input.group, input.category);
+
+  if (!input.group.isActive || !input.category.isActive) {
+    return { level: null, effectiveVisibility };
+  }
+
+  if (input.rowStatus === "active") {
+    return { level: "member", effectiveVisibility };
+  }
+
+  if (effectiveVisibility === "all_members") {
+    return { level: "visitor", effectiveVisibility };
+  }
+
+  return { level: null, effectiveVisibility };
 }

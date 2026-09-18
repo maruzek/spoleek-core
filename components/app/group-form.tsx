@@ -64,6 +64,7 @@ function toDefaultValues(
     slug: group?.slug ?? "",
     description: group?.description ?? null,
     joinPolicy: group?.joinPolicy ?? "admin_only",
+    pageVisibility: group?.pageVisibility ?? "inherit",
     isActive: group?.isActive ?? true,
     sortOrder: group?.sortOrder ?? 0,
     feeRenewalMonth: group?.feeRenewalMonth ?? null,

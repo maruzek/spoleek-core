@@ -7,6 +7,7 @@ import type {
   GroupCategorySelectionMode,
   GroupJoinPolicy,
   GroupMembershipRole,
+  GroupPageVisibility,
 } from "@/server/db/schema";
 
 const nullableTrimmedString = z
@@ -47,6 +48,28 @@ export const groupJoinPolicyOptions: Array<{
   },
 ];
 
+export const groupPageVisibilityOptions: Array<{
+  value: GroupPageVisibility;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "inherit",
+    label: "Inherit from category",
+    description: "Follow the category's setting for who may open group pages.",
+  },
+  {
+    value: "all_members",
+    label: "Open to all members",
+    description: "Any signed-in member can open this group's page. The roster stays members-only.",
+  },
+  {
+    value: "members_only",
+    label: "Members only",
+    description: "Only the group's members can open its page; others get a not-found page.",
+  },
+];
+
 export const groupMembershipRoleOptions: Array<{
   value: GroupMembershipRole;
   label: string;
@@ -74,6 +97,7 @@ export const groupCategorySchema = z
     isActive: z.boolean().default(true),
     isPinnedToNavigation: z.boolean().default(false),
     showGroupsToNonMembers: z.boolean().default(false),
+    groupPagesVisibleToAllMembers: z.boolean().default(false),
     showInRegistration: z.boolean().default(false),
     showInMembersTable: z.boolean().default(false),
     groupAdminsManageMembers: z.boolean().default(false),
@@ -121,6 +145,9 @@ export const groupSchema = z
     joinPolicy: z
       .enum(["admin_only", "free_join_leave", "request_to_join"])
       .default("admin_only"),
+    pageVisibility: z
+      .enum(["inherit", "all_members", "members_only"])
+      .default("inherit"),
     isActive: z.boolean().default(true),
     sortOrder: z.number().int().min(0).default(0),
     feeRenewalMonth: z
@@ -266,5 +293,45 @@ export const setJoinRequestBlockSchema = z.object({
   blocked: z.boolean(),
 });
 
+/** Sanitized length is checked again in the action; this bounds the request. */
+export const GROUP_ANNOUNCEMENT_MAX_LENGTH = 20_000;
+
+export const updateGroupAnnouncementSchema = z.object({
+  groupId: z.uuid(),
+  html: z.string().max(GROUP_ANNOUNCEMENT_MAX_LENGTH),
+});
+
+export const GROUP_RESOURCES_MAX = 20;
+
+const GROUP_RESOURCE_URL_SCHEMES = ["http:", "https:", "mailto:"] as const;
+
+export const groupResourceSchema = z.object({
+  id: z.uuid().optional(),
+  label: z.string().trim().min(1, "Label is required.").max(80),
+  url: z
+    .string()
+    .trim()
+    .min(1, "Link is required.")
+    .max(2000)
+    .refine((value) => {
+      try {
+        const scheme = new URL(value).protocol;
+        return (GROUP_RESOURCE_URL_SCHEMES as readonly string[]).includes(scheme);
+      } catch {
+        return false;
+      }
+    }, "Link must start with http://, https:// or mailto:."),
+});
+
+export const saveGroupResourcesSchema = z.object({
+  groupId: z.uuid(),
+  resources: z.array(groupResourceSchema).max(GROUP_RESOURCES_MAX),
+});
+
+export const setHideFromGroupRostersSchema = z.object({
+  hidden: z.boolean(),
+});
+
+export type GroupResourceFormValues = z.infer<typeof groupResourceSchema>;
 export type GroupCategoryFormValues = z.infer<typeof groupCategorySchema>;
 export type GroupFormValues = z.infer<typeof groupSchema>;
