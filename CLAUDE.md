@@ -21,6 +21,7 @@
 - `pnpm db:migrate` — apply migrations
 - `pnpm db:seed` — seed demo org
 - `pnpm db:seed:events` — demo events incl. a priced trip with every payment state (`--reset` removes)
+- `pnpm db:seed:groups` — demo category with a free / request / admin-only group, a leader, one pending and one declined request (`--reset` removes)
 - `docker compose up -d db adminer` — local Postgres + Adminer
 
 Run `pnpm typecheck`, `pnpm lint` and `pnpm test` before declaring a task done.

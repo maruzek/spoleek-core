@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { organizationPolicies, organizations } from "@/server/db/schema";
 import { seedDemoEvents } from "@/server/lib/events/seed";
 import { seedDemoForms } from "@/server/lib/forms/seed";
+import { seedDemoGroups } from "@/server/lib/groups/seed";
 import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
 
 async function main() {
@@ -33,6 +34,8 @@ async function main() {
     locale: "en",
   });
 
+  // Groups first so the demo events find a group to be owned by.
+  await seedDemoGroups(orgId);
   const demoEvents = await seedDemoEvents(orgId);
   await seedDemoForms(orgId, { eventId: demoEvents.groupEventId });
 

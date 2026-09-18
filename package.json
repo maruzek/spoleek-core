@@ -18,6 +18,7 @@
     "email:dev": "email dev --dir emails",
     "db:seed:report": "tsx --env-file=.env scripts/seed-report-test.ts",
     "db:seed:events": "tsx --env-file=.env scripts/seed-events-test.ts",
+    "db:seed:groups": "tsx --env-file=.env scripts/seed-groups-test.ts",
     "db:seed:forms": "tsx --env-file=.env scripts/seed-forms-test.ts"
   },
   "dependencies": {
