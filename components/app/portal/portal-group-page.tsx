@@ -1,21 +1,26 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
+  ArrowDownNarrowWideIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpNarrowWideIcon,
   CalendarIcon,
   ClipboardListIcon,
   ExternalLinkIcon,
+  LayoutDashboardIcon,
   LinkIcon,
   MailIcon,
   MoreHorizontalIcon,
+  SearchIcon,
   ShieldIcon,
   UsersIcon,
 } from "lucide-react";
 
-import { EventAgendaRow } from "@/components/app/events/event-agenda-row";
+import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/app/events/event-agenda-row";
+import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { PortalFormCard } from "@/components/app/forms/portal-form-card";
 import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
 import { GroupAnnouncementEditor } from "@/components/app/portal/group-announcement-editor";
@@ -30,18 +35,27 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { PAST_EVENTS_CAP } from "@/lib/groups/portal-group-page";
 import { formatMoney } from "@/lib/payments";
+import { matchesSearch } from "@/lib/search";
+import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
 import { cn } from "@/lib/utils";
-import type { PortalGroupDetail, PortalGroupRosterEntry } from "@/server/queries/portal-group-detail";
+import type {
+  GroupEventItem,
+  PortalGroupDetail,
+  PortalGroupRosterEntry,
+} from "@/server/queries/portal-group-detail";
 import type { PortalGroupPerson } from "@/server/queries/portal-groups";
 
 /**
- * One group, for one member. The header is the page title; below it two
- * columns — what the group is doing (board, events, forms) and where the
- * member stands in it (standing, links, roster, leader tools). Visitors get
- * the left column trimmed to what they may see and no right column beyond
- * the links. Same cards, rows and stagger as the rest of the portal.
+ * One group, for one member. The header is the page title; under it four
+ * tabs — Overview (board, standing, links, leader tools), Events (with the
+ * now / upcoming / past split and the agenda's filters), Forms, and Members
+ * when the org shows rosters. Visitors see the same tabs trimmed to what
+ * they may see. Same cards, rows and stagger as the rest of the portal.
  */
 export function PortalGroupPage({
   detail,
@@ -54,33 +68,109 @@ export function PortalGroupPage({
   timeZone: string;
   canManage: boolean;
 }) {
-  const isMember = detail.access === "member";
-  const hasAside = isMember || detail.resources.length > 0 || canManage;
+  const t = useDictionary().portalGroupPage;
+  const liveEvents = detail.events.upcoming.length + detail.events.alsoInvited.length;
+  const openForms = detail.forms.open.length;
+  const hasForms = openForms + detail.forms.past.length > 0;
 
   return (
     <div className="flex flex-1 flex-col pb-8">
       <Header detail={detail} canManage={canManage} />
 
-      <div className={cn("grid gap-8", hasAside ? "max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
-        <div className="flex min-w-0 flex-col gap-10">
-          {detail.announcement || canManage ? (
-            <AnnouncementSection detail={detail} canManage={canManage} />
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">
+            <LayoutDashboardIcon data-icon="inline-start" />
+            {t.tabs.overview}
+          </TabsTrigger>
+          <TabsTrigger value="events">
+            <CalendarIcon data-icon="inline-start" />
+            {t.tabs.events}
+            <TabCount count={liveEvents} />
+          </TabsTrigger>
+          {hasForms ? (
+            <TabsTrigger value="forms">
+              <ClipboardListIcon data-icon="inline-start" />
+              {t.tabs.forms}
+              <TabCount count={openForms} accent={openForms > 0} />
+            </TabsTrigger>
           ) : null}
-          <EventsSection detail={detail} locale={locale} timeZone={timeZone} />
-          <FormsSection detail={detail} />
-        </div>
+          {detail.roster ? (
+            <TabsTrigger value="members">
+              <UsersIcon data-icon="inline-start" />
+              {t.tabs.members}
+              <TabCount count={detail.roster.length} />
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
 
-        {hasAside ? (
-          <aside className="flex flex-col gap-6 lg:sticky lg:top-6 lg:self-start">
-            {detail.standing ? <StandingCard detail={detail} locale={locale} /> : null}
-            {detail.leaderPanel ? <LeaderPanel panel={detail.leaderPanel} /> : null}
-            {detail.resources.length > 0 || canManage ? (
-              <ResourcesCard detail={detail} canManage={canManage} />
-            ) : null}
-            {detail.roster ? <RosterCard roster={detail.roster} /> : null}
-          </aside>
+        <TabsContent value="overview" className="pt-4">
+          <OverviewTab detail={detail} locale={locale} canManage={canManage} />
+        </TabsContent>
+        <TabsContent value="events" className="pt-4">
+          <EventsTab detail={detail} locale={locale} timeZone={timeZone} />
+        </TabsContent>
+        {hasForms ? (
+          <TabsContent value="forms" className="pt-4">
+            <FormsSection detail={detail} />
+          </TabsContent>
         ) : null}
-      </div>
+        {detail.roster ? (
+          <TabsContent value="members" className="pt-4">
+            <RosterCard roster={detail.roster} />
+          </TabsContent>
+        ) : null}
+      </Tabs>
+    </div>
+  );
+}
+
+function TabCount({ count, accent = false }: { count: number; accent?: boolean }) {
+  if (count === 0) return null;
+  return (
+    <span
+      className={cn(
+        "ml-1.5 text-xs tabular-nums",
+        accent ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground",
+      )}
+    >
+      {count}
+    </span>
+  );
+}
+
+// ─── Overview ───────────────────────────────────────────────────────────────
+
+/**
+ * The board stretches across the top; below it the member's own cards sit in
+ * a row. A visitor with no links and no standing sees only the board (or,
+ * with nothing posted, the empty note), so the tab never renders blank.
+ */
+function OverviewTab({
+  detail,
+  locale,
+  canManage,
+}: {
+  detail: PortalGroupDetail;
+  locale: string;
+  canManage: boolean;
+}) {
+  const cards = [
+    detail.standing ? <StandingCard key="standing" detail={detail} locale={locale} /> : null,
+    detail.leaderPanel ? <LeaderPanel key="leader" panel={detail.leaderPanel} /> : null,
+    detail.resources.length > 0 || canManage ? (
+      <ResourcesCard key="resources" detail={detail} canManage={canManage} />
+    ) : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="flex max-w-5xl flex-col gap-8">
+      <AnnouncementSection detail={detail} canManage={canManage} />
+      {cards.length > 0 ? (
+        <div className={cn("grid gap-4", cards.length > 1 && "md:grid-cols-2", cards.length > 2 && "xl:grid-cols-3")}>
+          {cards}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -246,7 +336,27 @@ function AnnouncementSection({ detail, canManage }: { detail: PortalGroupDetail;
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
-function EventsSection({
+type EventWindow = "now" | "upcoming" | "past";
+type EventSource = "all" | "owned" | "invited";
+type EventSort = "soonest" | "latest";
+
+/** An event that has started and is not over yet. */
+function isRunning(item: GroupEventItem, now: Date) {
+  const start = item.event.startsAt;
+  return start != null && start <= now;
+}
+
+function startMs(item: GroupEventItem) {
+  return item.event.startsAt ? item.event.startsAt.getTime() : null;
+}
+
+/**
+ * The agenda's controls, scoped to one group: a now / upcoming / past window,
+ * where the event comes from, the member's answer, search, and sort. The
+ * buckets come pre-split by the server; the window split is done here because
+ * "running" depends on the moment the page is looked at.
+ */
+function EventsTab({
   detail,
   locale,
   timeZone,
@@ -255,67 +365,189 @@ function EventsSection({
   locale: string;
   timeZone: string;
 }) {
-  const t = useDictionary().portalGroupPage;
+  const dict = useDictionary();
+  const t = dict.portalGroupPage;
+  const te = dict.events;
   const { upcoming, alsoInvited, past } = detail.events;
+
+  // One instant per mount: the split must not flicker between renders.
+  const [now] = useState(() => new Date());
+  const live = useMemo(() => [...upcoming, ...alsoInvited], [upcoming, alsoInvited]);
+  const running = useMemo(() => live.filter((item) => isRunning(item, now)), [live, now]);
+  const ahead = useMemo(() => live.filter((item) => !isRunning(item, now)), [live, now]);
+
+  const [window, setWindow] = useState<EventWindow>(running.length > 0 ? "now" : "upcoming");
+  const [source, setSource] = useState<EventSource>("all");
+  const [sort, setSort] = useState<EventSort>("soonest");
+  const [query, setQuery] = useState("");
   const [showAllPast, setShowAllPast] = useState(false);
-  const visiblePast = showAllPast ? past : past.slice(0, PAST_EVENTS_CAP);
+
+  const outcomeOptions = useMemo<StatusFilterOption<EventOutcome>[]>(
+    () => [
+      { value: "pending", label: te.list.needsAnswer, dotClassName: "bg-amber-500" },
+      { value: "going", label: te.answer.yes, dotClassName: STATUS_DOT_CLASSES.success },
+      { value: "reserve", label: te.detail.yourStatus.reserve, dotClassName: STATUS_DOT_CLASSES.warning },
+      { value: "maybe", label: te.answer.maybe, dotClassName: STATUS_DOT_CLASSES.info },
+      { value: "no", label: te.answer.no, dotClassName: STATUS_DOT_CLASSES.default },
+    ],
+    [te],
+  );
+  const [outcomes, setOutcomes] = useState<EventOutcome[]>(() => outcomeOptions.map((o) => o.value));
+
+  const pool = window === "now" ? running : window === "upcoming" ? ahead : past;
+  const rows = useMemo(() => {
+    const filtered = pool
+      .filter((item) => source === "all" || item.relation === source)
+      .filter((item) => outcomes.includes(eventOutcomeOf(item)))
+      .filter((item) =>
+        matchesSearch(
+          [item.event.title, item.event.locationName ?? "", item.event.locationAddress ?? "", item.ownerName ?? ""].join(
+            " ",
+          ),
+          query,
+        ),
+      );
+    // Undated events sit at the end whichever way the list runs.
+    return [...filtered].sort((a, b) => {
+      const x = startMs(a);
+      const y = startMs(b);
+      if (x == null || y == null) return (x == null ? 1 : 0) - (y == null ? 1 : 0);
+      return sort === "soonest" ? x - y : y - x;
+    });
+  }, [pool, source, outcomes, query, sort]);
+
+  const filtered = query.trim().length > 0 || source !== "all" || outcomes.length !== outcomeOptions.length;
+  const capped = window === "past" && !showAllPast && rows.length > PAST_EVENTS_CAP;
+  const visible = capped ? rows.slice(0, PAST_EVENTS_CAP) : rows;
+  // Visitors never receive past events, so the toggle would be a dead end.
+  const windows: EventWindow[] = detail.access === "member" ? ["now", "upcoming", "past"] : ["now", "upcoming"];
+  const windowCount: Record<EventWindow, number> = { now: running.length, upcoming: ahead.length, past: past.length };
+  const windowLabel: Record<EventWindow, string> = { now: t.now, upcoming: t.upcoming, past: t.pastEvents };
+  const empty = filtered
+    ? t.noMatch
+    : window === "now"
+      ? t.nothingNow
+      : window === "upcoming"
+        ? t.nothingUpcoming
+        : t.nothingPast;
 
   return (
-    <section className="flex flex-col gap-6">
-      <div>
-        <SectionHeading count={upcoming.length}>{t.upcoming}</SectionHeading>
-        {upcoming.length === 0 ? (
-          <EmptyRow icon={<CalendarIcon className="size-4" aria-hidden />}>{t.nothingUpcoming}</EmptyRow>
-        ) : (
-          <ol className="flex flex-col gap-2">
-            {upcoming.map((item) => (
-              <EventAgendaRow key={item.event.id} item={item} locale={locale} timeZone={timeZone} />
-            ))}
-          </ol>
-        )}
+    <div className="flex max-w-4xl flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          spacing={0}
+          value={window}
+          onValueChange={(v) => v && setWindow(v as EventWindow)}
+          aria-label={t.events}
+        >
+          {windows.map((value) => (
+            <ToggleGroupItem key={value} value={value} className="gap-1.5 px-3">
+              {value === "now" && running.length > 0 ? (
+                <span className="relative flex size-2 shrink-0" aria-hidden>
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />
+                  <span className="relative inline-flex size-2 rounded-full bg-primary" />
+                </span>
+              ) : null}
+              {windowLabel[value]}
+              <span className="text-xs tabular-nums text-muted-foreground">{windowCount[value]}</span>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+
+        {alsoInvited.length > 0 && window !== "past" ? (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            spacing={0}
+            value={source}
+            onValueChange={(v) => v && setSource(v as EventSource)}
+            aria-label={t.sourceLabel}
+          >
+            <ToggleGroupItem value="all" className="px-3">
+              {t.sourceAll}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="owned" className="px-3">
+              {t.sourceOwned}
+            </ToggleGroupItem>
+            <ToggleGroupItem value="invited" className="px-3">
+              {t.sourceInvited}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        ) : null}
+
+        <StatusFilter
+          options={outcomeOptions}
+          value={outcomes}
+          onChange={setOutcomes}
+          label={t.answerLabel}
+          ariaLabel={t.answerLabel}
+          className="min-w-40"
+        />
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-muted-foreground"
+          onClick={() => setSort((value) => (value === "soonest" ? "latest" : "soonest"))}
+          aria-label={sort === "soonest" ? t.sortSoonest : t.sortLatest}
+          title={sort === "soonest" ? t.sortSoonest : t.sortLatest}
+        >
+          {sort === "soonest" ? <ArrowUpNarrowWideIcon /> : <ArrowDownNarrowWideIcon />}
+        </Button>
+
+        <InputGroup className="ml-auto w-full sm:w-64">
+          <InputGroupAddon>
+            <SearchIcon className="size-4" aria-hidden />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t.searchEvents}
+            aria-label={t.searchEvents}
+          />
+        </InputGroup>
       </div>
 
-      {alsoInvited.length > 0 ? (
-        <div>
-          <SectionHeading count={alsoInvited.length} hint={t.alsoInvitedHint}>
-            {t.alsoInvited}
-          </SectionHeading>
-          <ol className="flex flex-col gap-2">
-            {alsoInvited.map((item) => (
-              <EventAgendaRow key={item.event.id} item={item} locale={locale} timeZone={timeZone} />
-            ))}
-          </ol>
-        </div>
-      ) : null}
+      {rows.length === 0 ? (
+        <EmptyRow icon={<CalendarIcon className="size-4" aria-hidden />}>{empty}</EmptyRow>
+      ) : (
+        <ol className={cn("flex flex-col gap-2", window === "past" && "opacity-80")}>
+          {visible.map((item) => (
+            <EventAgendaRow
+              key={item.event.id}
+              item={item}
+              locale={locale}
+              timeZone={timeZone}
+              past={window === "past"}
+              extraBadges={
+                item.relation === "invited" ? (
+                  <Badge variant="secondary" title={item.ownerName ?? undefined}>
+                    {t.invitedBadge}
+                  </Badge>
+                ) : null
+              }
+            />
+          ))}
+        </ol>
+      )}
 
-      {past.length > 0 ? (
-        <div>
-          <SectionHeading
-            count={past.length}
-            hint={
-              past.length > PAST_EVENTS_CAP ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-mr-2 text-muted-foreground"
-                  aria-expanded={showAllPast}
-                  onClick={() => setShowAllPast((value) => !value)}
-                >
-                  {showAllPast ? t.showFewer : t.showAll(past.length)}
-                </Button>
-              ) : undefined
-            }
+      {window === "past" && rows.length > PAST_EVENTS_CAP ? (
+        <div className="flex justify-center">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            aria-expanded={showAllPast}
+            onClick={() => setShowAllPast((value) => !value)}
           >
-            {t.pastEvents}
-          </SectionHeading>
-          <ol className="flex flex-col gap-2 opacity-80">
-            {visiblePast.map((item) => (
-              <EventAgendaRow key={item.event.id} item={item} locale={locale} timeZone={timeZone} past />
-            ))}
-          </ol>
+            {showAllPast ? t.showFewer : t.showAll(rows.length)}
+          </Button>
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -324,10 +556,9 @@ function EventsSection({
 function FormsSection({ detail }: { detail: PortalGroupDetail }) {
   const t = useDictionary().portalGroupPage;
   const { open, past } = detail.forms;
-  if (open.length === 0 && past.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex max-w-4xl flex-col gap-6">
       <div>
         <SectionHeading count={open.length}>{t.forms}</SectionHeading>
         {open.length === 0 ? (
@@ -361,18 +592,20 @@ function AsideCard({
   count,
   action,
   index,
+  className,
   children,
 }: {
   title: string;
   count?: number;
   action?: ReactNode;
   index: number;
+  className?: string;
   children: ReactNode;
 }) {
   const r = reveal(index);
   return (
     <section
-      className={cn("rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10", r.className)}
+      className={cn("rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10", r.className, className)}
       style={r.style}
     >
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -536,12 +769,12 @@ function RosterCard({ roster }: { roster: PortalGroupRosterEntry[] }) {
   const t = useDictionary().portalGroupPage;
 
   return (
-    <AsideCard title={t.roster} count={roster.length} index={4}>
+    <AsideCard title={t.roster} count={roster.length} index={0} className="max-w-4xl">
       <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
         <UsersIcon className="size-3.5" aria-hidden />
         {t.rosterHint}
       </p>
-      <ul className="flex flex-col gap-2">
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {roster.map((person, index) => {
           const r = reveal(index);
           return (

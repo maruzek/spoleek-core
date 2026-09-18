@@ -10,30 +10,30 @@ import { PolicyEditor } from "@/components/app/policy-editor";
 import { useDictionary } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { updateGroupAnnouncementAction } from "@/server/actions/group-page";
 
 /**
- * The leader's notice board editor: the policy editor in a sheet. An empty
+ * The leader's notice board editor: the policy editor in a dialog. An empty
  * document clears the board — there is no separate "delete", so the way to
  * take a note down is the way it went up.
  */
 export function GroupAnnouncementEditor({
   groupId,
   initialHtml,
-  variant = "sheet",
+  variant = "dialog",
 }: {
   groupId: string;
   initialHtml: string;
-  /** `inline` renders the editor and its save button without the sheet — the admin tab uses it. */
-  variant?: "sheet" | "inline";
+  /** `inline` renders the editor and its save button without the dialog — the admin tab uses it. */
+  variant?: "dialog" | "inline";
 }) {
   const t = useDictionary().portalGroupPage;
   const router = useRouter();
@@ -78,7 +78,7 @@ export function GroupAnnouncementEditor({
   }
 
   return (
-    <Sheet
+    <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
@@ -89,19 +89,19 @@ export function GroupAnnouncementEditor({
         <PencilIcon data-icon="inline-start" />
         {t.edit}
       </Button>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>{t.announcement}</SheetTitle>
-          <SheetDescription>{t.announcementEditorDescription}</SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 overflow-y-auto px-4 pb-4">{editor}</div>
-        <SheetFooter className="flex-row justify-end gap-2">
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t.announcement}</DialogTitle>
+          <DialogDescription>{t.announcementEditorDescription}</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] overflow-y-auto px-1">{editor}</div>
+        <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={save.isPending}>
             {t.cancel}
           </Button>
           {saveButton}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -12,13 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { GROUP_RESOURCES_MAX, groupResourceSchema, type GroupResourceFormValues } from "@/lib/groups";
 import { saveGroupResourcesAction } from "@/server/actions/group-page";
@@ -33,11 +33,11 @@ type ResourceRow = GroupResourceFormValues;
 export function GroupResourcesEditor({
   groupId,
   resources,
-  variant = "sheet",
+  variant = "dialog",
 }: {
   groupId: string;
   resources: ResourceRow[];
-  variant?: "sheet" | "inline";
+  variant?: "dialog" | "inline";
 }) {
   const t = useDictionary().portalGroupPage;
   const router = useRouter();
@@ -63,14 +63,14 @@ export function GroupResourcesEditor({
 
   const body = (
     <form
-      className="flex flex-1 flex-col overflow-hidden"
+      className="flex flex-col gap-4"
       onSubmit={(event) => {
         event.preventDefault();
         event.stopPropagation();
         void form.handleSubmit();
       }}
     >
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div className="max-h-[60vh] overflow-y-auto px-1">
         <form.Field name="resources" mode="array">
           {(list) => (
             <ol className="flex flex-col gap-3">
@@ -180,8 +180,8 @@ export function GroupResourcesEditor({
           )}
         </form.Field>
       </div>
-      <SheetFooter className="flex-row justify-end gap-2">
-        {variant === "sheet" ? (
+      <DialogFooter>
+        {variant === "dialog" ? (
           <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={save.isPending}>
             {t.cancel}
           </Button>
@@ -190,21 +190,21 @@ export function GroupResourcesEditor({
           {save.isPending ? <Spinner data-icon="inline-start" /> : null}
           {save.isPending ? t.saving : t.save}
         </Button>
-      </SheetFooter>
+      </DialogFooter>
     </form>
   );
 
   if (variant === "inline") {
     return (
-      <div className="-mx-4 flex flex-col gap-2">
-        <p className="px-4 text-sm text-muted-foreground">{t.resourcesEditorDescription(GROUP_RESOURCES_MAX)}</p>
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">{t.resourcesEditorDescription(GROUP_RESOURCES_MAX)}</p>
         {body}
       </div>
     );
   }
 
   return (
-    <Sheet
+    <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
@@ -215,13 +215,13 @@ export function GroupResourcesEditor({
         <LinkIcon data-icon="inline-start" />
         {t.editLinks}
       </Button>
-      <SheetContent side="right" className="w-full sm:max-w-xl">
-        <SheetHeader>
-          <SheetTitle>{t.resources}</SheetTitle>
-          <SheetDescription>{t.resourcesEditorDescription(GROUP_RESOURCES_MAX)}</SheetDescription>
-        </SheetHeader>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{t.resources}</DialogTitle>
+          <DialogDescription>{t.resourcesEditorDescription(GROUP_RESOURCES_MAX)}</DialogDescription>
+        </DialogHeader>
         {body}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
