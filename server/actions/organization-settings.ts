@@ -170,6 +170,7 @@ export const saveMembershipSettingsAction = orgAdminActionClient
           parsedInput.membershipReportAllowSelfApproval,
         membershipReportConfirmMonth: parsedInput.membershipReportConfirmMonth,
         membershipReportConfirmDay: parsedInput.membershipReportConfirmDay,
+        showGroupRosters: parsedInput.showGroupRosters,
         updatedAt: new Date(),
       })
       .where(eq(organizations.id, organization.id));

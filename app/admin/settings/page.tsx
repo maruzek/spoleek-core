@@ -87,6 +87,7 @@ export default async function AdminSettingsPage({
       organization.membershipReportAllowSelfApproval,
     membershipReportConfirmMonth: organization.membershipReportConfirmMonth,
     membershipReportConfirmDay: organization.membershipReportConfirmDay,
+    showGroupRosters: organization.showGroupRosters,
   };
 
   // The yearly report has one row per group in the fee-managing category, so

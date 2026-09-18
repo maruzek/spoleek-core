@@ -76,6 +76,7 @@ export const membershipSettingsSchema = z
       .enum(["calendar_year", "renewal_span"])
       .default("calendar_year"),
     membershipReportEnabled: z.boolean().default(false),
+    showGroupRosters: z.boolean().default(false),
     membershipReportAllowSelfApproval: z.boolean().default(false),
     membershipReportConfirmMonth: z
       .union([z.number().int().min(1).max(12), z.null()])

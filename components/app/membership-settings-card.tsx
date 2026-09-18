@@ -55,6 +55,7 @@ export type MembershipSettingsState = {
   membershipReportAllowSelfApproval: boolean;
   membershipReportConfirmMonth: number | null;
   membershipReportConfirmDay: number | null;
+  showGroupRosters: boolean;
 };
 
 export function MembershipSettingsCard({
@@ -491,6 +492,7 @@ export function MembershipSettingsCard({
               membershipReportAllowSelfApproval: allowSelfApproval,
               membershipReportConfirmMonth: hasDeadline ? confirmMonth : null,
               membershipReportConfirmDay: hasDeadline ? confirmDay : null,
+              showGroupRosters: state.showGroupRosters,
             })
           }
           disabled={saveAction.isPending}

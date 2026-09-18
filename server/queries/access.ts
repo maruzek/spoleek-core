@@ -18,6 +18,7 @@ import {
   tenantMembers,
   users,
   type EventOwnerType,
+  type TenantMember,
 } from "@/server/db/schema";
 import { getAppOrganization } from "@/server/queries/app";
 import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
@@ -509,6 +510,38 @@ export async function requireGroupManagementAccess(groupId: string) {
   }
 
   return context;
+}
+
+/**
+ * Non-throwing twin of `requireGroupManagementAccess` for pages that show a
+ * manager-only panel to some viewers and nothing to the rest. Same rule: org
+ * admins, leaders and system admins manage every group; otherwise the member
+ * must be a category admin over its category or a group admin of the group.
+ */
+export async function canManageGroup(params: {
+  orgId: string;
+  member: Pick<TenantMember, "id" | "role" | "status" | "userId">;
+  group: { id: string; categoryId: string };
+}): Promise<boolean> {
+  const { orgId, member, group } = params;
+  if (member.status !== "active") return false;
+  if (member.role === "org_admin" || member.role === "leader") return true;
+
+  const [scopedCategoryIds, scopedGroupIds] = await Promise.all([
+    listScopedCategoryIds(orgId, member.id),
+    listScopedGroupIds(orgId, member.id),
+  ]);
+  if (scopedCategoryIds.includes(group.categoryId) || scopedGroupIds.includes(group.id)) {
+    return true;
+  }
+
+  if (!member.userId) return false;
+  const [user] = await db
+    .select({ systemRole: users.systemRole })
+    .from(users)
+    .where(eq(users.id, member.userId))
+    .limit(1);
+  return user?.systemRole === "system_admin";
 }
 
 /**

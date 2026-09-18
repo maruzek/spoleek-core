@@ -443,6 +443,7 @@ export async function buildMemberDataExport({
       role: member.role,
       status: member.status,
       preferredEmail: member.preferredEmail,
+      hideFromGroupRosters: member.hideFromGroupRosters,
       workspaceUserEmail: member.workspaceUserEmail,
       workspaceProvisionedAt: member.workspaceProvisionedAt,
       joinedAt: member.createdAt,

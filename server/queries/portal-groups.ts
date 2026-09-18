@@ -1,45 +1,30 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 
-import { isRsvpOpen } from "@/lib/events/rsvp";
 import {
   type PortalAvailableAction,
   type PortalLeaveBlockedReason,
   resolveAvailableAction,
   resolveLeave,
 } from "@/lib/groups/portal-actions";
-import { orgFormatLocale } from "@/lib/i18n";
-import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import { formatMoney, getPaymentTitle } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
   groupCategories,
   groupMemberships,
   groups,
-  tenantMembers,
   type GroupJoinPolicy,
   type Organization,
 } from "@/server/db/schema";
-import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
+import {
+  buildGroupNotices,
+  loadAdminCountByGroup,
+  loadLeadersByGroup,
+  type PortalGroupNotice,
+  type PortalGroupPerson,
+} from "@/server/lib/portal-group-summaries";
 import { listEventsForViewer } from "@/server/queries/events";
 import { listPaymentsForMember } from "@/server/queries/payments";
-import { activeMembership } from "@/server/lib/group-membership";
 
-export type PortalGroupPerson = {
-  id: string;
-  name: string;
-  email: string | null;
-  isYou: boolean;
-};
-
-/** Something in this group that is waiting on the member. */
-export type PortalGroupNotice = {
-  id: string;
-  kind: "rsvp_needed" | "payment_overdue" | "payment_due" | "refund_due";
-  title: string;
-  detail: string;
-  href: string;
-  urgent: "error" | "warning" | null;
-};
+export type { PortalGroupNotice, PortalGroupPerson } from "@/server/lib/portal-group-summaries";
 
 export type PortalGroup = {
   id: string;
@@ -159,131 +144,19 @@ export async function getPortalGroupsData(params: {
     })
     .map((group) => group.id);
 
-  const [leaderRows, adminCountRows, viewerEvents, payments] = await Promise.all([
-    visibleGroupIds.length > 0
-      ? db
-          .select({
-            groupId: groupMemberships.groupId,
-            memberId: tenantMembers.id,
-            firstName: tenantMembers.firstName,
-            lastName: tenantMembers.lastName,
-            email: tenantMembers.email,
-            workspaceUserEmail: tenantMembers.workspaceUserEmail,
-            preferredEmail: tenantMembers.preferredEmail,
-            role: groupMemberships.role,
-          })
-          .from(groupMemberships)
-          .innerJoin(tenantMembers, eq(tenantMembers.id, groupMemberships.memberId))
-          .where(
-            and(
-              eq(groupMemberships.orgId, orgId),
-              activeMembership(),
-              inArray(groupMemberships.groupId, visibleGroupIds),
-              eq(groupMemberships.role, "group_admin"),
-              eq(tenantMembers.status, "active"),
-            ),
-          )
-          .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName))
-      : Promise.resolve([]),
-    // Counts every active admin, not only the active-status people above, so
-    // "you are the last leader" is judged on the roster as the admin sees it.
-    myGroupIds.length > 0
-      ? db
-          .select({
-            groupId: groupMemberships.groupId,
-            count: sql<number>`count(*)::int`,
-          })
-          .from(groupMemberships)
-          .where(
-            and(
-              eq(groupMemberships.orgId, orgId),
-              activeMembership(),
-              inArray(groupMemberships.groupId, myGroupIds),
-              eq(groupMemberships.role, "group_admin"),
-            ),
-          )
-          .groupBy(groupMemberships.groupId)
-      : Promise.resolve([]),
+  const [leadersByGroup, adminCountByGroup, viewerEvents, payments] = await Promise.all([
+    loadLeadersByGroup({ organization, groupIds: visibleGroupIds, viewerMemberId: memberId }),
+    loadAdminCountByGroup(orgId, myGroupIds),
     listEventsForViewer({ orgId, memberId }),
     listPaymentsForMember(orgId, memberId),
   ]);
 
-  const leadersByGroup = new Map<string, PortalGroupPerson[]>();
-  for (const row of leaderRows) {
-    const person: PortalGroupPerson = {
-      id: row.memberId,
-      name: getMemberDisplayName(row) || "Unnamed member",
-      email: resolveMemberEmailForOrg({ member: row, organization }),
-      isYou: row.memberId === memberId,
-    };
-    leadersByGroup.set(row.groupId, [...(leadersByGroup.get(row.groupId) ?? []), person]);
-  }
-
-  const adminCountByGroup = new Map(adminCountRows.map((row) => [row.groupId, row.count]));
-
-  const now = new Date();
-  const locale = orgFormatLocale(organization.locale);
-  const nextEventByGroup = new Map<string, PortalGroup["nextEvent"]>();
-  const noticesByGroup = new Map<string, PortalGroupNotice[]>();
-  const pushNotice = (groupId: string, notice: PortalGroupNotice) =>
-    noticesByGroup.set(groupId, [...(noticesByGroup.get(groupId) ?? []), notice]);
-
-  // Which group a payment belongs to is the group that owns its event.
-  const groupByEvent = new Map<string, string>();
-  for (const item of [...viewerEvents.invited, ...viewerEvents.open, ...viewerEvents.past]) {
-    if (item.event.ownerGroupId) groupByEvent.set(item.event.id, item.event.ownerGroupId);
-  }
-  for (const payment of payments) {
-    const groupId = payment.eventId ? groupByEvent.get(payment.eventId) : null;
-    if (!groupId) continue;
-    const amount = formatMoney(payment.amount, payment.currency, locale);
-    if (payment.status === "overdue" || payment.status === "pending") {
-      pushNotice(groupId, {
-        id: `payment-${payment.id}`,
-        kind: payment.status === "overdue" ? "payment_overdue" : "payment_due",
-        title: payment.status === "overdue" ? `${amount} overdue` : `${amount} to pay`,
-        detail: getPaymentTitle(payment.type, payment.periodLabel),
-        href: "/portal/payments",
-        urgent: payment.status === "overdue" ? "error" : null,
-      });
-    } else if (payment.status === "refund_due") {
-      pushNotice(groupId, {
-        id: `refund-${payment.id}`,
-        kind: "refund_due",
-        title: `${amount} coming back to you`,
-        detail: getPaymentTitle(payment.type, payment.periodLabel),
-        href: "/portal/payments",
-        urgent: null,
-      });
-    }
-  }
-
-  for (const item of [...viewerEvents.invited, ...viewerEvents.open]) {
-    const { event, response } = item;
-    if (!event.ownerGroupId) continue;
-    if (!response && event.visibility === "targeted" && isRsvpOpen(event, now).open) {
-      pushNotice(event.ownerGroupId, {
-        id: `rsvp-${event.id}`,
-        kind: "rsvp_needed",
-        title: `Are you coming to ${event.title}?`,
-        detail: event.rsvpDeadlineAt
-          ? `Answer by ${new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(event.rsvpDeadlineAt)}.`
-          : "You have not answered yet.",
-        href: `/portal/events/${event.slug}`,
-        urgent: "warning",
-      });
-    }
-    if (!event.startsAt || event.startsAt < now) continue;
-    const current = nextEventByGroup.get(event.ownerGroupId);
-    if (!current || event.startsAt < current.startsAt) {
-      nextEventByGroup.set(event.ownerGroupId, {
-        id: event.id,
-        slug: event.slug,
-        title: event.title,
-        startsAt: event.startsAt,
-      });
-    }
-  }
+  const { noticesByGroup, nextEventByGroup } = buildGroupNotices({
+    organization,
+    viewerEvents,
+    payments,
+    now: new Date(),
+  });
 
   const categories: PortalGroupCategory[] = categoryRows
     .map((category) => {

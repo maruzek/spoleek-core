@@ -98,6 +98,7 @@ suite("the member data export", () => {
         lastName: "Nováková",
         email: "eva@example.test",
         status: "active",
+        hideFromGroupRosters: true,
       })
       .returning({ id: tenantMembers.id });
 
@@ -190,6 +191,8 @@ suite("the member data export", () => {
       firstName: "Eva",
       lastName: "Nováková",
       email: "eva@example.test",
+      // The roster opt-out is a choice the member made, so it is theirs to see.
+      hideFromGroupRosters: true,
     });
     expect(data!.customFieldAnswers).toEqual([
       expect.objectContaining({ label: "Phone number", value: "+420123456789" }),
