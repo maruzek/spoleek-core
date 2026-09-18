@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { db } from "@/server/db";
@@ -28,6 +29,7 @@ export async function listGroupCategories(orgId: string) {
         registrationFieldLabel: groupCategories.registrationFieldLabel,
         isActive: groupCategories.isActive,
         isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+        showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
         showInRegistration: groupCategories.showInRegistration,
         showInMembersTable: sql<boolean>`false`,
         groupAdminsManageMembers: groupCategories.groupAdminsManageMembers,
@@ -71,6 +73,7 @@ export async function listGroupCategories(orgId: string) {
       registrationFieldLabel: groupCategories.registrationFieldLabel,
       isActive: groupCategories.isActive,
       isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+      showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
       showInRegistration: groupCategories.showInRegistration,
       showInMembersTable: groupCategories.showInMembersTable,
       groupAdminsManageMembers: groupCategories.groupAdminsManageMembers,
@@ -122,6 +125,7 @@ export async function getGroupCategoryById(orgId: string, categoryId: string) {
           registrationFieldLabel: groupCategories.registrationFieldLabel,
           isActive: groupCategories.isActive,
           isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+          showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
           showInRegistration: groupCategories.showInRegistration,
           showInMembersTable: groupCategories.showInMembersTable,
           groupAdminsManageMembers: groupCategories.groupAdminsManageMembers,
@@ -150,6 +154,7 @@ export async function getGroupCategoryById(orgId: string, categoryId: string) {
           registrationFieldLabel: groupCategories.registrationFieldLabel,
           isActive: groupCategories.isActive,
           isPinnedToNavigation: groupCategories.isPinnedToNavigation,
+          showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
           showInRegistration: groupCategories.showInRegistration,
           showInMembersTable: sql<boolean>`false`,
           groupAdminsManageMembers: groupCategories.groupAdminsManageMembers,
@@ -200,16 +205,19 @@ export async function listGroupsByCategory(
       feePaymentWindowDays: groups.feePaymentWindowDays,
       createdAt: groups.createdAt,
       updatedAt: groups.updatedAt,
-      memberCount: sql<number>`count(distinct ${groupMemberships.id})::int`,
-      adminCount: sql<number>`count(distinct case when ${groupMemberships.role} = 'group_admin' then ${groupMemberships.id} end)::int`,
+      memberCount: sql<number>`count(distinct case when ${groupMemberships.status} = 'active' then ${groupMemberships.id} end)::int`,
+      adminCount: sql<number>`count(distinct case when ${groupMemberships.status} = 'active' and ${groupMemberships.role} = 'group_admin' then ${groupMemberships.id} end)::int`,
+      pendingRequestCount: sql<number>`count(distinct case when ${groupMemberships.status} = 'pending' then ${groupMemberships.id} end)::int`,
     })
     .from(groups)
+    // Joined without activeMembership() on purpose: the member/admin counts
+    // filter `active` inside their aggregates so the pending badge can share
+    // the scan.
     .leftJoin(
       groupMemberships,
       and(
         eq(groupMemberships.groupId, groups.id),
         eq(groupMemberships.orgId, groups.orgId),
-        activeMembership(),
       ),
     )
     .where(
@@ -349,6 +357,83 @@ export async function listGroupMembershipRows(orgId: string, groupId: string) {
     .orderBy(asc(tenantMembers.firstName), asc(tenantMembers.lastName));
 }
 
+/**
+ * Join requests on one group: pending first (oldest request on top so the
+ * queue is fair), then declined, newest decision first. `decidedBy` is the
+ * approver's display name, null when the row was never decided or the
+ * approver has since been deleted.
+ */
+export async function listGroupJoinRequests(orgId: string, groupId: string) {
+  const decider = alias(tenantMembers, "decider");
+
+  return db
+    .select({
+      membershipId: groupMemberships.id,
+      memberId: tenantMembers.id,
+      firstName: tenantMembers.firstName,
+      lastName: tenantMembers.lastName,
+      email: tenantMembers.email,
+      memberStatus: tenantMembers.status,
+      status: groupMemberships.status,
+      message: groupMemberships.requestMessage,
+      requestedAt: groupMemberships.requestedAt,
+      decidedAt: groupMemberships.decidedAt,
+      declineReason: groupMemberships.declineReason,
+      requestsBlocked: groupMemberships.requestsBlocked,
+      decidedByMemberId: groupMemberships.decidedByMemberId,
+      decidedByFirstName: decider.firstName,
+      decidedByLastName: decider.lastName,
+    })
+    .from(groupMemberships)
+    .innerJoin(tenantMembers, eq(tenantMembers.id, groupMemberships.memberId))
+    .leftJoin(decider, eq(decider.id, groupMemberships.decidedByMemberId))
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        eq(groupMemberships.groupId, groupId),
+        inArray(groupMemberships.status, ["pending", "declined"]),
+        ne(tenantMembers.status, "deleted"),
+      ),
+    )
+    .orderBy(
+      sql`case when ${groupMemberships.status} = 'pending' then 0 else 1 end`,
+      sql`case when ${groupMemberships.status} = 'pending' then ${groupMemberships.requestedAt} end asc nulls last`,
+      desc(groupMemberships.decidedAt),
+    );
+}
+
+export type GroupJoinRequestRow = Awaited<ReturnType<typeof listGroupJoinRequests>>[number];
+
+/** Pending join requests per group, for badges. Groups with none are absent. */
+export async function listPendingRequestCounts(orgId: string, groupIds: string[]) {
+  const counts = new Map<string, number>();
+
+  if (groupIds.length === 0) {
+    return counts;
+  }
+
+  const rows = await db
+    .select({
+      groupId: groupMemberships.groupId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(groupMemberships)
+    .where(
+      and(
+        eq(groupMemberships.orgId, orgId),
+        inArray(groupMemberships.groupId, groupIds),
+        eq(groupMemberships.status, "pending"),
+      ),
+    )
+    .groupBy(groupMemberships.groupId);
+
+  for (const row of rows) {
+    counts.set(row.groupId, row.count);
+  }
+
+  return counts;
+}
+
 export async function listGroupMembers(orgId: string, groupId: string) {
   const rows = await listGroupMembershipRows(orgId, groupId);
   return rows;
@@ -408,10 +493,11 @@ export async function getCategoryDetailData(
 }
 
 export async function getGroupDetailData(orgId: string, groupId: string) {
-  const [group, members, admins, assignableMembers] = await Promise.all([
+  const [group, members, admins, requests, assignableMembers] = await Promise.all([
     getGroupById(orgId, groupId),
     listGroupMembers(orgId, groupId),
     listGroupAdmins(orgId, groupId),
+    listGroupJoinRequests(orgId, groupId),
     listAssignableTenantMembers(orgId),
   ]);
 
@@ -423,6 +509,7 @@ export async function getGroupDetailData(orgId: string, groupId: string) {
     group,
     members,
     admins,
+    requests,
     assignableMembers,
     groupLabel: getMemberDisplayName({
       firstName: group.name,

@@ -168,6 +168,23 @@ const en = {
   },
 
   /** Group-category selection on the join form. */
+  /** Thrown server errors from the portal's join / leave / request actions. */
+  portalGroupActions: {
+    groupNotFound: "This group is no longer available.",
+    alreadyMember: "You are already in this group.",
+    notMember: "You are not in this group.",
+    joinNotAllowed: "This group cannot be joined on your own. Ask a leader to add you.",
+    requestNotAllowed: "You cannot request to join this group right now.",
+    requestsBlocked: "A leader has closed further requests for you on this group.",
+    requestAlreadyPending: "Your request is already waiting for a leader.",
+    noPendingRequest: "There is no pending request to withdraw.",
+    leaveNotAllowed: "You cannot leave this group on your own. Ask a leader.",
+    leaveSelectionRequired: "You have to be in a group of this category. Join another one first.",
+    stateChanged: "The group changed in the meantime. Refresh and try again.",
+    requestAlreadyHandled: "This request was already handled.",
+    requestNotDeclined: "Only a declined request can be blocked or unblocked.",
+  },
+
   groupRegistration: {
     noneAvailable: "No groups are currently available in this category.",
     chooseGroup: "Choose a group for this category.",
@@ -609,6 +626,35 @@ const en = {
         `If you have questions about this decision, write to ${contactEmail}.`,
     },
 
+    /** To the approvers: a member asked to join a group. */
+    joinRequest: {
+      subject: (memberName: string, groupName: string) =>
+        `${memberName} asked to join ${groupName}`,
+      heading: "New request to join a group",
+      body: (memberName: string, groupName: string, requestedAt: string) =>
+        `${memberName} asked to join ${groupName} on ${requestedAt}.`,
+      messageTitle: "Their message",
+      noMessage: "They did not add a message.",
+      cta: "Review the request",
+      footer:
+        "You are receiving this because you lead this group or its category. Join-request alerts are managed in the organization settings.",
+    },
+
+    /** To the member: what the leaders decided. */
+    joinDecision: {
+      approvedSubject: (groupName: string) => `You are now in ${groupName}`,
+      declinedSubject: (groupName: string) => `About your request to join ${groupName}`,
+      approvedHeading: "Welcome to the group",
+      declinedHeading: "About your request",
+      greeting: (memberName: string) => `Hello ${memberName},`,
+      approvedBody: (groupName: string, organizationName: string, decidedAt: string) =>
+        `A leader approved your request to join ${groupName} in ${organizationName} on ${decidedAt}. You will now see the group's events and notices in your portal.`,
+      declinedBody: (groupName: string, organizationName: string, decidedAt: string) =>
+        `Your request to join ${groupName} in ${organizationName} was reviewed on ${decidedAt} and was not approved.`,
+      reasonTitle: "From the leader",
+      cta: "Open your groups",
+    },
+
     membershipDeleted: {
       subject: (organizationName: string) =>
         `Your membership in ${organizationName} has ended`,
@@ -824,6 +870,22 @@ const cs: Dictionary = {
     notAnOption: (label: string) =>
       `${csField(label)} musí být jedna z nabízených možností.`,
     unknownQuestion: "Tato otázka ve formuláři není.",
+  },
+
+  portalGroupActions: {
+    groupNotFound: "Tato skupina již není k dispozici.",
+    alreadyMember: "V této skupině již jste.",
+    notMember: "V této skupině nejste.",
+    joinNotAllowed: "Do této skupiny se nelze přidat sami. Požádejte vedoucího, aby vás přidal.",
+    requestNotAllowed: "O vstup do této skupiny teď nemůžete požádat.",
+    requestsBlocked: "Vedoucí u této skupiny další žádosti od vás uzavřel.",
+    requestAlreadyPending: "Vaše žádost už čeká na vedoucího.",
+    noPendingRequest: "Není žádná čekající žádost, kterou by šlo stáhnout.",
+    leaveNotAllowed: "Z této skupiny nelze odejít sami. Požádejte vedoucího.",
+    leaveSelectionRequired: "V některé skupině této kategorie musíte být. Nejdříve se přidejte do jiné.",
+    stateChanged: "Skupina se mezitím změnila. Obnovte stránku a zkuste to znovu.",
+    requestAlreadyHandled: "Tato žádost už byla vyřízena.",
+    requestNotDeclined: "Blokovat nebo odblokovat lze jen zamítnutou žádost.",
   },
 
   groupRegistration: {
@@ -1264,6 +1326,33 @@ const cs: Dictionary = {
         "Vaše přihláška i všechny údaje, které jste s ní odeslali, byly smazány. Uchováváme pouze záznam o této zprávě. Pokud se vaše situace změní, můžete se přihlásit znovu.",
       contact: (contactEmail: string) =>
         `Máte-li k tomuto rozhodnutí dotazy, napište na ${contactEmail}.`,
+    },
+
+    joinRequest: {
+      subject: (memberName: string, groupName: string) =>
+        `${memberName} žádá o vstup do skupiny ${groupName}`,
+      heading: "Nová žádost o vstup do skupiny",
+      body: (memberName: string, groupName: string, requestedAt: string) =>
+        `${memberName} požádal(a) ${requestedAt} o vstup do skupiny ${groupName}.`,
+      messageTitle: "Zpráva od žadatele",
+      noMessage: "Žadatel nepřipojil žádnou zprávu.",
+      cta: "Posoudit žádost",
+      footer:
+        "Tento e-mail dostáváte, protože vedete tuto skupinu nebo její kategorii. Upozornění na žádosti se nastavují v nastavení organizace.",
+    },
+
+    joinDecision: {
+      approvedSubject: (groupName: string) => `Jste ve skupině ${groupName}`,
+      declinedSubject: (groupName: string) => `K vaší žádosti o vstup do skupiny ${groupName}`,
+      approvedHeading: "Vítejte ve skupině",
+      declinedHeading: "K vaší žádosti",
+      greeting: (memberName: string) => `Dobrý den, ${memberName},`,
+      approvedBody: (groupName: string, organizationName: string, decidedAt: string) =>
+        `Vedoucí ${decidedAt} schválil(a) vaši žádost o vstup do skupiny ${groupName} (${organizationName}). Ve svém portálu teď uvidíte akce a oznámení této skupiny.`,
+      declinedBody: (groupName: string, organizationName: string, decidedAt: string) =>
+        `Vaši žádost o vstup do skupiny ${groupName} (${organizationName}) jsme posoudili ${decidedAt} a nebyla schválena.`,
+      reasonTitle: "Vyjádření vedoucího",
+      cta: "Otevřít moje skupiny",
     },
 
     membershipDeleted: {

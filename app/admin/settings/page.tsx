@@ -101,6 +101,8 @@ export default async function AdminSettingsPage({
     emailNotifyReportReminder: organization.emailNotifyReportReminder,
     emailNotifyRegistration: organization.emailNotifyRegistration,
     emailNotifyRegistrationOrgAdmins: organization.emailNotifyRegistrationOrgAdmins,
+    emailNotifyJoinRequest: organization.emailNotifyJoinRequest,
+    emailNotifyJoinDecision: organization.emailNotifyJoinDecision,
     registrationNotificationEmail: organization.registrationNotificationEmail,
   };
 

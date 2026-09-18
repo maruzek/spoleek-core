@@ -456,6 +456,13 @@
       "when": 1789709225988,
       "tag": "0064_closed_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1789711217238,
+      "tag": "0065_material_spot",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,8 @@ export type EmailNotificationSettingsState = {
   emailNotifyReportReminder: boolean;
   emailNotifyRegistration: boolean;
   emailNotifyRegistrationOrgAdmins: boolean;
+  emailNotifyJoinRequest: boolean;
+  emailNotifyJoinDecision: boolean;
   registrationNotificationEmail: string | null;
 };
 
@@ -46,6 +48,8 @@ export function EmailNotificationSettingsCard({
   const [notifyRegistrationOrgAdmins, setNotifyRegistrationOrgAdmins] = useState(
     state.emailNotifyRegistrationOrgAdmins,
   );
+  const [notifyJoinRequest, setNotifyJoinRequest] = useState(state.emailNotifyJoinRequest);
+  const [notifyJoinDecision, setNotifyJoinDecision] = useState(state.emailNotifyJoinDecision);
   const [registrationEmail, setRegistrationEmail] = useState(
     state.registrationNotificationEmail ?? "",
   );
@@ -234,6 +238,40 @@ export function EmailNotificationSettingsCard({
         )}
       </div>
 
+      <div className="flex flex-col gap-4 rounded-xl border p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Join requests → leaders</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              When a member asks to join a request-to-join group, email the
+              group&apos;s address or its admins; category and organization admins
+              are used when the group has none.
+            </p>
+          </div>
+          <Switch
+            checked={notifyJoinRequest}
+            onCheckedChange={setNotifyJoinRequest}
+            id="notify-join-request"
+            aria-label="Email leaders about group join requests"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Join decisions → members</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Email the member when a leader approves or declines their request,
+              including the reason the leader chose to share.
+            </p>
+          </div>
+          <Switch
+            checked={notifyJoinDecision}
+            onCheckedChange={setNotifyJoinDecision}
+            id="notify-join-decision"
+            aria-label="Email members about join request decisions"
+          />
+        </div>
+      </div>
 
       <div>
         <Button
@@ -246,6 +284,8 @@ export function EmailNotificationSettingsCard({
               emailNotifyReportReminder: notifyReportReminder,
               emailNotifyRegistration: notifyRegistration,
               emailNotifyRegistrationOrgAdmins: notifyRegistrationOrgAdmins,
+              emailNotifyJoinRequest: notifyJoinRequest,
+              emailNotifyJoinDecision: notifyJoinDecision,
               registrationNotificationEmail: registrationEmail,
             })
           }

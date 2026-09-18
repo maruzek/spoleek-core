@@ -12,6 +12,7 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import { activeMembership } from "@/server/lib/group-membership";
+import { pickJoinRequestRecipients } from "@/lib/groups/join-request-recipients";
 
 export type NotificationRecipient = {
   email: string;
@@ -363,6 +364,118 @@ export async function resolveReportReminderRecipients(params: {
   push(orgAdmins, "org_admin");
 
   return { recipients: dedupe(recipients), fellBackToOrgAdmins: true };
+}
+
+/**
+ * Who is told that a member asked to join a group. Tier-picking is pure
+ * (`pickJoinRequestRecipients`); this loads the candidates.
+ */
+export async function resolveJoinRequestRecipients(params: {
+  orgId: string;
+  groupId: string;
+}): Promise<NotificationRecipient[]> {
+  const [organization] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, params.orgId))
+    .limit(1);
+
+  if (!organization?.emailNotifyJoinRequest) {
+    return [];
+  }
+
+  const [scope] = await db
+    .select({
+      categoryId: groups.categoryId,
+      groupNotificationEmail: groups.notificationEmail,
+      notifyViaWorkspaceGroup: groups.notifyViaWorkspaceGroup,
+      workspaceGroupEmail: groupWorkspaceLinks.workspaceGroupEmail,
+      workspaceLinkEnabled: groupWorkspaceLinks.isEnabled,
+      groupAdminsManageMembers: groupCategories.groupAdminsManageMembers,
+    })
+    .from(groups)
+    .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))
+    .leftJoin(
+      groupWorkspaceLinks,
+      and(eq(groupWorkspaceLinks.groupId, groups.id), eq(groupWorkspaceLinks.orgId, groups.orgId)),
+    )
+    .where(and(eq(groups.orgId, params.orgId), eq(groups.id, params.groupId)))
+    .limit(1);
+
+  if (!scope) {
+    return [];
+  }
+
+  const memberColumns = {
+    email: tenantMembers.email,
+    workspaceUserEmail: tenantMembers.workspaceUserEmail,
+    preferredEmail: tenantMembers.preferredEmail,
+    firstName: tenantMembers.firstName,
+    lastName: tenantMembers.lastName,
+  };
+
+  const [groupAdmins, categoryAdmins, orgAdmins] = await Promise.all([
+    db
+      .select(memberColumns)
+      .from(groupMemberships)
+      .innerJoin(tenantMembers, eq(groupMemberships.memberId, tenantMembers.id))
+      .where(
+        and(
+          eq(groupMemberships.orgId, params.orgId),
+          activeMembership(),
+          eq(groupMemberships.groupId, params.groupId),
+          eq(groupMemberships.role, "group_admin"),
+          eq(tenantMembers.status, "active"),
+        ),
+      ),
+    db
+      .select(memberColumns)
+      .from(categoryAdminAssignments)
+      .innerJoin(tenantMembers, eq(categoryAdminAssignments.memberId, tenantMembers.id))
+      .where(
+        and(
+          eq(categoryAdminAssignments.orgId, params.orgId),
+          eq(categoryAdminAssignments.categoryId, scope.categoryId),
+          eq(tenantMembers.status, "active"),
+        ),
+      ),
+    db
+      .select(memberColumns)
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.orgId, params.orgId),
+          eq(tenantMembers.role, "org_admin"),
+          eq(tenantMembers.status, "active"),
+        ),
+      ),
+  ]);
+
+  const toCandidates = (rows: typeof groupAdmins) =>
+    rows.map((row) => ({
+      email: resolveMemberEmailForOrg({
+        member: {
+          email: row.email,
+          workspaceUserEmail: row.workspaceUserEmail,
+          preferredEmail: row.preferredEmail,
+        },
+        organization,
+      }),
+      name: memberName(row),
+    }));
+
+  const viaWorkspace =
+    scope.notifyViaWorkspaceGroup && scope.workspaceLinkEnabled === true && scope.workspaceGroupEmail;
+
+  return pickJoinRequestRecipients({
+    enabled: true,
+    groupNotificationEmail: scope.groupNotificationEmail,
+    workspaceGroupEmail: viaWorkspace ? scope.workspaceGroupEmail : null,
+    groupAdminsManageMembers: scope.groupAdminsManageMembers,
+    groupAdmins: toCandidates(groupAdmins),
+    categoryAdmins: toCandidates(categoryAdmins),
+    orgAdmins: toCandidates(orgAdmins),
+  });
 }
 
 /** Org admins, for the board digest. */

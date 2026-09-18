@@ -16,7 +16,10 @@ import { upsertActiveMembership } from "@/server/lib/group-membership";
 import { canAccessMemberInScope } from "@/server/lib/member-management-scope";
 import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import { resolveDesiredMembers } from "@/server/lib/workspace/group-links";
-import { resolveRegistrationRecipients } from "@/server/notifications/recipients";
+import {
+  resolveJoinRequestRecipients,
+  resolveRegistrationRecipients,
+} from "@/server/notifications/recipients";
 import { listScopedGroupIds } from "@/server/queries/access";
 import { listEligibleMemberIds } from "@/server/queries/events";
 import { listGroupMembers } from "@/server/queries/groups";
@@ -221,6 +224,23 @@ suite("pending join requests are not memberships", () => {
       syncedToWorkspace: false,
       inManagementScope: false,
     });
+  });
+
+  it("a join request is routed to the group's active admins, gated by the org switch", async () => {
+    const recipients = await resolveJoinRequestRecipients({ orgId, groupId });
+    expect(recipients).toEqual([
+      expect.objectContaining({ reason: "group_admin", email: expect.stringMatching(/^leader/) }),
+    ]);
+
+    await db
+      .update(organizations)
+      .set({ emailNotifyJoinRequest: false })
+      .where(eq(organizations.id, orgId));
+    expect(await resolveJoinRequestRecipients({ orgId, groupId })).toEqual([]);
+    await db
+      .update(organizations)
+      .set({ emailNotifyJoinRequest: true })
+      .where(eq(organizations.id, orgId));
   });
 
   it("a pending requester is never billed the group fee", async () => {

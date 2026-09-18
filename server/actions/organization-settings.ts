@@ -185,6 +185,8 @@ const emailNotificationSettingsSchema = z.object({
   emailNotifyReportReminder: z.boolean(),
   emailNotifyRegistration: z.boolean(),
   emailNotifyRegistrationOrgAdmins: z.boolean(),
+  emailNotifyJoinRequest: z.boolean(),
+  emailNotifyJoinDecision: z.boolean(),
   registrationNotificationEmail: optionalNotificationEmailSchema,
 });
 
@@ -222,6 +224,8 @@ export const saveEmailNotificationSettingsAction = orgAdminActionClient
         emailNotifyReportReminder: parsedInput.emailNotifyReportReminder,
         emailNotifyRegistration: parsedInput.emailNotifyRegistration,
         emailNotifyRegistrationOrgAdmins: parsedInput.emailNotifyRegistrationOrgAdmins,
+        emailNotifyJoinRequest: parsedInput.emailNotifyJoinRequest,
+        emailNotifyJoinDecision: parsedInput.emailNotifyJoinDecision,
         registrationNotificationEmail: parsedInput.registrationNotificationEmail,
         updatedAt: new Date(),
       })

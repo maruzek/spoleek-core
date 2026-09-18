@@ -37,13 +37,13 @@ export const groupJoinPolicyOptions: Array<{
   {
     value: "free_join_leave",
     label: "Free join and leave",
-    description: "Members may eventually join or leave on their own.",
+    description: "Members join and leave on their own from their portal.",
   },
   {
     value: "request_to_join",
     label: "Request to join",
     description:
-      "Request workflows will come later, but the policy can be stored now.",
+      "Members ask from their portal; a group or category admin approves or declines.",
   },
 ];
 
@@ -73,6 +73,7 @@ export const groupCategorySchema = z
     registrationFieldLabel: nullableTrimmedString,
     isActive: z.boolean().default(true),
     isPinnedToNavigation: z.boolean().default(false),
+    showGroupsToNonMembers: z.boolean().default(false),
     showInRegistration: z.boolean().default(false),
     showInMembersTable: z.boolean().default(false),
     groupAdminsManageMembers: z.boolean().default(false),
@@ -228,6 +229,42 @@ export const removeGroupMemberSchema = assignGroupMemberSchema;
 export const assignGroupAdminSchema = assignGroupMemberSchema;
 
 export const removeGroupAdminSchema = assignGroupMemberSchema;
+
+// ─── Portal self-service ─────────────────────────────────────────────────────
+
+/** Optional free text, trimmed, empty → null. */
+const optionalNoteSchema = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((value) => (typeof value === "string" ? value.trim() : ""))
+  .pipe(z.string().max(500, "Keep it under 500 characters."))
+  .transform((value) => (value.length > 0 ? value : null));
+
+export const joinGroupSchema = z.object({
+  groupId: z.uuid(),
+});
+
+export const leaveGroupSchema = joinGroupSchema;
+
+export const requestToJoinGroupSchema = z.object({
+  groupId: z.uuid(),
+  message: optionalNoteSchema,
+});
+
+export const withdrawJoinRequestSchema = joinGroupSchema;
+
+export const decideJoinRequestSchema = z.object({
+  groupId: z.uuid(),
+  memberId: z.uuid(),
+  decision: z.enum(["approve", "decline"]),
+  reason: optionalNoteSchema,
+  blockFurtherRequests: z.boolean().default(false),
+});
+
+export const setJoinRequestBlockSchema = z.object({
+  groupId: z.uuid(),
+  memberId: z.uuid(),
+  blocked: z.boolean(),
+});
 
 export type GroupCategoryFormValues = z.infer<typeof groupCategorySchema>;
 export type GroupFormValues = z.infer<typeof groupSchema>;

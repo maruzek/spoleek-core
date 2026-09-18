@@ -108,6 +108,10 @@ export const emailKindEnum = pgEnum("email_kind", [
   // it after seeing the pending count. Never automatic, for the same reason
   // as `event_invite`.
   "form_reminder",
+  // A member asked to join a group (to the approvers) and the approvers'
+  // decision (to the member). Each is gated by its own organization switch.
+  "group_join_requested",
+  "group_join_decided",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [
