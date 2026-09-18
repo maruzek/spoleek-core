@@ -113,6 +113,17 @@ suite("the member data export", () => {
       .values({ orgId, categoryId: category.id, name: "Brno", slug: "brno" })
       .returning({ id: groups.id });
 
+    const [requestedGroup] = await db
+      .insert(groups)
+      .values({
+        orgId,
+        categoryId: category.id,
+        name: "Praha",
+        slug: "praha",
+        joinPolicy: "request_to_join",
+      })
+      .returning({ id: groups.id });
+
     const [field] = await db
       .insert(memberCustomFields)
       .values({
@@ -126,6 +137,14 @@ suite("the member data export", () => {
 
     await Promise.all([
       db.insert(groupMemberships).values({ orgId, groupId: group.id, memberId }),
+      db.insert(groupMemberships).values({
+        orgId,
+        groupId: requestedGroup.id,
+        memberId,
+        status: "pending",
+        requestMessage: "Moving to Prague in June",
+        requestedAt: new Date(),
+      }),
       db
         .insert(memberCustomFieldValues)
         .values({ orgId, memberId, fieldId: field.id, value: "+420123456789" }),
@@ -175,8 +194,17 @@ suite("the member data export", () => {
     expect(data!.customFieldAnswers).toEqual([
       expect.objectContaining({ label: "Phone number", value: "+420123456789" }),
     ]);
+    // A pending request is the member's own words, so it is exported — but as
+    // a request, never as a membership.
     expect(data!.groupAssignments).toEqual([
       expect.objectContaining({ groupName: "Brno", categoryName: "Regions" }),
+    ]);
+    expect(data!.groupJoinRequests).toEqual([
+      expect.objectContaining({
+        groupName: "Praha",
+        status: "pending",
+        message: "Moving to Prague in June",
+      }),
     ]);
     expect(data!.payments).toHaveLength(1);
     expect(data!.invite).toMatchObject({ status: "sent" });

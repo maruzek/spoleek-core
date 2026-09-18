@@ -55,6 +55,12 @@ export type CategoryAdminRow = {
  */
 export function resolveEligibleMemberIds(params: {
   rules: readonly AudienceRule[];
+  /**
+   * Active memberships only. This module is pure and does not know about
+   * `group_memberships.status`; the DB callers (server/queries/events.ts,
+   * server/queries/forms.ts) filter with `activeMembership()` before passing
+   * rows in, so a pending join request never targets anyone.
+   */
   groupMemberships: readonly GroupMembershipRow[];
   /** groupId → categoryId, for every group in the org. */
   groupsByCategory: ReadonlyMap<string, string>;

@@ -10,7 +10,10 @@ import {
   tenantMembers,
   users,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 import { hasGroupCategoryMembersTableColumn } from "@/server/lib/group-category-members-table-column";
+
+export { activeMembership };
 
 export async function listGroupCategories(orgId: string) {
   const hasMembersTableColumn = await hasGroupCategoryMembersTableColumn();
@@ -203,7 +206,11 @@ export async function listGroupsByCategory(
     .from(groups)
     .leftJoin(
       groupMemberships,
-      and(eq(groupMemberships.groupId, groups.id), eq(groupMemberships.orgId, groups.orgId)),
+      and(
+        eq(groupMemberships.groupId, groups.id),
+        eq(groupMemberships.orgId, groups.orgId),
+        activeMembership(),
+      ),
     )
     .where(
       and(
@@ -335,6 +342,7 @@ export async function listGroupMembershipRows(orgId: string, groupId: string) {
       and(
         eq(groupMemberships.orgId, orgId),
         eq(groupMemberships.groupId, groupId),
+        activeMembership(),
         ne(tenantMembers.status, "deleted"),
       ),
     )

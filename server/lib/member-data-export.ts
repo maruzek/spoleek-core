@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { decryptSecret } from "@/lib/crypto";
 import { getServerEnv } from "@/lib/env";
@@ -33,6 +33,7 @@ import {
   workspaceSyncOperations,
 } from "@/server/db/schema";
 import { listMemberAcknowledgements } from "@/server/queries/policies";
+import { activeMembership } from "@/server/lib/group-membership";
 
 /**
  * Everything the organization holds about one member, in one machine-readable
@@ -100,6 +101,7 @@ export async function buildMemberDataExport({
     account,
     customFieldAnswers,
     groupAssignments,
+    groupJoinRequests,
     categoryAdminRoles,
     acknowledgements,
     payments,
@@ -159,7 +161,31 @@ export async function buildMemberDataExport({
       .from(groupMemberships)
       .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
       .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))
-      .where(eq(groupMemberships.memberId, memberId))
+      .where(and(eq(groupMemberships.memberId, memberId), activeMembership()))
+      .orderBy(asc(groups.name)),
+
+    // Join requests are the member's own words and the decision made about
+    // them, so they are personal data even though they are not memberships.
+    db
+      .select({
+        groupName: groups.name,
+        categoryName: groupCategories.name,
+        status: groupMemberships.status,
+        message: groupMemberships.requestMessage,
+        requestedAt: groupMemberships.requestedAt,
+        decidedAt: groupMemberships.decidedAt,
+        declineReason: groupMemberships.declineReason,
+        furtherRequestsBlocked: groupMemberships.requestsBlocked,
+      })
+      .from(groupMemberships)
+      .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
+      .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))
+      .where(
+        and(
+          eq(groupMemberships.memberId, memberId),
+          inArray(groupMemberships.status, ["pending", "declined"]),
+        ),
+      )
       .orderBy(asc(groups.name)),
 
     db
@@ -427,6 +453,7 @@ export async function buildMemberDataExport({
     account,
     customFieldAnswers,
     groupAssignments,
+    groupJoinRequests,
     categoryAdminRoles,
 
     policyAcknowledgements: acknowledgements.map((entry) => ({

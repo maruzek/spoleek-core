@@ -11,6 +11,7 @@ import {
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type NotificationRecipient = {
   email: string;
@@ -197,6 +198,7 @@ export async function resolveRegistrationRecipients(params: {
       .where(
         and(
           eq(groupMemberships.orgId, params.orgId),
+          activeMembership(),
           inArray(groupMemberships.groupId, groupIdsNeedingAdmins),
           eq(groupMemberships.role, "group_admin"),
           eq(tenantMembers.status, "active"),
@@ -296,6 +298,7 @@ export async function resolveReportReminderRecipients(params: {
       .where(
         and(
           eq(groupMemberships.orgId, params.orgId),
+          activeMembership(),
           eq(groupMemberships.groupId, params.groupId),
           eq(groupMemberships.role, "group_admin"),
           eq(tenantMembers.status, "active"),

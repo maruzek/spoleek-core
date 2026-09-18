@@ -18,6 +18,7 @@ import {
   type MembershipReportConfirmationBasis,
   type MembershipReportGroupStatus,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 
 /**
  * A payment confirms membership when the money arrived, or when an admin
@@ -155,6 +156,7 @@ async function getReportGroupIdByMember(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groups.categoryId, categoryId),
         eq(groups.isActive, true),
         memberIds?.length
@@ -241,6 +243,7 @@ export async function listUnassignedConfirmedMembers(
             .where(
               and(
                 eq(groupMemberships.memberId, memberPayments.memberId),
+                activeMembership(),
                 eq(groups.categoryId, category.id),
                 eq(groups.isActive, true),
               ),

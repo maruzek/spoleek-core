@@ -14,6 +14,7 @@ import {
   type MemberPaymentStatus,
   type MemberPaymentType,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type PaymentStatBucket = { count: number; totalCents: number };
 
@@ -102,6 +103,7 @@ async function getGroupsByMember(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         inArray(groupMemberships.memberId, memberIds),
       ),
     )
@@ -135,6 +137,7 @@ export async function listMemberIdsInGroups(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         inArray(groupMemberships.groupId, groupIds),
       ),
     );

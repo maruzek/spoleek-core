@@ -10,6 +10,7 @@ import {
 } from "@/server/queries/access";
 import { listGroupAdmins, listGroupMembers } from "@/server/queries/groups";
 import { listTenantMembers } from "@/server/queries/members";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type ResolvedMemberDatasetRow = {
   memberId: string;
@@ -68,6 +69,7 @@ async function listScopedMembersAdminDataset(orgId: string, scopedGroupIds: stri
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(tenantMembers.orgId, orgId),
         ne(tenantMembers.status, "deleted"),
         inArray(groupMemberships.groupId, scopedGroupIds),

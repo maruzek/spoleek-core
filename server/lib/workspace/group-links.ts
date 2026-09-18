@@ -24,6 +24,7 @@ import {
   type DesiredMember,
   type GroupSyncPlan,
 } from "@/server/lib/workspace/reconcile";
+import { activeMembership } from "@/server/lib/group-membership";
 
 /**
  * Statuses that should not appear in a Workspace group. Everyone else —
@@ -131,6 +132,7 @@ export async function resolveDesiredMembers(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.groupId, config.groupId),
         notInArray(tenantMembers.status, EXCLUDED_MEMBER_STATUSES),
       ),

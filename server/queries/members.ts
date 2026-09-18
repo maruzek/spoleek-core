@@ -45,6 +45,7 @@ export type MemberPolicyAcknowledgementRow = Awaited<
 >[number];
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 import { getMemberCustomFieldAnswerMap } from "@/server/queries/member-custom-fields";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type MemberGroupAssignment = {
   id: string;
@@ -274,6 +275,7 @@ async function listMemberGroupAssignments(
 ) {
   const filters = [
     eq(groupMemberships.orgId, orgId),
+    activeMembership(),
     eq(groups.isActive, true),
     eq(groupCategories.isActive, true),
   ];
@@ -417,6 +419,7 @@ async function listVisibleScopedMemberIds(orgId: string, visibleGroupIds: string
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         inArray(groupMemberships.groupId, visibleGroupIds),
       ),
     );

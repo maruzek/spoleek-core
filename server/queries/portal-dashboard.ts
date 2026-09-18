@@ -31,6 +31,7 @@ import {
   listActiveMemberCustomFields,
 } from "@/server/queries/member-custom-fields";
 import { listPaymentsForMember } from "@/server/queries/payments";
+import { activeMembership } from "@/server/lib/group-membership";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** A member's horizon is longer than an admin's: trips are planned weeks out. */
@@ -58,6 +59,7 @@ async function listMemberGroups(orgId: string, memberId: string) {
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, memberId),
         eq(groups.isActive, true),
         eq(groupCategories.isActive, true),

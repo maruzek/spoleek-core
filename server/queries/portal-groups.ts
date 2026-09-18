@@ -16,6 +16,7 @@ import {
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { listEventsForViewer } from "@/server/queries/events";
 import { listPaymentsForMember } from "@/server/queries/payments";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type PortalGroupPerson = {
   id: string;
@@ -101,6 +102,8 @@ export async function getPortalGroupsData(params: {
       .where(and(eq(groups.orgId, orgId), eq(groups.isActive, true)))
       .orderBy(asc(groups.sortOrder), asc(groups.name)),
     db
+      // Deliberately no activeMembership(): this page renders the member's
+      // pending / declined requests as well, so it reads every status.
       .select({ groupId: groupMemberships.groupId, role: groupMemberships.role })
       .from(groupMemberships)
       .where(and(eq(groupMemberships.orgId, orgId), eq(groupMemberships.memberId, memberId))),
@@ -127,6 +130,7 @@ export async function getPortalGroupsData(params: {
           .where(
             and(
               eq(groupMemberships.orgId, orgId),
+              activeMembership(),
               inArray(groupMemberships.groupId, myGroupIds),
               eq(groupMemberships.role, "group_admin"),
               eq(tenantMembers.status, "active"),

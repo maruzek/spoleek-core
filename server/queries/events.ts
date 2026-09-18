@@ -20,6 +20,7 @@ import {
 } from "@/server/db/schema";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { listManageableOwners, requireGroupAdminModuleAccess } from "@/server/queries/access";
+import { activeMembership } from "@/server/lib/group-membership";
 
 const liveEvent = (orgId: string) => and(eq(events.orgId, orgId), isNull(events.deletedAt));
 
@@ -56,7 +57,7 @@ async function loadEligibilityInputs(orgId: string, eventId: string) {
     db
       .select({ groupId: groupMemberships.groupId, memberId: groupMemberships.memberId })
       .from(groupMemberships)
-      .where(eq(groupMemberships.orgId, orgId)),
+      .where(and(eq(groupMemberships.orgId, orgId), activeMembership())),
     db
       .select({ id: groups.id, categoryId: groups.categoryId })
       .from(groups)

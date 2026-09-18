@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/server/db";
 import { groupCategories, groupMemberships, groups } from "@/server/db/schema";
 import { type Dictionary, messages } from "@/lib/i18n/messages";
+import { upsertActiveMembership } from "@/server/lib/group-membership";
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -105,15 +106,7 @@ export async function syncRegistrationGroupSelections(tx: DbTransaction, {
   }
 
   for (const selection of selections) {
-    await tx
-      .insert(groupMemberships)
-      .values({
-        orgId,
-        groupId: selection.groupId,
-        memberId,
-        role: "member",
-      })
-      .onConflictDoNothing();
+    await upsertActiveMembership(tx, { orgId, groupId: selection.groupId, memberId });
   }
 }
 

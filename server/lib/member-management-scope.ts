@@ -9,6 +9,7 @@ import {
   type TenantRole,
 } from "@/server/db/schema";
 import { requireAdminAccess } from "@/server/queries/access";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type MemberManagementGroupCategory = {
   id: string;
@@ -115,6 +116,7 @@ async function listScopedManageableGroups(orgId: string, memberId: string) {
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, memberId),
         eq(groupMemberships.role, "group_admin"),
         eq(groups.isActive, true),
@@ -198,6 +200,7 @@ export async function canAccessMemberInScope(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, memberId),
         inArray(groupMemberships.groupId, managedGroupIds),
       ),

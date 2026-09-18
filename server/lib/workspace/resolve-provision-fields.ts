@@ -14,6 +14,7 @@ import {
   type WorkspaceFieldValues,
   type WorkspaceProvisionFieldConfig,
 } from "./field-catalog";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export async function resolveProvisionFieldsForMember(
   orgId: string,
@@ -97,6 +98,7 @@ export async function resolveProvisionFieldsForMember(
         and(
           eq(groupMemberships.memberId, memberId),
           eq(groupMemberships.orgId, orgId),
+          activeMembership(),
         ),
       );
     for (const row of rows) {

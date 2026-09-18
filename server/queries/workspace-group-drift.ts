@@ -8,6 +8,7 @@ import {
   tenantMembers,
   workspaceGroupDrift,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type WorkspaceDriftRow = Awaited<
   ReturnType<typeof listWorkspaceGroupDrift>
@@ -120,6 +121,7 @@ export async function listWorkspaceGroupDrift(
           .where(
             and(
               eq(groupMemberships.orgId, orgId),
+              activeMembership(),
               inArray(groupMemberships.memberId, memberIds),
             ),
           )

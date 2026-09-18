@@ -28,6 +28,7 @@ import {
   requireGroupManagementAccess,
   requireOrgAdminAccess,
 } from "@/server/queries/access";
+import { activeMembership } from "@/server/lib/group-membership";
 
 /**
  * A calendar date with no time component.
@@ -388,6 +389,7 @@ export const addReportMemberManuallyAction = authActionClient
       .where(
         and(
           eq(groupMemberships.orgId, row.orgId),
+          activeMembership(),
           eq(groupMemberships.groupId, row.groupId),
           eq(groupMemberships.memberId, parsedInput.memberId),
         ),

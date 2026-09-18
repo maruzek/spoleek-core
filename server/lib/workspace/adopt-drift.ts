@@ -2,12 +2,12 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import {
-  groupMemberships,
   tenantMembers,
   workspaceGroupMemberLinks,
 } from "@/server/db/schema";
 import { getWorkspaceUser } from "@/server/lib/workspace/client";
 import { normalizeAddress } from "@/server/lib/workspace/reconcile";
+import { upsertActiveMembership } from "@/server/lib/group-membership";
 
 export type AdoptTarget = {
   id: string;
@@ -148,15 +148,11 @@ export async function adoptDriftAddress(
     createdMember = true;
   }
 
-  await db
-    .insert(groupMemberships)
-    .values({
-      orgId: link.orgId,
-      groupId: link.groupId,
-      memberId,
-      role: "member" as const,
-    })
-    .onConflictDoNothing();
+  await upsertActiveMembership(db, {
+    orgId: link.orgId,
+    groupId: link.groupId,
+    memberId,
+  });
 
   await db
     .insert(workspaceGroupMemberLinks)

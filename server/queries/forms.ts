@@ -43,6 +43,7 @@ import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { listManageableOwners, requireGroupAdminModuleAccess } from "@/server/queries/access";
 import { listEligibleMemberIds } from "@/server/queries/events";
 import { getMemberCustomFieldAnswerRows } from "@/server/queries/member-custom-fields";
+import { activeMembership } from "@/server/lib/group-membership";
 
 const liveForm = (orgId: string) => and(eq(forms.orgId, orgId), isNull(forms.deletedAt));
 
@@ -165,7 +166,7 @@ export async function listFormEligibleMemberIds(
         role: groupMemberships.role,
       })
       .from(groupMemberships)
-      .where(eq(groupMemberships.orgId, orgId)),
+      .where(and(eq(groupMemberships.orgId, orgId), activeMembership())),
     db.select({ id: groups.id, categoryId: groups.categoryId }).from(groups).where(eq(groups.orgId, orgId)),
     db
       .select({

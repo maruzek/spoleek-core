@@ -77,6 +77,7 @@ import {
   getMemberById,
   getMemberByUserId,
 } from "@/server/queries/members";
+import { activeMembership, upsertActiveMembership } from "@/server/lib/group-membership";
 
 function isWorkspaceModuleReady(organization: {
   workspaceModuleEnabled: boolean;
@@ -198,6 +199,7 @@ async function syncManageableGroupMemberships(args: {
     .where(
       and(
         eq(groupMemberships.orgId, args.orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, args.memberId),
         inArray(groupMemberships.groupId, uniqueAllowedGroupIds),
       ),
@@ -227,18 +229,12 @@ async function syncManageableGroupMemberships(args: {
     (groupId) => !existingGroupIds.has(groupId),
   );
 
-  if (groupIdsToInsert.length > 0) {
-    await args.tx
-      .insert(groupMemberships)
-      .values(
-        groupIdsToInsert.map((groupId) => ({
-          orgId: args.orgId,
-          groupId,
-          memberId: args.memberId,
-          role: "member" as const,
-        })),
-      )
-      .onConflictDoNothing();
+  for (const groupId of groupIdsToInsert) {
+    await upsertActiveMembership(args.tx, {
+      orgId: args.orgId,
+      groupId,
+      memberId: args.memberId,
+    });
   }
 }
 

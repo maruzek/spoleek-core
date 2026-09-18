@@ -42,6 +42,7 @@ import {
   enqueueMemberSyncForGroup,
 } from "@/server/lib/workspace/group-links";
 import { drainWorkspaceSyncOperations } from "@/server/lib/workspace/sync-queue";
+import { activeMembership, upsertActiveMembership } from "@/server/lib/group-membership";
 
 async function ensureUniqueCategorySlug(orgId: string, slug: string, categoryId?: string) {
   const conditions = [eq(groupCategories.orgId, orgId), eq(groupCategories.slug, slug)];
@@ -433,16 +434,11 @@ export const assignGroupMemberAction = authActionClient
     await requireGroupManagementAccess(parsedInput.groupId);
     const member = await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
-    await db
-      .insert(groupMemberships)
-      .values({
-
-        orgId: organization.id,
-        groupId: parsedInput.groupId,
-        memberId: parsedInput.memberId,
-        role: "member",
-      })
-      .onConflictDoNothing();
+    await upsertActiveMembership(db, {
+      orgId: organization.id,
+      groupId: parsedInput.groupId,
+      memberId: parsedInput.memberId,
+    });
 
     await syncGroupMembership(organization.id, parsedInput.groupId, [
       parsedInput.memberId,
@@ -483,18 +479,13 @@ export const assignGroupMembersAction = authActionClient
       members.push(await requireOrgMemberInOrganization(organization.id, memberId));
     }
 
-    await db
-      .insert(groupMemberships)
-      .values(
-        uniqueMemberIds.map((memberId) => ({
-
-          orgId: organization.id,
-          groupId: parsedInput.groupId,
-          memberId,
-          role: "member" as const,
-        })),
-      )
-      .onConflictDoNothing();
+    for (const memberId of uniqueMemberIds) {
+      await upsertActiveMembership(db, {
+        orgId: organization.id,
+        groupId: parsedInput.groupId,
+        memberId,
+      });
+    }
 
     await syncGroupMembership(organization.id, parsedInput.groupId, uniqueMemberIds);
 
@@ -556,35 +547,14 @@ export const assignGroupAdminAction = authActionClient
     await requireGroupManagementAccess(parsedInput.groupId);
     await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
-    const [existing] = await db
-      .select({ id: groupMemberships.id })
-      .from(groupMemberships)
-      .where(
-        and(
-          eq(groupMemberships.orgId, organization.id),
-          eq(groupMemberships.groupId, parsedInput.groupId),
-          eq(groupMemberships.memberId, parsedInput.memberId),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(groupMemberships)
-        .set({
-          role: "group_admin",
-          updatedAt: new Date(),
-        })
-        .where(eq(groupMemberships.id, existing.id));
-    } else {
-      await db.insert(groupMemberships).values({
-
-        orgId: organization.id,
-        groupId: parsedInput.groupId,
-        memberId: parsedInput.memberId,
-        role: "group_admin",
-      });
-    }
+    // Promotes an existing member, approves a pending requester, or adds a
+    // brand-new admin — the upsert covers all three.
+    await upsertActiveMembership(db, {
+      orgId: organization.id,
+      groupId: parsedInput.groupId,
+      memberId: parsedInput.memberId,
+      role: "group_admin",
+    });
 
     await syncGroupMembership(organization.id, parsedInput.groupId, [
       parsedInput.memberId,
@@ -610,6 +580,7 @@ export const removeGroupAdminAction = authActionClient
       .where(
         and(
           eq(groupMemberships.orgId, organization.id),
+          activeMembership(),
           eq(groupMemberships.groupId, parsedInput.groupId),
           eq(groupMemberships.memberId, parsedInput.memberId),
         ),

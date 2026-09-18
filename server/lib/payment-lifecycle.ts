@@ -19,6 +19,7 @@ import type { MembershipPeriodMode } from "@/server/db/schema";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { formatLongDate } from "@/lib/format";
+import { activeMembership } from "@/server/lib/group-membership";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
@@ -418,6 +419,7 @@ export async function generatePaymentForMember(
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, memberId),
         eq(groupCategories.managesMembershipFees, true),
         eq(groups.isActive, true),
@@ -582,6 +584,7 @@ export async function generateMembershipPayments(): Promise<GenerateResult> {
         .where(
           and(
             eq(groupMemberships.orgId, org.id),
+            activeMembership(),
             inArray(groupMemberships.memberId, memberIds),
             eq(groupCategories.managesMembershipFees, true),
             eq(groups.isActive, true),

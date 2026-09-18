@@ -16,6 +16,7 @@ import {
   type MembershipReportConfirmationBasis,
   type MembershipReportGroupStatus,
 } from "@/server/db/schema";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export type ReportPeriodOption = {
   id: string;
@@ -556,6 +557,7 @@ export async function getGroupReportView(
           .where(
             and(
               eq(groupMemberships.orgId, orgId),
+              activeMembership(),
               eq(groupMemberships.groupId, groupId),
               eq(tenantMembers.status, "active"),
               rosterMemberIds.length > 0

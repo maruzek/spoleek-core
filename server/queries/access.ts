@@ -24,6 +24,7 @@ import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fiel
 import { listOutstandingPolicies } from "@/server/queries/policies";
 import { requireViewerSession } from "@/server/queries/auth";
 import { listPinnedGroupCategoriesForSidebar } from "@/server/queries/groups";
+import { activeMembership } from "@/server/lib/group-membership";
 
 export async function requireOrganization() {
   const organization = await getAppOrganization();
@@ -329,6 +330,7 @@ async function hasScopedGroupManagementAccess(orgId: string, memberId: string) {
       groupMemberships,
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, tenantMembers.id),
         eq(groupMemberships.role, "group_admin"),
       ),
@@ -356,6 +358,7 @@ async function hasScopedMemberManagementAccess(orgId: string, memberId: string) 
       groupMemberships,
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, tenantMembers.id),
         eq(groupMemberships.role, "group_admin"),
       ),
@@ -397,6 +400,7 @@ export async function listScopedGroupIds(orgId: string, memberId: string) {
     .where(
       and(
         eq(groupMemberships.orgId, orgId),
+        activeMembership(),
         eq(groupMemberships.memberId, memberId),
         eq(groupMemberships.role, "group_admin"),
       ),
@@ -415,6 +419,7 @@ export async function listAccessibleCategoryIds(orgId: string, memberId: string)
       .where(
         and(
           eq(groupMemberships.orgId, orgId),
+          activeMembership(),
           eq(groupMemberships.memberId, memberId),
           eq(groupMemberships.role, "group_admin"),
         ),
