@@ -236,6 +236,18 @@ export const groupMembershipRoleEnum = pgEnum("group_membership_role", [
 ]);
 
 /**
+ * Lifecycle state of a `group_memberships` row. Only `active` is a membership.
+ * `pending` and `declined` are join requests that happen to live in the same
+ * table so the unique `(group_id, member_id)` row can be reused across the
+ * lifecycle; every reader filters `status = 'active'` unless it renders requests.
+ */
+export const groupMembershipStatusEnum = pgEnum("group_membership_status", [
+  "active",
+  "pending",
+  "declined",
+]);
+
+/**
  * When a maximum age takes effect.
  *
  * Stanovy almost never say "membership ends on your 26th birthday" — they say
@@ -736,6 +748,10 @@ export const organizations = pgTable(
      * mailed, whatever the category and group settings say.
      */
     emailNotifyRegistration: boolean("email_notify_registration").notNull().default(true),
+    /** Mail group / category / org admins when a member requests to join a group. */
+    emailNotifyJoinRequest: boolean("email_notify_join_request").notNull().default(true),
+    /** Mail the member when their join request is approved or declined. */
+    emailNotifyJoinDecision: boolean("email_notify_join_decision").notNull().default(true),
     /**
      * Whether every org admin is on that list. Kept separate from the master
      * switch so a large organization can route applications to the group admins
@@ -1081,6 +1097,14 @@ export const groupCategories = pgTable(
     registrationFieldLabel: text("registration_field_label"),
     isActive: boolean("is_active").notNull().default(true),
     isPinnedToNavigation: boolean("is_pinned_to_navigation").notNull().default(false),
+    /**
+     * Members see this category's `admin_only` groups on their portal and can
+     * ask a leader to add them. Off means non-members only see groups whose
+     * policy already lets them join or request.
+     */
+    showGroupsToNonMembers: boolean("show_groups_to_non_members")
+      .notNull()
+      .default(false),
     showInRegistration: boolean("show_in_registration").notNull().default(false),
     showInMembersTable: boolean("show_in_members_table").notNull().default(false),
     groupAdminsManageMembers: boolean("group_admins_manage_members")
@@ -1179,6 +1203,27 @@ export const groups = pgTable(
   ],
 );
 
+/**
+ * One row per member per group, in any state. The unique `(group_id, member_id)`
+ * index means the row is reused across the join-request lifecycle and its id
+ * is stable:
+ *
+ *   (none) --request--> pending --approve--> active
+ *                         |  ^
+ *                         |  +--re-request-- declined (requests_blocked blocks this)
+ *                       decline
+ *   withdraw / leave / admin remove --> row deleted
+ *
+ * - `pending -> active` clears `requestMessage`, sets `decidedAt` / `decidedByMemberId`.
+ * - `pending -> declined` sets the decided fields, `declineReason`, `requestsBlocked`.
+ * - `declined -> pending` clears the decided fields and `declineReason`, sets
+ *   `requestMessage` / `requestedAt`; only allowed while `requestsBlocked` is false.
+ * - An admin assigning someone who already has a `pending` / `declined` row flips
+ *   it to `active` (approval by another door) via `upsertActiveMembership`.
+ *
+ * Only `active` rows are memberships. Rosters, fees, event targeting, Workspace
+ * sync, notification recipients and admin scope must all filter on it.
+ */
 export const groupMemberships = pgTable(
   "group_memberships",
   {
@@ -1193,6 +1238,21 @@ export const groupMemberships = pgTable(
       .notNull()
       .references(() => tenantMembers.id, { onDelete: "cascade" }),
     role: groupMembershipRoleEnum("role").notNull().default("member"),
+    status: groupMembershipStatusEnum("status").notNull().default("active"),
+    /** The member's note on a join request. Cleared on approval. */
+    requestMessage: text("request_message"),
+    /** Set on request and on re-request. */
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
+    /** Set on approve / decline. */
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedByMemberId: uuid("decided_by_member_id").references(
+      () => tenantMembers.id,
+      { onDelete: "set null" },
+    ),
+    /** Optional, shown to the member after a decline. */
+    declineReason: text("decline_reason"),
+    /** Only meaningful when `status = 'declined'`: the member may not re-request. */
+    requestsBlocked: boolean("requests_blocked").notNull().default(false),
     ...timestamps,
   },
   (table) => [
@@ -1205,6 +1265,11 @@ export const groupMemberships = pgTable(
       table.orgId,
       table.groupId,
       table.role,
+    ),
+    index("group_memberships_org_group_status_idx").on(
+      table.orgId,
+      table.groupId,
+      table.status,
     ),
   ],
 );
@@ -2664,6 +2729,8 @@ export type GroupCategorySelectionMode =
   typeof groupCategorySelectionModeEnum.enumValues[number];
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
+export type GroupMembershipStatus =
+  typeof groupMembershipStatusEnum.enumValues[number];
 export type MembershipManagementMode = typeof membershipManagementModeEnum.enumValues[number];
 export type MaximumAgeEffect = typeof maximumAgeEffectEnum.enumValues[number];
 export type MemberPreferredEmail = typeof memberPreferredEmailEnum.enumValues[number];

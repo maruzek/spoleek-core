@@ -449,6 +449,13 @@
       "when": 1789589581078,
       "tag": "0063_clever_network",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1789709225988,
+      "tag": "0064_closed_loki",
+      "breakpoints": true
     }
   ]
 }
