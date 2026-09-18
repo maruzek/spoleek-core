@@ -34,7 +34,7 @@ export default async function PortalOverviewPage() {
   return (
     <AppPage
       eyebrow={dateline}
-      title={firstName ? `Hi ${firstName}, here is your week.` : "Here is your week."}
+      title={firstName ? `Hi ${firstName}, welcome back.` : "Welcome back."}
       description={summary}
     >
       <PortalDashboard data={data} orgName={organization.name} />
