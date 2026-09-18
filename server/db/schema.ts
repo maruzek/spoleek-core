@@ -234,6 +234,17 @@ export const groupJoinPolicyEnum = pgEnum("group_join_policy", [
   "request_to_join",
 ]);
 
+/**
+ * Who may open a group's portal page. `inherit` resolves to the category's
+ * `groupPagesVisibleToAllMembers`; the resolver is `resolveGroupPageAccess` in
+ * `lib/groups/portal-actions.ts`. Rosters are members-only whatever this says.
+ */
+export const groupPageVisibilityEnum = pgEnum("group_page_visibility", [
+  "inherit",
+  "all_members",
+  "members_only",
+]);
+
 export const groupMembershipRoleEnum = pgEnum("group_membership_role", [
   "member",
   "group_admin",
@@ -766,6 +777,13 @@ export const organizations = pgTable(
       .default(true),
     registrationNotificationEmail: text("registration_notification_email"),
     /**
+     * Members see the names of the other members in their own groups. Legal
+     * basis is the organization's legitimate interest, so it is off until an
+     * admin turns it on. Members opt out per row via
+     * `tenantMembers.hideFromGroupRosters`.
+     */
+    showGroupRosters: boolean("show_group_rosters").notNull().default(false),
+    /**
      * Age below which an application is flagged for manual handling.
      *
      * Deliberately not a validation rule. A date field's `minAge` constraint
@@ -944,6 +962,12 @@ export const tenantMembers = pgTable(
      */
     workspacePurgeAttempts: integer("workspace_purge_attempts").notNull().default(0),
     workspacePurgeLastError: text("workspace_purge_last_error"),
+    /**
+     * Member opt-out from group rosters. Does not hide a group admin from the
+     * leaders list — leadership is a role the org assigns, not personal data
+     * the member controls.
+     */
+    hideFromGroupRosters: boolean("hide_from_group_rosters").notNull().default(false),
     ...timestamps,
   },
   (table) => [
@@ -1109,6 +1133,13 @@ export const groupCategories = pgTable(
     showGroupsToNonMembers: boolean("show_groups_to_non_members")
       .notNull()
       .default(false),
+    /**
+     * Any active member can open this category's group pages, not only the
+     * group's own members. Groups override it via `pageVisibility`.
+     */
+    groupPagesVisibleToAllMembers: boolean("group_pages_visible_to_all_members")
+      .notNull()
+      .default(false),
     showInRegistration: boolean("show_in_registration").notNull().default(false),
     showInMembersTable: boolean("show_in_members_table").notNull().default(false),
     groupAdminsManageMembers: boolean("group_admins_manage_members")
@@ -1181,6 +1212,22 @@ export const groups = pgTable(
      */
     notifyViaWorkspaceGroup: boolean("notify_via_workspace_group").notNull().default(false),
     notificationEmail: text("notification_email"),
+    pageVisibility: groupPageVisibilityEnum("page_visibility")
+      .notNull()
+      .default("inherit"),
+    /**
+     * Leader notice board. Sanitized HTML in the `lib/policy-html.ts` schema
+     * (`sanitizePolicyHtml` runs in the action); never render unsanitized
+     * input. Null when the board is empty.
+     */
+    announcement: text("announcement"),
+    announcementUpdatedAt: timestamp("announcement_updated_at", {
+      withTimezone: true,
+    }),
+    announcementUpdatedByMemberId: uuid("announcement_updated_by_member_id").references(
+      () => tenantMembers.id,
+      { onDelete: "set null" },
+    ),
     ...timestamps,
   },
   (table) => [
@@ -1274,6 +1321,36 @@ export const groupMemberships = pgTable(
       table.orgId,
       table.groupId,
       table.status,
+    ),
+  ],
+);
+
+/**
+ * Links & resources shown on a group's portal page, curated by its leaders.
+ * Not `group_links` — `server/lib/workspace/group-links.ts` owns that name for
+ * the Workspace sync. Max 20 rows per group and the `http:` / `https:` /
+ * `mailto:` scheme rule are enforced in `saveGroupResourcesAction`.
+ */
+export const groupResources = pgTable(
+  "group_resources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    url: text("url").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (table) => [
+    index("group_resources_org_group_sort_idx").on(
+      table.orgId,
+      table.groupId,
+      table.sortOrder,
     ),
   ],
 );
@@ -2678,6 +2755,7 @@ export const schema = {
   groupCategories,
   groups,
   groupMemberships,
+  groupResources,
   categoryAdminAssignments,
   memberCustomFields,
   memberCustomFieldValues,
@@ -2732,6 +2810,7 @@ export type MemberCustomFieldArt9Condition =
 export type GroupCategorySelectionMode =
   typeof groupCategorySelectionModeEnum.enumValues[number];
 export type GroupJoinPolicy = typeof groupJoinPolicyEnum.enumValues[number];
+export type GroupPageVisibility = typeof groupPageVisibilityEnum.enumValues[number];
 export type GroupMembershipRole = typeof groupMembershipRoleEnum.enumValues[number];
 export type GroupMembershipStatus =
   typeof groupMembershipStatusEnum.enumValues[number];
@@ -2767,6 +2846,8 @@ export type TenantMember = typeof tenantMembers.$inferSelect;
 export type GroupCategory = typeof groupCategories.$inferSelect;
 export type Group = typeof groups.$inferSelect;
 export type GroupMembership = typeof groupMemberships.$inferSelect;
+export type GroupResource = typeof groupResources.$inferSelect;
+export type NewGroupResource = typeof groupResources.$inferInsert;
 export type CategoryAdminAssignment = typeof categoryAdminAssignments.$inferSelect;
 export type MemberCustomField = typeof memberCustomFields.$inferSelect;
 export type MemberCustomFieldValue = typeof memberCustomFieldValues.$inferSelect;
