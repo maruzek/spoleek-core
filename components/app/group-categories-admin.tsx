@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 
 import { GroupCategoryDialog } from "@/components/app/group-category-dialog";
+import { PendingRequestsBadge } from "@/components/app/pending-requests-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
@@ -52,6 +53,8 @@ type GroupCategoryRow = {
   updatedAt: Date;
   groupCount: number;
   adminCount: number;
+  /** Join requests waiting on a leader across the category's groups. */
+  pendingRequestCount: number;
 };
 
 type Shelf = "active" | "archived";
@@ -197,7 +200,12 @@ export function GroupCategoriesAdmin({
       columnHelper.accessor("groupCount", {
         meta: { label: "Groups" },
         header: ({ column }) => <SortableHeader column={column}>Groups</SortableHeader>,
-        cell: (info) => <span className="tabular-nums">{info.getValue()}</span>,
+        cell: ({ row, getValue }) => (
+          <span className="inline-flex items-center gap-2">
+            <span className="tabular-nums">{getValue()}</span>
+            {row.original.pendingRequestCount > 0 ? <PendingRequestsBadge count={row.original.pendingRequestCount} /> : null}
+          </span>
+        ),
       }),
       columnHelper.accessor("adminCount", {
         meta: { label: "Category admins" },

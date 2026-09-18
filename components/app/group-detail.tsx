@@ -9,6 +9,7 @@ import { useAction } from "next-safe-action/hooks";
 import {
   ClipboardCheckIcon,
   CloudAlertIcon,
+  InboxIcon,
   PlusIcon,
   Settings2Icon,
   ShieldIcon,
@@ -19,6 +20,8 @@ import { toast } from "sonner";
 
 import { GroupDriftPanel } from "@/components/app/group-drift-panel";
 import { GroupForm } from "@/components/app/group-form";
+import { GroupJoinRequestsTab } from "@/components/app/group-join-requests-tab";
+import type { GroupJoinRequestRow } from "@/server/queries/groups";
 import { REPORT_GROUP_STATUS } from "@/lib/membership-report-status";
 import type { GroupReportTabView } from "@/server/queries/membership-reports";
 import { GroupReportCard } from "@/components/app/group-report-card";
@@ -115,6 +118,10 @@ type GroupDetailProps = {
     linkedUserName: string | null;
     assignedAt: Date;
   }>;
+  /** Pending and declined join requests; the tab shows when there are any or the policy invites them. */
+  requests: GroupJoinRequestRow[];
+  /** Tab to open first — the request email deep-links to `requests`. */
+  initialTab?: string;
   assignableMembers: Array<{
     id: string;
     firstName: string;
@@ -168,6 +175,8 @@ export function GroupDetail({
   group,
   members,
   admins,
+  requests,
+  initialTab,
   assignableMembers,
   membersTable,
   workspaceLinks,
@@ -183,6 +192,8 @@ export function GroupDetail({
   const openDriftCount = workspaceDrift.filter(
     (row) => row.status === "open",
   ).length;
+  const pendingRequestCount = requests.filter((row) => row.status === "pending").length;
+  const showRequestsTab = group.joinPolicy === "request_to_join" || requests.length > 0;
   const router = useRouter();
   const [memberSheetOpen, setMemberSheetOpen] = useState(false);
   const [adminSheetOpen, setAdminSheetOpen] = useState(false);
@@ -315,7 +326,7 @@ export function GroupDetail({
 
   return (
     <div className="flex flex-col gap-6">
-      <Tabs defaultValue="members">
+      <Tabs defaultValue={initialTab === "requests" && showRequestsTab ? "requests" : "members"}>
         <TabsList>
           <TabsTrigger value="members">
             <UsersIcon data-icon="inline-start" />
@@ -325,6 +336,22 @@ export function GroupDetail({
             <ShieldIcon data-icon="inline-start" />
             Group Admins
           </TabsTrigger>
+          {showRequestsTab ? (
+            <TabsTrigger value="requests">
+              <InboxIcon data-icon="inline-start" />
+              Requests
+              {pendingRequestCount > 0 ? (
+                <span className="relative ml-2 inline-flex">
+                  {/* Same ambient glow as the drift badge: a queue that is
+                      waiting on a human should be visible from any tab. */}
+                  <span className="absolute inset-0 animate-ping rounded-full bg-amber-500/40" />
+                  <Badge className="relative border-amber-500/40 bg-amber-500/15 text-amber-700 shadow-[0_0_10px_rgba(245,158,11,0.45)] dark:text-amber-400">
+                    {pendingRequestCount}
+                  </Badge>
+                </span>
+              ) : null}
+            </TabsTrigger>
+          ) : null}
           {workspaceDrift.length > 0 ? (
             <TabsTrigger value="drift">
               <CloudAlertIcon data-icon="inline-start" />
@@ -381,6 +408,12 @@ export function GroupDetail({
             }}
           />
         </TabsContent>
+
+        {showRequestsTab ? (
+          <TabsContent value="requests" className="flex flex-col gap-4 pt-4">
+            <GroupJoinRequestsTab groupId={group.id} requests={requests} />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="admins" className="flex flex-col gap-4 pt-4">
           <DataTable

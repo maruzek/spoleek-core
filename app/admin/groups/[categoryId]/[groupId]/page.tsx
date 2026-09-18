@@ -18,9 +18,9 @@ export default async function AdminGroupPage({
   searchParams,
 }: {
   params: Promise<{ categoryId: string; groupId: string }>;
-  searchParams: Promise<{ report?: string }>;
+  searchParams: Promise<{ report?: string; tab?: string }>;
 }) {
-  const [{ categoryId, groupId }, { report: requestedReportId }] =
+  const [{ categoryId, groupId }, { report: requestedReportId, tab }] =
     await Promise.all([params, searchParams]);
   const [access, organization] = await Promise.all([
     requireGroupManagementAccess(groupId),
@@ -84,6 +84,8 @@ export default async function AdminGroupPage({
           orgUnitCategoryId: membersTable.workspace.orgUnitCategoryId,
         }}
         admins={detail.admins}
+        requests={detail.requests}
+        initialTab={tab}
         assignableMembers={detail.assignableMembers}
         workspaceLinks={workspaceLinks}
         workspaceDrift={workspaceDrift}

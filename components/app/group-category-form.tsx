@@ -618,6 +618,18 @@ export function GroupCategoryForm({
             )}
           </form.Field>
 
+          <form.Field name="showGroupsToNonMembers">
+            {(formField) => (
+              <SwitchChoiceField
+                id="group-category-show-groups-to-non-members"
+                title="Show groups to non-members"
+                description="Members see this category's admin-only groups on their portal and can ask a leader to add them. Groups that are free to join or request are always shown."
+                checked={formField.state.value}
+                onCheckedChange={formField.handleChange}
+              />
+            )}
+          </form.Field>
+
           <form.Field name="isActive">
             {(formField) => (
               <SwitchChoiceField

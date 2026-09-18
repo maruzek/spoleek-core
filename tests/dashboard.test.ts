@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   daysUntil,
   groupByDay,
+  joinRequestAttention,
   nextRenewalDate,
   rankAttention,
   sortUpcoming,
@@ -84,5 +85,46 @@ describe("daysUntil / groupByDay", () => {
     expect(days.map((d) => d.dayOffset)).toEqual([0, 1]);
     expect(days[0].items.map((i) => i.id)).toEqual(["a", "b"]);
     expect(days[1].items.map((i) => i.id)).toEqual(["c"]);
+  });
+});
+
+describe("joinRequestAttention", () => {
+  const oldest = new Date("2026-09-10T08:00:00Z");
+  const newer = new Date("2026-09-15T08:00:00Z");
+
+  it("is null when nothing is waiting", () => {
+    expect(joinRequestAttention([])).toBeNull();
+    expect(
+      joinRequestAttention([{ groupId: "g", categoryId: "c", groupName: "Climbing", count: 0, oldest: null }]),
+    ).toBeNull();
+  });
+
+  it("links straight to the group's Requests tab when one group has the queue", () => {
+    const item = joinRequestAttention([
+      { groupId: "g1", categoryId: "c1", groupName: "Climbing", count: 2, oldest },
+    ]);
+    expect(item).toMatchObject({
+      module: "groups",
+      urgent: true,
+      count: 2,
+      title: "2 join requests waiting",
+      href: "/admin/groups/c1/g1?tab=requests",
+      waitingSince: oldest,
+    });
+    expect(item?.detail).toContain("Climbing");
+  });
+
+  it("sends the admin to the overview when several groups have requests, dated from the oldest", () => {
+    const item = joinRequestAttention([
+      { groupId: "g1", categoryId: "c1", groupName: "Climbing", count: 1, oldest: newer },
+      { groupId: "g2", categoryId: "c1", groupName: "Hiking", count: 3, oldest },
+    ]);
+    expect(item).toMatchObject({
+      count: 4,
+      title: "4 join requests waiting",
+      href: "/admin/groups",
+      waitingSince: oldest,
+    });
+    expect(item?.detail).toContain("2 groups");
   });
 });

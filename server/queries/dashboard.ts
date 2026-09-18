@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql, sum } from "dri
 
 import {
   MODULE_ORDER,
+  joinRequestAttention,
   nextRenewalDate,
   pluralize,
   rankAttention,
@@ -24,6 +25,7 @@ import {
   formSubmissions,
   forms,
   groupCategories,
+  groupMemberships,
   groups,
   memberAuthEvents,
   memberInvites,
@@ -848,9 +850,9 @@ async function emailSignals(orgId: string, w: Window): Promise<Signals> {
 
 // ─── Groups ─────────────────────────────────────────────────────────────────
 
-async function groupSignals(orgId: string): Promise<Signals> {
+async function groupSignals(orgId: string, owners: Owners): Promise<Signals> {
   const s = emptySignals();
-  const [[categories], [groupRows]] = await Promise.all([
+  const [[categories], [groupRows], pendingRows] = await Promise.all([
     db
       .select({ count: countInt })
       .from(groupCategories)
@@ -859,11 +861,40 @@ async function groupSignals(orgId: string): Promise<Signals> {
       .select({ count: countInt })
       .from(groups)
       .where(and(eq(groups.orgId, orgId), eq(groups.isActive, true))),
+    // Only groups this admin can decide on: a scoped admin must not be nagged
+    // about a queue they cannot open.
+    owners.organization || owners.groupIds.length > 0
+      ? db
+          .select({
+            groupId: groups.id,
+            categoryId: groups.categoryId,
+            groupName: groups.name,
+            count: countInt,
+            oldest: sql<Date | null>`min(${groupMemberships.requestedAt})`,
+          })
+          .from(groupMemberships)
+          .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
+          .where(
+            and(
+              eq(groupMemberships.orgId, orgId),
+              eq(groupMemberships.status, "pending"),
+              eq(groups.isActive, true),
+              owners.organization ? undefined : inArray(groups.id, owners.groupIds),
+            ),
+          )
+          .groupBy(groups.id, groups.categoryId, groups.name)
+      : Promise.resolve([]),
   ]);
   s.stats.groups = {
     value: String(groupRows?.count ?? 0),
     label: `groups in ${pluralize(categories?.count ?? 0, "category", "categories")}`,
   };
+
+  const joinRequests = joinRequestAttention(
+    pendingRows.map((row) => ({ ...row, oldest: row.oldest ? new Date(row.oldest) : null })),
+  );
+  if (joinRequests) s.attention.push(joinRequests);
+
   return s;
 }
 
@@ -912,7 +943,7 @@ export async function getAdminDashboardData(context: AdminContext): Promise<Admi
 
   const sections = await Promise.all([
     capabilities.canManageMembers ? memberSignals(orgId, w) : emptySignals(),
-    capabilities.canManageGroups ? groupSignals(orgId) : emptySignals(),
+    capabilities.canManageGroups ? groupSignals(orgId, owners) : emptySignals(),
     capabilities.canManageEvents ? eventSignals(orgId, w, owners) : emptySignals(),
     capabilities.canManageEvents ? formSignals(orgId, w, owners) : emptySignals(),
     capabilities.canManagePayments ? paymentSignals(orgId, w, locale, paymentMemberIds) : emptySignals(),

@@ -31,6 +31,7 @@ import {
 } from "@/lib/groups";
 import { matchesSearch } from "@/lib/search";
 import type { MembershipStatus } from "@/server/db/schema";
+import { PendingRequestsBadge } from "@/components/app/pending-requests-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,7 @@ type CategoryDetailProps = {
     updatedAt: Date;
     memberCount: number;
     adminCount: number;
+    pendingRequestCount: number;
   }>;
   categoryAdmins: Array<{
     assignmentId: string;
@@ -172,12 +174,20 @@ export function GroupCategoryDetail({
           ),
         cell: ({ row }) => (
           <div className="flex min-w-0 flex-col gap-0.5">
-            <Link
-              href={`/admin/groups/${category.id}/${row.original.id}`}
-              className="truncate font-medium text-foreground hover:underline"
-            >
-              {row.original.name}
-            </Link>
+            <span className="flex min-w-0 items-center gap-2">
+              <Link
+                href={`/admin/groups/${category.id}/${row.original.id}`}
+                className="truncate font-medium text-foreground hover:underline"
+              >
+                {row.original.name}
+              </Link>
+              {row.original.pendingRequestCount > 0 ? (
+                <PendingRequestsBadge
+                  count={row.original.pendingRequestCount}
+                  href={`/admin/groups/${category.id}/${row.original.id}?tab=requests`}
+                />
+              ) : null}
+            </span>
             <span className="truncate text-xs text-muted-foreground">
               {row.original.description ?? row.original.slug}
             </span>

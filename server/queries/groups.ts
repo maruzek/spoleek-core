@@ -434,6 +434,21 @@ export async function listPendingRequestCounts(orgId: string, groupIds: string[]
   return counts;
 }
 
+/** Pending join requests per category, for the groups overview. Categories with none are absent. */
+export async function listPendingRequestCountsByCategory(orgId: string) {
+  const rows = await db
+    .select({
+      categoryId: groups.categoryId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(groupMemberships)
+    .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
+    .where(and(eq(groupMemberships.orgId, orgId), eq(groupMemberships.status, "pending")))
+    .groupBy(groups.categoryId);
+
+  return new Map(rows.map((row) => [row.categoryId, row.count]));
+}
+
 export async function listGroupMembers(orgId: string, groupId: string) {
   const rows = await listGroupMembershipRows(orgId, groupId);
   return rows;

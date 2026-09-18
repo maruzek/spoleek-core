@@ -1,11 +1,18 @@
 import { AppPage } from "@/components/app/app-page";
 import { GroupCategoriesAdmin } from "@/components/app/group-categories-admin";
 import { listAccessibleCategoryIds, requireGroupAdminModuleAccess } from "@/server/queries/access";
-import { listGroupCategories } from "@/server/queries/groups";
+import { listGroupCategories, listPendingRequestCountsByCategory } from "@/server/queries/groups";
 
 export default async function AdminGroupsPage() {
   const access = await requireGroupAdminModuleAccess();
-  const categories = await listGroupCategories(access.organization.id);
+  const [categoryRows, pendingByCategory] = await Promise.all([
+    listGroupCategories(access.organization.id),
+    listPendingRequestCountsByCategory(access.organization.id),
+  ]);
+  const categories = categoryRows.map((category) => ({
+    ...category,
+    pendingRequestCount: pendingByCategory.get(category.id) ?? 0,
+  }));
   const canManageCategories =
     access.adminAccessLevel === "full" || access.member?.role === "leader";
   const scopedCategoryIds =

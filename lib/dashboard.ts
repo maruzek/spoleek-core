@@ -207,3 +207,38 @@ export function groupByDay<T extends { at: Date }>(
 export function pluralize(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
+
+/**
+ * The "join requests waiting" attention line, from per-group pending counts.
+ *
+ * One group → link straight to its Requests tab and name it; several → the
+ * groups overview, where the badges point the way. Null when nothing waits,
+ * so the caller can `push` unconditionally.
+ */
+export function joinRequestAttention(
+  rows: readonly { groupId: string; categoryId: string; groupName: string; count: number; oldest: Date | null }[],
+): AttentionItem | null {
+  const total = rows.reduce((sum, row) => sum + row.count, 0);
+  if (total === 0) return null;
+
+  const oldest = rows
+    .map((row) => row.oldest)
+    .filter((date): date is Date => date !== null)
+    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+
+  const single = rows.length === 1 ? rows[0] : null;
+
+  return {
+    id: "groups-join-requests",
+    module: "groups",
+    tone: "warning",
+    urgent: true,
+    count: total,
+    title: `${pluralize(total, "join request")} waiting`,
+    detail: single
+      ? `${single.groupName} — a member is waiting to be let in.`
+      : `Across ${pluralize(rows.length, "group")}; approve or decline from each group's Requests tab.`,
+    href: single ? `/admin/groups/${single.categoryId}/${single.groupId}?tab=requests` : "/admin/groups",
+    waitingSince: oldest,
+  };
+}
