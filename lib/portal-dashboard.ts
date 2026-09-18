@@ -60,7 +60,7 @@ export type MembershipSummary = {
   memberSince: Date | null;
   /** The address the organization writes to, after preference resolution. */
   contactEmail: string | null;
-  groups: { id: string; name: string; categoryName: string; isAdmin: boolean }[];
+  groups: { id: string; slug: string; name: string; categoryName: string; isAdmin: boolean }[];
   /** Join requests the member has sent that no leader has decided yet. */
   pendingRequests: number;
   /** The current period's fee, when fees are on: paid, due, or nothing issued. */

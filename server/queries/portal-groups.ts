@@ -4,6 +4,7 @@ import {
   type PortalAvailableAction,
   type PortalLeaveBlockedReason,
   resolveAvailableAction,
+  resolveGroupPageAccess,
   resolveLeave,
 } from "@/lib/groups/portal-actions";
 import { db } from "@/server/db";
@@ -28,6 +29,7 @@ export type { PortalGroupNotice, PortalGroupPerson } from "@/server/lib/portal-g
 
 export type PortalGroup = {
   id: string;
+  slug: string;
   name: string;
   description: string | null;
   joinPolicy: GroupJoinPolicy;
@@ -47,11 +49,14 @@ export type PortalGroup = {
 /** A group the member is not in, with the one thing they can do about it. */
 export type PortalAvailableGroup = {
   id: string;
+  slug: string;
   name: string;
   description: string | null;
   joinPolicy: GroupJoinPolicy;
   leaders: PortalGroupPerson[];
   action: PortalAvailableAction;
+  /** Whether `/portal/groups/[slug]` opens for this non-member. */
+  canOpenPage: boolean;
 };
 
 export type PortalGroupCategory = {
@@ -97,6 +102,8 @@ export async function getPortalGroupsData(params: {
         maxSelections: groupCategories.maxSelections,
         selectionRequired: groupCategories.selectionRequired,
         showGroupsToNonMembers: groupCategories.showGroupsToNonMembers,
+        groupPagesVisibleToAllMembers: groupCategories.groupPagesVisibleToAllMembers,
+        isActive: groupCategories.isActive,
       })
       .from(groupCategories)
       .where(and(eq(groupCategories.orgId, orgId), eq(groupCategories.isActive, true)))
@@ -105,9 +112,12 @@ export async function getPortalGroupsData(params: {
       .select({
         id: groups.id,
         categoryId: groups.categoryId,
+        slug: groups.slug,
         name: groups.name,
         description: groups.description,
         joinPolicy: groups.joinPolicy,
+        pageVisibility: groups.pageVisibility,
+        isActive: groups.isActive,
       })
       .from(groups)
       .where(and(eq(groups.orgId, orgId), eq(groups.isActive, true)))
@@ -172,6 +182,7 @@ export async function getPortalGroupsData(params: {
           const leave = resolveLeave(group, category, myActiveInCategory);
           return {
             id: group.id,
+            slug: group.slug,
             name: group.name,
             description: group.description,
             joinPolicy: group.joinPolicy,
@@ -199,11 +210,15 @@ export async function getPortalGroupsData(params: {
           return [
             {
               id: group.id,
+              slug: group.slug,
               name: group.name,
               description: group.description,
               joinPolicy: group.joinPolicy,
               leaders: leadersByGroup.get(group.id) ?? [],
               action,
+              canOpenPage:
+                resolveGroupPageAccess({ rowStatus: row?.status ?? null, group, category }).level !==
+                null,
             },
           ];
         });

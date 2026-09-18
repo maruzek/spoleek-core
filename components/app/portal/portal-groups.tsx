@@ -83,7 +83,18 @@ function GroupCard({ group, index }: { group: PortalGroup; index: number }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate font-sans text-base font-semibold text-foreground">{group.name}</h3>
+          <h3 className="truncate font-sans text-base font-semibold text-foreground">
+            <Link
+              href={`/portal/groups/${group.slug}`}
+              className="group/name inline-flex max-w-full items-center gap-1.5 hover:underline"
+            >
+              <span className="truncate">{group.name}</span>
+              <ArrowRightIcon
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground/0 transition-all group-hover/name:translate-x-0.5 group-hover/name:text-muted-foreground"
+              />
+            </Link>
+          </h3>
           {group.description ? (
             <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{group.description}</p>
           ) : null}
@@ -175,7 +186,22 @@ function AvailableGroupCard({ group, index }: { group: PortalAvailableGroup; ind
       style={r.style}
     >
       <div className="min-w-0">
-        <h3 className="truncate font-sans text-base font-semibold text-foreground">{group.name}</h3>
+        <h3 className="truncate font-sans text-base font-semibold text-foreground">
+          {group.canOpenPage ? (
+            <Link
+              href={`/portal/groups/${group.slug}`}
+              className="group/name inline-flex max-w-full items-center gap-1.5 hover:underline"
+            >
+              <span className="truncate">{group.name}</span>
+              <ArrowRightIcon
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground/0 transition-all group-hover/name:translate-x-0.5 group-hover/name:text-muted-foreground"
+              />
+            </Link>
+          ) : (
+            group.name
+          )}
+        </h3>
         {group.description ? (
           <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{group.description}</p>
         ) : null}

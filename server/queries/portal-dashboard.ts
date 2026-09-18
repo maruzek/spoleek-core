@@ -64,6 +64,7 @@ async function listMemberGroups(orgId: string, memberId: string) {
   const rows = await db
     .select({
       id: groups.id,
+      slug: groups.slug,
       name: groups.name,
       categoryName: groupCategories.name,
       role: groupMemberships.role,
@@ -84,6 +85,7 @@ async function listMemberGroups(orgId: string, memberId: string) {
 
   return rows.map((row) => ({
     id: row.id,
+    slug: row.slug,
     name: row.name,
     categoryName: row.categoryName,
     isAdmin: row.role === "group_admin",

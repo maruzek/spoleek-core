@@ -52,6 +52,9 @@ export default async function PortalProfilePage({
         contactEmail={resolveMemberEmailForOrg({ member, organization })}
         membershipStatus={member.status}
         memberSince={member.linkedAt ?? member.createdAt}
+        rosterOptOut={
+          organization.showGroupRosters ? { hidden: member.hideFromGroupRosters } : null
+        }
       />
     </AppPage>
   );

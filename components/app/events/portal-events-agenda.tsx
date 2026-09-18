@@ -1,26 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRightIcon, CalendarDaysIcon, CalendarIcon, ListIcon, MapPinIcon, SearchIcon } from "lucide-react";
+import { CalendarDaysIcon, CalendarIcon, ListIcon, SearchIcon } from "lucide-react";
 
-import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
+import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/app/events/event-agenda-row";
 import { EventsMonthCalendar, type CalendarTone } from "@/components/app/events/events-month-calendar";
 import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { useDictionary } from "@/components/locale-provider";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatEventWhen } from "@/lib/events/display";
 import { matchesSearch } from "@/lib/search";
 import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
 import { cn } from "@/lib/utils";
 import type { ViewerEventItem } from "@/server/queries/events";
 
-type Outcome = "pending" | "going" | "reserve" | "maybe" | "no";
+type Outcome = EventOutcome;
 type Window = "upcoming" | "past";
 type View = "list" | "calendar";
 
@@ -31,21 +26,6 @@ const OUTCOME_TONE: Record<Outcome, CalendarTone> = {
   maybe: "info",
   no: "muted",
 };
-
-const OUTCOME_VARIANT: Record<Outcome, "success" | "warning" | "info" | "default"> = {
-  pending: "default",
-  going: "success",
-  reserve: "warning",
-  maybe: "info",
-  no: "default",
-};
-
-function outcomeOf(item: ViewerEventItem): Outcome {
-  const r = item.response;
-  if (!r) return "pending";
-  if (r.answer === "yes") return r.standing === "reserve" ? "reserve" : "going";
-  return r.answer;
-}
 
 /**
  * The attendee's agenda: one list, grouped by month, newest question first.
@@ -69,7 +49,6 @@ export function PortalEventsAgenda({
 }) {
   const dict = useDictionary();
   const t = dict.events;
-  const f = dict.forms;
   const l = t.list;
   const router = useRouter();
   const [view, setView] = useState<View>("list");
@@ -89,13 +68,13 @@ export function PortalEventsAgenda({
   const [outcomes, setOutcomes] = useState<Outcome[]>(() => outcomeOptions.map((o) => o.value));
 
   const source = window === "upcoming" ? upcoming : past;
-  const pendingCount = useMemo(() => upcoming.filter((i) => outcomeOf(i) === "pending").length, [upcoming]);
+  const pendingCount = useMemo(() => upcoming.filter((i) => eventOutcomeOf(i) === "pending").length, [upcoming]);
 
   const monthLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone }), [locale, timeZone]);
 
   const groups = useMemo(() => {
     const rows = source
-      .filter((i) => outcomes.includes(outcomeOf(i)))
+      .filter((i) => outcomes.includes(eventOutcomeOf(i)))
       .filter((i) =>
         matchesSearch(
           [i.event.title, i.event.locationName ?? "", i.event.locationAddress ?? "", i.ownerName ?? ""].join(" "),
@@ -123,7 +102,7 @@ export function PortalEventsAgenda({
   const calendarItems = useMemo(
     () =>
       [...upcoming, ...past]
-        .filter((i) => outcomes.includes(outcomeOf(i)))
+        .filter((i) => outcomes.includes(eventOutcomeOf(i)))
         .filter((i) =>
           matchesSearch(
             [i.event.title, i.event.locationName ?? "", i.event.locationAddress ?? "", i.ownerName ?? ""].join(" "),
@@ -133,7 +112,7 @@ export function PortalEventsAgenda({
         .map((i) => ({
           id: i.event.slug,
           event: i.event,
-          tone: i.event.status === "cancelled" ? ("cancelled" as const) : OUTCOME_TONE[outcomeOf(i)],
+          tone: i.event.status === "cancelled" ? ("cancelled" as const) : OUTCOME_TONE[eventOutcomeOf(i)],
         })),
     [upcoming, past, outcomes, query],
   );
@@ -227,71 +206,16 @@ export function PortalEventsAgenda({
                 {group.label}
               </h2>
               <ol className="flex flex-col gap-2">
-                {group.items.map((item) => {
-                  const { event, ownerName } = item;
-                  const outcome = outcomeOf(item);
-                  const cancelled = event.status === "cancelled";
-                  const where = event.locationName ?? event.locationAddress;
-                  const needsAnswer = outcome === "pending" && !cancelled && window === "upcoming";
-                  return (
-                    <li key={event.id}>
-                      <Link
-                        href={`/portal/events/${event.slug}`}
-                        className={cn(
-                          "group flex items-center gap-4 rounded-xl border bg-card p-3 pr-4 shadow-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                          needsAnswer && "border-amber-500/40",
-                          cancelled && "opacity-70",
-                        )}
-                      >
-                        <EventDateLeaf startsAt={event.startsAt} cancelled={cancelled} locale={locale} timeZone={timeZone} />
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className={cn(
-                                "font-heading text-lg leading-tight text-foreground",
-                                cancelled && "text-muted-foreground line-through decoration-1",
-                              )}
-                            >
-                              {event.title}
-                            </span>
-                            {event.visibility === "targeted" ? <Badge variant="outline">{l.invitedBadge}</Badge> : null}
-                            {cancelled ? <Badge variant="destructive">{l.cancelledBadge}</Badge> : null}
-                            {pendingForms[event.id] ? (
-                              <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-500">
-                                {f.event.pendingHint(pendingForms[event.id]!)}
-                              </Badge>
-                            ) : null}
-                          </div>
-                          <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
-                            <span>{formatEventWhen(event, locale, timeZone) ?? t.dateTba}</span>
-                            {where ? (
-                              <span className="flex items-center gap-1">
-                                <MapPinIcon className="size-3.5" aria-hidden />
-                                <span className="truncate">{where}</span>
-                              </span>
-                            ) : null}
-                            <span className="hidden sm:inline">{t.organisedBy(ownerName ?? t.wholeOrganization)}</span>
-                          </span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          {needsAnswer ? (
-                            <Button size="sm" tabIndex={-1} className="pointer-events-none">
-                              {l.answer}
-                              <ArrowRightIcon data-icon="inline-end" />
-                            </Button>
-                          ) : outcome !== "pending" ? (
-                            <Status variant={OUTCOME_VARIANT[outcome]}>
-                              <StatusIndicator />
-                              <StatusLabel>{t.detail.yourStatus[outcome]}</StatusLabel>
-                            </Status>
-                          ) : (
-                            <ArrowRightIcon className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
-                          )}
-                        </div>
-                      </Link>
-                    </li>
-                  );
-                })}
+                {group.items.map((item) => (
+                  <EventAgendaRow
+                    key={item.event.id}
+                    item={item}
+                    locale={locale}
+                    timeZone={timeZone}
+                    past={window === "past"}
+                    pendingFormCount={pendingForms[item.event.id] ?? 0}
+                  />
+                ))}
               </ol>
             </section>
           ))}

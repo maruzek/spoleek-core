@@ -46,6 +46,13 @@ import {
   withdrawJoinRequestAction,
 } from "@/server/actions/group-membership-requests";
 import type { PortalAvailableGroup, PortalGroup } from "@/server/queries/portal-groups";
+
+/** What the action slot needs from a group — the page passes a subset. */
+export type ActionableGroup = Pick<PortalAvailableGroup, "id" | "name" | "joinPolicy" | "leaders">;
+export type LeavableGroup = Pick<
+  PortalGroup,
+  "id" | "name" | "canLeave" | "leaveBlockedReason" | "role" | "isLastAdmin"
+>;
 import { cn } from "@/lib/utils";
 
 const MESSAGE_MAX = 500;
@@ -78,7 +85,7 @@ function useGroupAction<TAction extends HookSafeActionFn<string, any, any, any>>
 
 // ─── Available group: the action slot ───────────────────────────────────────
 
-export function JoinButton({ group }: { group: PortalAvailableGroup }) {
+export function JoinButton({ group }: { group: ActionableGroup }) {
   const t = useDictionary().portalGroups;
   const join = useGroupAction(joinGroupAction, t.joined(group.name));
 
@@ -98,7 +105,7 @@ export function SwitchDialog({
   group,
   from,
 }: {
-  group: PortalAvailableGroup;
+  group: ActionableGroup;
   from: { id: string; name: string };
 }) {
   const t = useDictionary().portalGroups;
@@ -138,7 +145,7 @@ export function RequestDialog({
   group,
   again = false,
 }: {
-  group: PortalAvailableGroup;
+  group: ActionableGroup;
   again?: boolean;
 }) {
   const t = useDictionary().portalGroups;
@@ -205,7 +212,7 @@ export function RequestDialog({
   );
 }
 
-export function WithdrawButton({ group }: { group: PortalAvailableGroup }) {
+export function WithdrawButton({ group }: { group: ActionableGroup }) {
   const t = useDictionary().portalGroups;
   const [open, setOpen] = useState(false);
   const withdraw = useGroupAction(withdrawJoinRequestAction, t.withdrawn, () => setOpen(false));
@@ -244,7 +251,7 @@ export function AvailableActionSlot({
   group,
   action,
 }: {
-  group: PortalAvailableGroup;
+  group: ActionableGroup;
   action: PortalAvailableAction;
 }) {
   const t = useDictionary().portalGroups;
@@ -329,7 +336,7 @@ export function AvailableActionSlot({
  * blocked, disabled with the reason, so the member learns the rule instead of
  * hunting for a button that is not there.
  */
-export function LeaveMenuItem({ group }: { group: PortalGroup }) {
+export function LeaveMenuItem({ group }: { group: LeavableGroup }) {
   const t = useDictionary().portalGroups;
   const [open, setOpen] = useState(false);
   const leave = useGroupAction(leaveGroupAction, t.left(group.name), () => setOpen(false));

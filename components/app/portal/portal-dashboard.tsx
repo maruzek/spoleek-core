@@ -272,7 +272,7 @@ function MembershipSection({
                 <ListRow
                   key={group.id}
                   index={startIndex + 1 + index}
-                  href="/portal/groups"
+                  href={`/portal/groups/${group.slug}`}
                   title={group.name}
                   meta={
                     <>

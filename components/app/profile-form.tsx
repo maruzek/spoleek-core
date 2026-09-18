@@ -17,8 +17,9 @@ import { toast } from "sonner";
 
 import { MemberCustomFieldInput } from "@/components/app/member-custom-field-input";
 import { MemberDataExportButton } from "@/components/app/member-data-export-button";
+import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { useAppShell } from "@/components/app/app-shell-provider";
-import { useFormatters } from "@/components/locale-provider";
+import { useDictionary, useFormatters } from "@/components/locale-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +48,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { profileCompleteness } from "@/lib/portal-dashboard";
 import { cn } from "@/lib/utils";
+import { setHideFromGroupRostersAction } from "@/server/actions/group-page";
 import {
   updateEmailPreferenceAction,
   updateProfileAction,
@@ -71,6 +73,8 @@ type ProfileFormProps = {
   contactEmail: string | null;
   membershipStatus: MembershipStatus;
   memberSince: Date | null;
+  /** Only when the organization shows group rosters; the switch is pointless otherwise. */
+  rosterOptOut: { hidden: boolean } | null;
 };
 
 const STATUS_LABEL: Record<MembershipStatus, string> = {
@@ -97,6 +101,7 @@ export function ProfileForm({
   contactEmail,
   membershipStatus,
   memberSince,
+  rosterOptOut,
 }: ProfileFormProps) {
   const router = useRouter();
   const { organization } = useAppShell();
@@ -461,6 +466,8 @@ export function ProfileForm({
               </Field>
             </FieldSet>
 
+            {rosterOptOut ? <RosterOptOutField hidden={rosterOptOut.hidden} /> : null}
+
             <FieldSet>
               <FieldLegend className="flex items-center gap-2">Documents you accepted</FieldLegend>
               <Link
@@ -486,5 +493,46 @@ export function ProfileForm({
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * The member's side of `organization.showGroupRosters`: one switch, saved on
+ * change like the email preference above. Leadership is not covered — a
+ * leader stays listed as one; that is the organization's role, not the
+ * member's data.
+ */
+function RosterOptOutField({ hidden }: { hidden: boolean }) {
+  const t = useDictionary().portalGroupPage;
+  const router = useRouter();
+  const [checked, setChecked] = useState(hidden);
+  const action = useAction(setHideFromGroupRostersAction, {
+    onSuccess() {
+      toast.success(t.hideFromRostersSaved);
+      router.refresh();
+    },
+    onError({ error }) {
+      setChecked(hidden);
+      toast.error(error.serverError ?? t.failed);
+    },
+  });
+
+  return (
+    <FieldSet>
+      <FieldLegend className="flex items-center gap-2">Group rosters</FieldLegend>
+      <div className="max-w-2xl">
+        <SwitchChoiceField
+          id="hide-from-group-rosters"
+          title={t.hideFromRosters}
+          description={t.hideFromRostersDescription}
+          checked={checked}
+          disabled={action.isPending}
+          onCheckedChange={(next) => {
+            setChecked(next);
+            action.execute({ hidden: next });
+          }}
+        />
+      </div>
+    </FieldSet>
   );
 }
