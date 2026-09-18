@@ -7,6 +7,7 @@ import {
   categoryAdminAssignments,
   groupCategories,
   groupMemberships,
+  groupResources,
   groups,
   tenantMembers,
   users,
@@ -289,11 +290,14 @@ export async function getGroupById(orgId: string, groupId: string) {
       workspaceOrgUnitPath: groups.workspaceOrgUnitPath,
       notifyViaWorkspaceGroup: groups.notifyViaWorkspaceGroup,
       notificationEmail: groups.notificationEmail,
+      pageVisibility: groups.pageVisibility,
+      announcement: groups.announcement,
       createdAt: groups.createdAt,
       updatedAt: groups.updatedAt,
       categoryName: groupCategories.name,
       categorySlug: groupCategories.slug,
       categoryManagesFees: groupCategories.managesMembershipFees,
+      categoryGroupPagesVisibleToAllMembers: groupCategories.groupPagesVisibleToAllMembers,
       categoryNotifiesOnRegistration: groupCategories.notifyOnRegistration,
       categorySpecialCapability: groupCategories.specialCapability,
     })
@@ -511,13 +515,23 @@ export async function getCategoryDetailData(
   };
 }
 
+/** The group's portal links, in display order — what the Page tab edits. */
+export async function listGroupResources(orgId: string, groupId: string) {
+  return db
+    .select({ id: groupResources.id, label: groupResources.label, url: groupResources.url })
+    .from(groupResources)
+    .where(and(eq(groupResources.orgId, orgId), eq(groupResources.groupId, groupId)))
+    .orderBy(asc(groupResources.sortOrder), asc(groupResources.createdAt));
+}
+
 export async function getGroupDetailData(orgId: string, groupId: string) {
-  const [group, members, admins, requests, assignableMembers] = await Promise.all([
+  const [group, members, admins, requests, assignableMembers, resources] = await Promise.all([
     getGroupById(orgId, groupId),
     listGroupMembers(orgId, groupId),
     listGroupAdmins(orgId, groupId),
     listGroupJoinRequests(orgId, groupId),
     listAssignableTenantMembers(orgId),
+    listGroupResources(orgId, groupId),
   ]);
 
   if (!group) {
@@ -530,6 +544,7 @@ export async function getGroupDetailData(orgId: string, groupId: string) {
     admins,
     requests,
     assignableMembers,
+    resources,
     groupLabel: getMemberDisplayName({
       firstName: group.name,
       lastName: "",

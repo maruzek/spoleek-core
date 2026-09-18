@@ -631,6 +631,18 @@ export function GroupCategoryForm({
             )}
           </form.Field>
 
+          <form.Field name="groupPagesVisibleToAllMembers">
+            {(formField) => (
+              <SwitchChoiceField
+                id="group-category-pages-visible-to-all-members"
+                title="Group pages open to all members"
+                description="Any signed-in member can open this category's group pages. Rosters stay members-only regardless. Each group can override this."
+                checked={formField.state.value}
+                onCheckedChange={formField.handleChange}
+              />
+            )}
+          </form.Field>
+
           <form.Field name="isActive">
             {(formField) => (
               <SwitchChoiceField

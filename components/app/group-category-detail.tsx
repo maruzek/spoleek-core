@@ -442,6 +442,7 @@ export function GroupCategoryDetail({
         isPending={saveGroup.isPending}
         validationErrors={saveGroup.result.validationErrors}
         categoryManagesFees={category.managesMembershipFees}
+        categoryGroupPagesVisibleToAllMembers={category.groupPagesVisibleToAllMembers}
         workspaceConnected={workspaceConnected}
         canManageWorkspaceIntegration={canManageWorkspaceIntegration}
         onOpenChange={(open) => setGroupSheetState((current) => ({ ...current, open }))}

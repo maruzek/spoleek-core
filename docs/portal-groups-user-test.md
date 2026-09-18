@@ -131,3 +131,43 @@ With the plain member's request on hiking **pending** (not approved):
 ## 8. Clean-up
 
 - [ ] `pnpm db:seed:groups --reset` removes the demo category, its groups, memberships and the three demo members; nothing else changes.
+
+## 9. Group page (`/portal/groups/[slug]`)
+
+Fresh `pnpm db:seed:groups`: climbing is **open to all members** with a notice and three links, hiking and board **inherit** (category default: members only), the org shows rosters, Filip has opted out of them.
+
+### Access
+
+- [ ] Signed in as a member of nothing (your own account before joining): `/portal/groups/demo-climbing` opens as a **visitor** — header, notice board, links, upcoming events, no Overview cards beyond links, no Members tab, no Past window. `/portal/groups/demo-hiking` and `/portal/groups/demo-board` → **404**, not 403. `/portal/groups/nope` → 404.
+- [ ] Join climbing → the page becomes the **member** view: "Member" badge, Overview shows **Your standing** (role, member since today), Members tab appears, Events gets a **Past** window.
+- [ ] Ask to join hiking → still 404 on hiking's page (a pending row is not a membership). Same for Filip's declined row.
+- [ ] Admin: set hiking to **Members only** explicitly, then the category switch **Group pages open to all members** on → hiking still 404s for a non-member; board (inherit) now opens. The group form's "Inherit from category" reads "(currently: open to all members)".
+- [ ] Archive climbing (inactive) → 404 for everyone including Dana; the card disappears from `/portal/groups`.
+- [ ] Group names on `/portal/groups` cards link to the page — own cards always, available cards only when the page would open. The dashboard "Groups" tile links each name.
+
+### Roster
+
+- [ ] As a climbing member, Members tab lists Dana (Leader badge, first) and the other members; **Filip is not listed** even after he joins climbing.
+- [ ] `/portal/profile` → Your data → **Do not list me in group rosters** switch; turn it on → your row disappears from the roster for others (check as a second member); the export lists `hideFromGroupRosters: true`.
+- [ ] `/admin/settings` → Membership → **Show group rosters to members** off → the Members tab disappears everywhere; the profile switch disappears too.
+- [ ] Dana opts out → she is still shown in the header's Leaders line.
+
+### Notice board and links
+
+- [ ] As Dana (group admin) on climbing: Overview → **Edit** on the notice board → dialog with the rich-text editor → change text, save → toast, page refreshes with "Updated today by Dana Leader".
+- [ ] Paste `<p>Hi</p><script>alert(1)</script><a href="javascript:alert(1)">x</a>` into the editor's HTML (or type it and check the stored value) → after save the board shows "Hi", no script, no javascript: link.
+- [ ] Clear the editor completely → save → toast "Notice board cleared", the board shows the empty note (managers only; visitors see no board section).
+- [ ] **Edit links** → reorder with the arrows, remove one, add one with `ftp://x` → inline error; `https://` and `mailto:` accept. Add until 20 → the add button disables. Save → order and set match on reload.
+- [ ] `/admin/groups/<category>/<climbing>` → **Page** tab → same two editors inline, "View as member" opens the portal page in a new tab.
+
+### Events, forms, fee
+
+- [ ] `pnpm db:seed:events` then make one event owned by climbing and one owned by the org with audience = climbing group. Events tab: the owned one is in **Upcoming**, the org one too but with an **Invited** badge; the source toggle **This group / Invited to** splits them. A past owned event shows under **Past**; more than 20 → "Show all N".
+- [ ] An event running right now (start in the past, end in the future) → lands under **Now** with the pulsing dot, and Now is the default window.
+- [ ] Answer filter and search narrow the list; "Nothing matches these filters." when nothing does.
+- [ ] A standalone form owned by climbing → Forms tab (count on the tab in orange while open). Event-attached forms do not appear here.
+- [ ] Category **manages membership fees**, climbing has a fee → Overview → Your standing shows the amount and either the payment status (link to `/portal/payments`) or "Renews <date>".
+
+### Leader tools
+
+- [ ] Dana on hiking: Overview shows **Leader tools** with "1 request waiting · N members" and **Manage in admin** → hiking's admin page. A plain member does not see the card.

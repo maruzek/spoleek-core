@@ -111,6 +111,7 @@ export function MembershipSettingsCard({
   const [allowSelfApproval, setAllowSelfApproval] = useState(
     state.membershipReportAllowSelfApproval,
   );
+  const [showGroupRosters, setShowGroupRosters] = useState(state.showGroupRosters);
   const [confirmMonth, setConfirmMonth] = useState(
     state.membershipReportConfirmMonth ?? 3,
   );
@@ -465,6 +466,19 @@ export function MembershipSettingsCard({
         </>
       ) : null}
 
+      <div className="flex flex-col gap-3 border-t pt-6">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Group pages
+        </p>
+        <SwitchChoiceField
+          id="membership-show-group-rosters"
+          title="Show group rosters to members"
+          description="Members see the names of the other members in their own groups. Legal basis is the organization's legitimate interest — say so in your privacy policy. Contact details are never shown, and each member can opt out on their profile."
+          checked={showGroupRosters}
+          onCheckedChange={setShowGroupRosters}
+        />
+      </div>
+
       <div>
         <Button
           type="button"
@@ -492,7 +506,7 @@ export function MembershipSettingsCard({
               membershipReportAllowSelfApproval: allowSelfApproval,
               membershipReportConfirmMonth: hasDeadline ? confirmMonth : null,
               membershipReportConfirmDay: hasDeadline ? confirmDay : null,
-              showGroupRosters: state.showGroupRosters,
+              showGroupRosters,
             })
           }
           disabled={saveAction.isPending}

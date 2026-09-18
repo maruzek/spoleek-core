@@ -15,6 +15,7 @@ export function GroupDialog({
   isPending,
   validationErrors,
   categoryManagesFees,
+  categoryGroupPagesVisibleToAllMembers,
   workspaceConnected,
   canManageWorkspaceIntegration,
   onOpenChange,
@@ -26,6 +27,7 @@ export function GroupDialog({
   isPending: boolean;
   validationErrors?: GroupValidationErrors;
   categoryManagesFees?: boolean;
+  categoryGroupPagesVisibleToAllMembers?: boolean;
   workspaceConnected?: boolean;
   canManageWorkspaceIntegration?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -55,6 +57,7 @@ export function GroupDialog({
         isPending={isPending}
         validationErrors={validationErrors}
         categoryManagesFees={categoryManagesFees}
+        categoryGroupPagesVisibleToAllMembers={categoryGroupPagesVisibleToAllMembers}
         workspaceConnected={workspaceConnected}
         canManageWorkspaceIntegration={canManageWorkspaceIntegration}
         onSubmit={onSubmit}

@@ -7,6 +7,7 @@ import { FolderTreeIcon, Loader2Icon } from "lucide-react";
 
 import {
   groupJoinPolicyOptions,
+  groupPageVisibilityOptions,
   groupSchema,
   type GroupFormValues,
 } from "@/lib/groups";
@@ -46,6 +47,7 @@ import {
   WorkspaceLinkSettingsFields,
 } from "@/components/app/workspace-link-fields";
 import { getWorkspaceOrgUnitsAction } from "@/server/actions/workspace";
+import { resolveEffectiveVisibility } from "@/lib/groups/portal-actions";
 import { feeToMajorUnits, feeToMinorUnits } from "@/lib/payments";
 import type { WorkspaceOrgUnit } from "@/server/lib/workspace/client";
 
@@ -114,6 +116,7 @@ export function GroupForm({
   isWorkspaceOrgUnitCategory,
   linkedWorkspaceGroupEmail = null,
   categoryNotifiesOnRegistration = false,
+  categoryGroupPagesVisibleToAllMembers = false,
   onSubmit,
   onCancel,
   submitLabel,
@@ -132,6 +135,8 @@ export function GroupForm({
   /** Address of this group's enabled Google group link, when it has one. */
   linkedWorkspaceGroupEmail?: string | null;
   categoryNotifiesOnRegistration?: boolean;
+  /** The category's default for who may open group pages; shown on the "inherit" option. */
+  categoryGroupPagesVisibleToAllMembers?: boolean;
   onSubmit: (value: GroupFormValues) => Promise<void>;
   onCancel?: () => void;
   submitLabel?: string;
@@ -341,6 +346,58 @@ export function GroupForm({
               </RadioGroup>
             </FieldSet>
           )}
+        </form.Field>
+
+        <form.Field name="pageVisibility">
+          {(formField) => {
+            const inherited = resolveEffectiveVisibility(
+              { pageVisibility: "inherit" },
+              { groupPagesVisibleToAllMembers: categoryGroupPagesVisibleToAllMembers },
+            );
+            const inheritedLabel = groupPageVisibilityOptions.find((o) => o.value === inherited)?.label ?? "";
+
+            return (
+              <FieldSet>
+                <FieldLegend className="flex items-center gap-2">
+                  Group page
+                  <FieldHint>
+                    Who may open this group&apos;s page on the member portal. The roster is only ever
+                    shown to the group&apos;s own members.
+                  </FieldHint>
+                </FieldLegend>
+                <RadioGroup
+                  value={formField.state.value}
+                  onValueChange={(value) =>
+                    formField.handleChange(value as GroupFormValues["pageVisibility"])
+                  }
+                  className="max-w-2xl"
+                >
+                  {groupPageVisibilityOptions.map((option) => {
+                    const id = `group-page-visibility-${option.value}`;
+
+                    return (
+                      <FieldLabel key={option.value} htmlFor={id}>
+                        <Field orientation="horizontal">
+                          <FieldContent>
+                            <FieldTitle>
+                              {option.label}
+                              {option.value === "inherit" ? (
+                                <span className="ml-1.5 font-normal text-muted-foreground">
+                                  (currently: {inheritedLabel.toLowerCase()})
+                                </span>
+                              ) : null}
+                            </FieldTitle>
+                            <FieldDescription>{option.description}</FieldDescription>
+                          </FieldContent>
+                          <RadioGroupItem value={option.value} id={id} />
+                        </Field>
+                      </FieldLabel>
+                    );
+                  })}
+                </RadioGroup>
+              </FieldSet>
+            );
+          }}
         </form.Field>
 
         <div className="flex flex-col gap-5">

@@ -9,6 +9,8 @@ import { useAction } from "next-safe-action/hooks";
 import {
   ClipboardCheckIcon,
   CloudAlertIcon,
+  ExternalLinkIcon,
+  LayoutTemplateIcon,
   InboxIcon,
   PlusIcon,
   Settings2Icon,
@@ -26,6 +28,8 @@ import { REPORT_GROUP_STATUS } from "@/lib/membership-report-status";
 import type { GroupReportTabView } from "@/server/queries/membership-reports";
 import { GroupReportCard } from "@/components/app/group-report-card";
 import { GroupWorkspaceLinksCard } from "@/components/app/group-workspace-links-card";
+import { GroupAnnouncementEditor } from "@/components/app/portal/group-announcement-editor";
+import { GroupResourcesEditor } from "@/components/app/portal/group-resources-editor";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAdmin } from "@/components/app/member-admin";
 import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
@@ -91,7 +95,11 @@ type GroupDetailProps = {
     categorySlug: string;
     categoryManagesFees: boolean;
     categoryNotifiesOnRegistration: boolean;
+    categoryGroupPagesVisibleToAllMembers: boolean;
+    announcement: string | null;
   };
+  /** The portal page's links, in order. */
+  resources: Array<{ id: string; label: string; url: string }>;
   members: Array<{
     membershipId: string;
     memberId: string;
@@ -176,6 +184,7 @@ export function GroupDetail({
   members,
   admins,
   requests,
+  resources,
   initialTab,
   assignableMembers,
   membersTable,
@@ -368,6 +377,10 @@ export function GroupDetail({
               ) : null}
             </TabsTrigger>
           ) : null}
+          <TabsTrigger value="page">
+            <LayoutTemplateIcon data-icon="inline-start" />
+            Page
+          </TabsTrigger>
           {reportView ? (
             <TabsTrigger value="report">
               <ClipboardCheckIcon data-icon="inline-start" />
@@ -386,6 +399,55 @@ export function GroupDetail({
             Settings
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="page" className="flex flex-col gap-4 pt-4">
+          {/* Same centred column as Settings: two editors, read top to bottom. */}
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Notice board</CardTitle>
+                <CardDescription>
+                  A note from the leaders at the top of the group&apos;s portal page. Everyone who
+                  can open the page sees it.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GroupAnnouncementEditor
+                  key={`${group.id}-${group.updatedAt.toISOString()}`}
+                  groupId={group.id}
+                  initialHtml={group.announcement ?? ""}
+                  variant="inline"
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Links &amp; resources</CardTitle>
+                <CardDescription>
+                  Where the group lives outside Spoleek — a chat, a shared folder, a calendar.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GroupResourcesEditor
+                  key={`${group.id}-${resources.map((r) => r.id).join(",")}`}
+                  groupId={group.id}
+                  resources={resources}
+                  variant="inline"
+                />
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end">
+              <Button asChild variant="outline" size="sm">
+                <a href={`/portal/groups/${group.slug}`} target="_blank" rel="noopener noreferrer">
+                  View as member
+                  <ExternalLinkIcon data-icon="inline-end" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
 
         {reportView ? (
           <TabsContent value="report" className="flex flex-col gap-4 pt-4">
@@ -476,6 +538,7 @@ export function GroupDetail({
                   workspaceLinks.find((link) => link.isEnabled)?.workspaceGroupEmail ?? null
                 }
                 categoryNotifiesOnRegistration={group.categoryNotifiesOnRegistration}
+                categoryGroupPagesVisibleToAllMembers={group.categoryGroupPagesVisibleToAllMembers}
                 submitLabel="Save group"
                 onSubmit={async (value: GroupFormValues) => {
                   const result = await saveGroup.executeAsync(value);

@@ -4,7 +4,9 @@ import { db } from "@/server/db";
 import {
   groupCategories,
   groupMemberships,
+  groupResources,
   groups,
+  organizations,
   tenantMembers,
 } from "@/server/db/schema";
 
@@ -21,6 +23,10 @@ const DEMO_EMAIL_DOMAIN = "@groups.demo.test";
  *   - Hiking: `request_to_join`, led by Dana → **Ask to join**; carries one
  *     pending request (Eva) and one declined request (Filip, blocked).
  *   - Board: `admin_only` → **Ask a leader**, with Dana's mailto.
+ *
+ * For the group page: Climbing is open to all members, carries a notice and
+ * three links; the org shows rosters; Filip has opted out of them. Reset
+ * turns the org switch back off.
  *
  * Members are shadow records (no login) so the seed never touches auth; sign
  * in as your own member to see the portal side, or open Hiking's Requests
@@ -56,6 +62,10 @@ export async function seedDemoGroups(orgId: string) {
         description: "Indoor wall on Tuesdays, rock on weekends.",
         joinPolicy: "free_join_leave",
         sortOrder: 0,
+        pageVisibility: "all_members",
+        announcement:
+          "<h2>Autumn season</h2><p>The wall reopens on <strong>1 October</strong>. Bring your own harness; club ropes are checked and back in the locker.</p><ul><li>Tuesdays 18:00 — indoor</li><li>Weekends — rock, weather permitting</li></ul>",
+        announcementUpdatedAt: new Date(now - 3 * day),
       },
       {
         orgId,
@@ -83,9 +93,30 @@ export async function seedDemoGroups(orgId: string) {
     .values([
       { orgId, firstName: "Dana", lastName: "Leader", email: `dana${DEMO_EMAIL_DOMAIN}`, status: "active" },
       { orgId, firstName: "Eva", lastName: "Asking", email: `eva${DEMO_EMAIL_DOMAIN}`, status: "active" },
-      { orgId, firstName: "Filip", lastName: "Declined", email: `filip${DEMO_EMAIL_DOMAIN}`, status: "active" },
+      {
+        orgId,
+        firstName: "Filip",
+        lastName: "Declined",
+        email: `filip${DEMO_EMAIL_DOMAIN}`,
+        status: "active",
+        hideFromGroupRosters: true,
+      },
     ])
     .returning({ id: tenantMembers.id });
+
+  // The announcement author is Dana; the FK needs her row first.
+  await db
+    .update(groups)
+    .set({ announcementUpdatedByMemberId: dana!.id })
+    .where(eq(groups.id, climbing!.id));
+
+  await db.insert(groupResources).values([
+    { orgId, groupId: climbing!.id, label: "Team chat", url: "https://chat.example.test/climbing", sortOrder: 0 },
+    { orgId, groupId: climbing!.id, label: "Route log (shared sheet)", url: "https://docs.example.test/routes", sortOrder: 1 },
+    { orgId, groupId: climbing!.id, label: "Write to the wall", url: "mailto:wall@example.test", sortOrder: 2 },
+  ]);
+
+  await db.update(organizations).set({ showGroupRosters: true }).where(eq(organizations.id, orgId));
 
   await db.insert(groupMemberships).values([
     { orgId, groupId: climbing!.id, memberId: dana!.id, role: "group_admin" },
@@ -121,8 +152,9 @@ export async function seedDemoGroups(orgId: string) {
   };
 }
 
-/** Removes the demo category (groups and memberships cascade) and the demo members. */
+/** Removes the demo category (groups, memberships and links cascade) and the demo members; turns rosters back off. */
 export async function resetDemoGroups(orgId: string) {
+  await db.update(organizations).set({ showGroupRosters: false }).where(eq(organizations.id, orgId));
   const [categories, members] = await Promise.all([
     db
       .delete(groupCategories)

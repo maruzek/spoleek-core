@@ -85,6 +85,7 @@ export default async function AdminGroupPage({
         }}
         admins={detail.admins}
         requests={detail.requests}
+        resources={detail.resources}
         initialTab={tab}
         assignableMembers={detail.assignableMembers}
         workspaceLinks={workspaceLinks}
