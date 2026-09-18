@@ -43,12 +43,7 @@ import { formatMoney } from "@/lib/payments";
 import { matchesSearch } from "@/lib/search";
 import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
 import { cn } from "@/lib/utils";
-import type {
-  GroupEventItem,
-  PortalGroupDetail,
-  PortalGroupRosterEntry,
-} from "@/server/queries/portal-group-detail";
-import type { PortalGroupPerson } from "@/server/queries/portal-groups";
+import type { GroupEventItem, PortalGroupDetail } from "@/server/queries/portal-group-detail";
 
 /**
  * One group, for one member. The header is the page title; under it four
@@ -72,6 +67,7 @@ export function PortalGroupPage({
   const liveEvents = detail.events.upcoming.length + detail.events.alsoInvited.length;
   const openForms = detail.forms.open.length;
   const hasForms = openForms + detail.forms.past.length > 0;
+  const hasPeople = detail.leaders.length > 0 || detail.roster !== null;
 
   return (
     <div className="flex flex-1 flex-col pb-8">
@@ -95,11 +91,11 @@ export function PortalGroupPage({
               <TabCount count={openForms} accent={openForms > 0} />
             </TabsTrigger>
           ) : null}
-          {detail.roster ? (
+          {hasPeople ? (
             <TabsTrigger value="members">
               <UsersIcon data-icon="inline-start" />
               {t.tabs.members}
-              <TabCount count={detail.roster.length} />
+              <TabCount count={detail.roster?.length ?? 0} />
             </TabsTrigger>
           ) : null}
         </TabsList>
@@ -115,9 +111,9 @@ export function PortalGroupPage({
             <FormsSection detail={detail} />
           </TabsContent>
         ) : null}
-        {detail.roster ? (
+        {hasPeople ? (
           <TabsContent value="members" className="pt-4">
-            <RosterCard roster={detail.roster} />
+            <MembersTab detail={detail} />
           </TabsContent>
         ) : null}
       </Tabs>
@@ -142,9 +138,8 @@ function TabCount({ count, accent = false }: { count: number; accent?: boolean }
 // ─── Overview ───────────────────────────────────────────────────────────────
 
 /**
- * The board stretches across the top; below it the member's own cards sit in
- * a row. A visitor with no links and no standing sees only the board (or,
- * with nothing posted, the empty note), so the tab never renders blank.
+ * The board on the left, the member's own cards stacked beside it. A visitor
+ * with no links and no standing gets the board alone at reading width.
  */
 function OverviewTab({
   detail,
@@ -164,12 +159,12 @@ function OverviewTab({
   ].filter(Boolean);
 
   return (
-    <div className="flex max-w-5xl flex-col gap-8">
+    <div className={cn("grid gap-8", cards.length > 0 ? "max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
       <AnnouncementSection detail={detail} canManage={canManage} />
       {cards.length > 0 ? (
-        <div className={cn("grid gap-4", cards.length > 1 && "md:grid-cols-2", cards.length > 2 && "xl:grid-cols-3")}>
+        <aside className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:sticky lg:top-6 lg:self-start">
           {cards}
-        </div>
+        </aside>
       ) : null}
     </div>
   );
@@ -183,19 +178,21 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
   const { group, standing, leaders } = detail;
 
   return (
-    <header className="flex flex-col gap-4 pb-6 md:pb-8">
-      <Link
-        href="/portal/groups"
-        className="inline-flex w-fit items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/80 transition-colors hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-3.5" aria-hidden />
-        {t.allGroups}
-        <span aria-hidden>·</span>
-        <span className="normal-case tracking-normal">{group.categoryName}</span>
-      </Link>
+    <div className="flex flex-col gap-6 pb-6 md:pb-8">
+      <div>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href="/portal/groups">
+            <ArrowLeftIcon data-icon="inline-start" />
+            {t.allGroups}
+          </Link>
+        </Button>
+      </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 flex-col gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+            {group.categoryName}
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{group.name}</h1>
             {standing?.role === "group_admin" ? (
@@ -203,14 +200,11 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
                 <ShieldIcon data-icon="inline-start" />
                 {t.youLead}
               </Badge>
-            ) : standing ? (
-              <Badge variant="outline">{t.member}</Badge>
             ) : null}
           </div>
           {group.description ? (
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">{group.description}</p>
           ) : null}
-          <LeaderLine leaders={leaders} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -249,43 +243,8 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
             </Button>
           ) : null}
         </div>
-      </div>
-    </header>
-  );
-}
-
-function LeaderLine({ leaders }: { leaders: PortalGroupPerson[] }) {
-  const tg = useDictionary().portalGroups;
-
-  return (
-    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
-        {leaders.length === 1 ? tg.leader : tg.leaders}
-      </span>
-      {leaders.length === 0 ? (
-        <span>{tg.notAssignedYet}</span>
-      ) : (
-        leaders.map((leader, index) => (
-          <span key={leader.id} className="inline-flex items-center gap-1">
-            {index > 0 ? <span aria-hidden className="mr-1 text-muted-foreground/50">·</span> : null}
-            <span className={cn("text-foreground", leader.isYou && "text-primary")}>
-              {leader.name}
-              {leader.isYou ? ` ${tg.you}` : ""}
-            </span>
-            {leader.email && !leader.isYou ? (
-              <a
-                href={`mailto:${leader.email}`}
-                aria-label={tg.writeTo(leader.name)}
-                title={leader.email}
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <MailIcon className="size-3.5" aria-hidden />
-              </a>
-            ) : null}
-          </span>
-        ))
-      )}
-    </p>
+      </header>
+    </div>
   );
 }
 
@@ -311,7 +270,7 @@ function AnnouncementSection({ detail, canManage }: { detail: PortalGroupDetail;
       {announcement ? (
         <article
           className={cn(
-            "rounded-xl border-l-4 border-primary/60 bg-card px-5 py-4 text-card-foreground ring-1 ring-foreground/10",
+            "rounded-xl bg-card px-5 py-4 text-card-foreground ring-1 ring-foreground/10",
             r.className,
           )}
           style={r.style}
@@ -765,39 +724,133 @@ function initials(name: string) {
     .join("");
 }
 
-function RosterCard({ roster }: { roster: PortalGroupRosterEntry[] }) {
+/**
+ * Leaders first, each with a mail action, then the roster when the org shows
+ * it. Leaders come from `detail.leaders` (with email), not the roster: a
+ * leader who opted out of rosters is still the person to write to.
+ */
+function MembersTab({ detail }: { detail: PortalGroupDetail }) {
   const t = useDictionary().portalGroupPage;
+  const tg = useDictionary().portalGroups;
+  const { leaders, roster } = detail;
+  const leaderIds = new Set(leaders.map((leader) => leader.id));
+  const members = roster?.filter((person) => !leaderIds.has(person.id)) ?? null;
+  const leaderEmails = leaders.filter((leader) => leader.email && !leader.isYou).map((leader) => leader.email!);
 
   return (
-    <AsideCard title={t.roster} count={roster.length} index={0} className="max-w-4xl">
-      <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <UsersIcon className="size-3.5" aria-hidden />
-        {t.rosterHint}
-      </p>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {roster.map((person, index) => {
-          const r = reveal(index);
-          return (
-            <li key={person.id} className={cn("flex items-center gap-2.5", r.className)} style={r.style}>
-              <Avatar size="sm">
-                {person.image ? <AvatarImage src={person.image} alt="" /> : null}
-                <AvatarFallback>{initials(person.name) || "?"}</AvatarFallback>
-              </Avatar>
-              <span className={cn("min-w-0 flex-1 truncate text-sm", person.isYou && "text-primary")}>
-                {person.name}
-                {person.isYou ? ` ${t.you}` : ""}
-              </span>
-              {person.role === "group_admin" ? (
-                <Badge variant="secondary" className="shrink-0">
-                  <ShieldIcon data-icon="inline-start" />
-                  {t.leaderBadge}
-                </Badge>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-    </AsideCard>
+    <div className="flex max-w-4xl flex-col gap-6">
+      {leaders.length > 0 ? (
+        <section>
+          <SectionHeading
+            count={leaders.length}
+            hint={
+              leaderEmails.length > 0 ? (
+                <Button asChild variant="outline" size="sm">
+                  <a href={`mailto:${leaderEmails.join(",")}`}>
+                    <MailIcon data-icon="inline-start" />
+                    {t.emailLeaders}
+                  </a>
+                </Button>
+              ) : undefined
+            }
+          >
+            {t.leadersHeading}
+          </SectionHeading>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {leaders.map((leader, index) => (
+              <PersonRow
+                key={leader.id}
+                index={index}
+                name={leader.name}
+                image={null}
+                isYou={leader.isYou}
+                leader
+                trailing={
+                  leader.email && !leader.isYou ? (
+                    <Button asChild variant="ghost" size="sm" className="-mr-2 text-muted-foreground">
+                      <a href={`mailto:${leader.email}`} aria-label={tg.writeTo(leader.name)} title={leader.email}>
+                        <MailIcon data-icon="inline-start" />
+                        {t.write}
+                      </a>
+                    </Button>
+                  ) : null
+                }
+              />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {members ? (
+        <section>
+          <SectionHeading count={members.length} hint={t.rosterHint}>
+            {t.membersHeading}
+          </SectionHeading>
+          {members.length === 0 ? (
+            <EmptyRow icon={<UsersIcon className="size-4" aria-hidden />}>{tg.notAssignedYet}</EmptyRow>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {members.map((person, index) => (
+                <PersonRow
+                  key={person.id}
+                  index={leaders.length + index}
+                  name={person.name}
+                  image={person.image}
+                  isYou={person.isYou}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function PersonRow({
+  index,
+  name,
+  image,
+  isYou,
+  leader = false,
+  trailing,
+}: {
+  index: number;
+  name: string;
+  image: string | null;
+  isYou: boolean;
+  leader?: boolean;
+  trailing?: ReactNode;
+}) {
+  const t = useDictionary().portalGroupPage;
+  const r = reveal(index);
+
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-3 rounded-xl bg-card px-3 py-2.5 text-card-foreground ring-1 ring-foreground/10",
+        r.className,
+      )}
+      style={r.style}
+    >
+      <Avatar>
+        {image ? <AvatarImage src={image} alt="" /> : null}
+        <AvatarFallback>{initials(name) || "?"}</AvatarFallback>
+      </Avatar>
+      <span className="min-w-0 flex-1">
+        <span className={cn("block truncate text-sm font-medium", isYou ? "text-primary" : "text-foreground")}>
+          {name}
+          {isYou ? ` ${t.you}` : ""}
+        </span>
+        {leader ? (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <ShieldIcon className="size-3" aria-hidden />
+            {t.leaderBadge}
+          </span>
+        ) : null}
+      </span>
+      {trailing}
+    </li>
   );
 }
 
