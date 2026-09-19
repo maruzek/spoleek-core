@@ -95,34 +95,21 @@ path is tested against.
 
 ---
 
-## 4 · Group Category selection invariant behind the write seam — **Worth exploring**
+## ✅ 4 · Group Category selection invariant — DONE (2026-09-19)
 
-**Files**
-- `lib/groups/portal-actions.ts` :105-126 (single mode + `maxSelections`, tested)
-- `server/lib/member-management-scope.ts` :215-240
-  `validateManagedGroupSelection` (single mode only, untested)
-- `server/actions/member-admin.ts` :113-150 `validateGroupSelectionOrThrow`
-- `server/actions/groups.ts` :433-470 `assignGroupMemberAction`, :472
-  `assignGroupMembersAction` — **no check**
-- `server/lib/group-registration.ts` :109 and
-  `server/lib/workspace/adopt-drift.ts` — straight to the upsert
-- `server/lib/group-membership.ts` :33 `upsertActiveMembership` (7 callers) —
-  the natural home
-
-**Problem.** "One active group per single-select category / ≤ N per
-multi-select" is a data invariant enforced fully at one door, half at another,
-not at all at three. It will surface as "admin put a member in two regions".
-
-**Deepening.** Enforce the invariant inside `upsertActiveMembership` (it
-already takes a tx: lock the member's rows in the category, count, reject).
-Keep `resolveAvailableAction` in `lib/groups/portal-actions.ts` only for the
-portal's *pre-explanation* of why an action is unavailable. Delete
-`validateManagedGroupSelection` and `validateGroupSelectionOrThrow`.
-
-**Done when**
-- One DB test inserts through each of the 5 doors and asserts the second
-  single-select membership is rejected everywhere.
-- The two validators are gone; the portal decision table test still passes.
+`lib/groups/selection-limit.ts` (`resolveSelectionViolation`, pure, tested in
+`tests/group-selection-limit.test.ts`) is enforced inside
+`upsertActiveMembership` (`server/lib/group-membership.ts`), which now opens
+its own transaction (a savepoint when handed one) and throws
+`GroupMembershipError` with a human message. `validateManagedGroupSelection`
+is deleted; `validateGroupSelectionOrThrow` shrank to the RBAC half
+(`requireGroupIdsInScopeOrThrow`) plus a catch that turns the seam's error
+back into a `groupIds` field error. `syncManageableGroupMemberships` moved
+next to the upsert so the member-form door is testable. Bulk assign skips
+refused members and returns them; adopt-drift gained a
+`category_selection_full` skip reason. `tests/group-selection-invariant.test.ts`
+drives all five doors. **Selection limit** added to `CONTEXT.md`.
+Concurrent writes are serialised by a `FOR UPDATE` lock on the member row.
 
 ---
 

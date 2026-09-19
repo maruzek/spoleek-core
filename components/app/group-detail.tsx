@@ -219,8 +219,13 @@ export function GroupDetail({
   const assignGroupMembers = useAction(assignGroupMembersAction, {
     onSuccess({ data }) {
       if (data?.success) {
-        const count = data.requestedCount;
-        toast.success(`${count} member${count === 1 ? "" : "s"} assigned.`);
+        const count = data.assignedCount;
+        if (count > 0) {
+          toast.success(`${count} member${count === 1 ? "" : "s"} assigned.`);
+        }
+        for (const entry of data.skipped) {
+          toast.error(`${entry.name}: ${entry.reason}`);
+        }
         setMemberDialogOpen(false);
         router.refresh();
       }

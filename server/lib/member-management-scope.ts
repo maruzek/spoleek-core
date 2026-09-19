@@ -211,34 +211,3 @@ export async function canAccessMemberInScope(
 
   return membership != null;
 }
-
-export function validateManagedGroupSelection(
-  categories: MemberManagementGroupCategory[],
-  selectedGroupIds: string[],
-) {
-  const allowedGroupIds = new Set(
-    categories.flatMap((category) => category.groups.map((group) => group.id)),
-  );
-
-  for (const groupId of selectedGroupIds) {
-    if (!allowedGroupIds.has(groupId)) {
-      return "One or more selected groups are outside your management scope.";
-    }
-  }
-
-  for (const category of categories) {
-    if (category.selectionMode !== "single") {
-      continue;
-    }
-
-    const selectedCount = category.groups.filter((group) =>
-      selectedGroupIds.includes(group.id),
-    ).length;
-
-    if (selectedCount > 1) {
-      return `${category.name} only allows one group assignment.`;
-    }
-  }
-
-  return null;
-}

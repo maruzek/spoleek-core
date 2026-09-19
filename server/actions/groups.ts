@@ -42,7 +42,11 @@ import {
   enqueueMemberSyncForGroup,
 } from "@/server/lib/workspace/group-links";
 import { drainWorkspaceSyncOperations } from "@/server/lib/workspace/sync-queue";
-import { activeMembership, upsertActiveMembership } from "@/server/lib/group-membership";
+import {
+  activeMembership,
+  GroupMembershipError,
+  upsertActiveMembership,
+} from "@/server/lib/group-membership";
 
 async function ensureUniqueCategorySlug(orgId: string, slug: string, categoryId?: string) {
   const conditions = [eq(groupCategories.orgId, orgId), eq(groupCategories.slug, slug)];
@@ -484,26 +488,47 @@ export const assignGroupMembersAction = authActionClient
 
     const uniqueMemberIds = [...new Set(parsedInput.memberIds)];
 
-    const members = [];
+    const candidates = [];
     for (const memberId of uniqueMemberIds) {
-      members.push(await requireOrgMemberInOrganization(organization.id, memberId));
+      candidates.push(await requireOrgMemberInOrganization(organization.id, memberId));
     }
 
-    for (const memberId of uniqueMemberIds) {
-      await upsertActiveMembership(db, {
-        orgId: organization.id,
-        groupId: parsedInput.groupId,
-        memberId,
-      });
+    // A member the category will not take (already in a sibling group of a
+    // single-select category) is reported, not fatal: the rest of the
+    // selection still goes through.
+    const assigned = [];
+    const skipped: Array<{ memberId: string; name: string; reason: string }> = [];
+    for (const member of candidates) {
+      try {
+        await upsertActiveMembership(db, {
+          orgId: organization.id,
+          groupId: parsedInput.groupId,
+          memberId: member.id,
+        });
+        assigned.push(member);
+      } catch (error) {
+        if (!(error instanceof GroupMembershipError)) throw error;
+        skipped.push({
+          memberId: member.id,
+          name: `${member.firstName} ${member.lastName}`.trim(),
+          reason: error.message,
+        });
+      }
     }
 
-    await syncGroupMembership(organization.id, parsedInput.groupId, uniqueMemberIds);
+    if (assigned.length > 0) {
+      await syncGroupMembership(
+        organization.id,
+        parsedInput.groupId,
+        assigned.map((member) => member.id),
+      );
+    }
 
     if (
       group.categorySpecialCapability === "workspace_org_unit" &&
       group.workspaceOrgUnitPath
     ) {
-      for (const member of members) {
+      for (const member of assigned) {
         if (!member.workspaceUserEmail) continue;
         await updateWorkspaceUserOrgUnit(
           organization.id,
@@ -515,7 +540,8 @@ export const assignGroupMembersAction = authActionClient
 
     return {
       success: true,
-      requestedCount: uniqueMemberIds.length,
+      assignedCount: assigned.length,
+      skipped,
     };
   });
 

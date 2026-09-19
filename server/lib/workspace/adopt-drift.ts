@@ -7,7 +7,7 @@ import {
 } from "@/server/db/schema";
 import { getWorkspaceUser } from "@/server/lib/workspace/client";
 import { normalizeAddress } from "@/server/lib/workspace/reconcile";
-import { upsertActiveMembership } from "@/server/lib/group-membership";
+import { GroupMembershipError, upsertActiveMembership } from "@/server/lib/group-membership";
 
 export type AdoptTarget = {
   id: string;
@@ -26,7 +26,9 @@ export type AdoptTarget = {
 export type AdoptSkipReason =
   | "external_not_included"
   | "member_syncs_another_address"
-  | "alias_of_another_address";
+  | "alias_of_another_address"
+  /** The member is already in a sibling group of a category that limits selection. */
+  | "category_selection_full";
 
 export type AdoptOutcome =
   | { status: "adopted"; memberId: string; createdMember: boolean }
@@ -39,6 +41,8 @@ export const adoptSkipMessages: Record<AdoptSkipReason, string> = {
     "belongs to a member who syncs under a different address, so adopting it would not stick.",
   alias_of_another_address:
     "is an alias of another Workspace account. Adopt that account's primary address instead.",
+  category_selection_full:
+    "belongs to a member who is already in another group of this category, and the category does not allow more.",
 };
 
 function splitFullName(fullName: string) {
@@ -148,11 +152,20 @@ export async function adoptDriftAddress(
     createdMember = true;
   }
 
-  await upsertActiveMembership(db, {
-    orgId: link.orgId,
-    groupId: link.groupId,
-    memberId,
-  });
+  try {
+    await upsertActiveMembership(db, {
+      orgId: link.orgId,
+      groupId: link.groupId,
+      memberId,
+    });
+  } catch (error) {
+    // Only an existing member can hit this — a member created just above has
+    // no memberships yet — so skipping leaves nothing behind.
+    if (error instanceof GroupMembershipError) {
+      return { status: "skipped", reason: "category_selection_full" };
+    }
+    throw error;
+  }
 
   await db
     .insert(workspaceGroupMemberLinks)

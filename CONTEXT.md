@@ -34,3 +34,18 @@ concept lives here.
   Two doors produce a scope: the `canManagePayments` capability (dashboard)
   and event management (the event's response list yields a scope limited to
   that one event). Both feed the same list query and the same mutations.
+
+## Groups
+
+- **Selection limit** — a Group Category's rule for how many of its groups
+  one member may be active in at once: exactly one (`single`), or at most
+  `maxSelections` (`multiple`, `null` = unlimited). A member's `group_admin`
+  row counts like any other active row; join *requests* (`pending`,
+  `declined`) do not count. The rule is one pure function
+  (`lib/groups/selection-limit.ts` `resolveSelectionViolation`) and is
+  enforced in exactly one place: `upsertActiveMembership`, the only writer of
+  active memberships, which refuses the write with `GroupMembershipError`.
+  Callers that *move* a member between groups (portal switch, the join form,
+  the member-form picker) delete the old row first in the same transaction.
+  The portal's `resolveAvailableAction` only *explains* the limit ahead of
+  time; it never enforces it.

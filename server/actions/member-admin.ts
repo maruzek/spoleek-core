@@ -34,7 +34,6 @@ import { groupCategories, groupMemberships, organizations, tenantMembers } from 
 import {
   canAccessMemberInScope,
   resolveMemberManagementScope,
-  validateManagedGroupSelection,
 } from "@/server/lib/member-management-scope";
 import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import {
@@ -77,7 +76,11 @@ import {
   getMemberById,
   getMemberByUserId,
 } from "@/server/queries/members";
-import { activeMembership, upsertActiveMembership } from "@/server/lib/group-membership";
+import {
+  activeMembership,
+  GroupMembershipError,
+  syncManageableGroupMemberships,
+} from "@/server/lib/group-membership";
 
 function isWorkspaceModuleReady(organization: {
   workspaceModuleEnabled: boolean;
@@ -110,7 +113,12 @@ function resolveAllowedRole(
   return canAssignElevatedRoles ? requestedRole : "member";
 }
 
-function validateGroupSelectionOrThrow(args: {
+/**
+ * The RBAC half of group assignment: a scoped leader may only hand out groups
+ * they manage. The selection-count invariant is not checked here — the write
+ * seam (`upsertActiveMembership`) owns it; see `groupIdsValidationError`.
+ */
+function requireGroupIdsInScopeOrThrow(args: {
   schema: typeof createMemberSchema | typeof updateMemberSchema;
   scopeAccessLevel: "full" | "scoped";
   manageableGroupCategories: Awaited<
@@ -120,15 +128,16 @@ function validateGroupSelectionOrThrow(args: {
   requireAtLeastOneGroup: boolean;
 }) {
   const uniqueGroupIds = [...new Set(args.groupIds)];
-  const selectionError = validateManagedGroupSelection(
-    args.manageableGroupCategories,
-    uniqueGroupIds,
+  const allowedGroupIds = new Set(
+    args.manageableGroupCategories.flatMap((category) =>
+      category.groups.map((group) => group.id),
+    ),
   );
 
-  if (selectionError) {
+  if (uniqueGroupIds.some((groupId) => !allowedGroupIds.has(groupId))) {
     returnValidationErrors(args.schema, {
       groupIds: {
-        _errors: [selectionError],
+        _errors: ["One or more selected groups are outside your management scope."],
       },
     });
   }
@@ -146,6 +155,21 @@ function validateGroupSelectionOrThrow(args: {
   }
 
   return uniqueGroupIds;
+}
+
+/**
+ * A selection the write seam refused becomes a field error on `groupIds`, so
+ * the member form shows it next to the picker instead of as a toast. Anything
+ * else is rethrown.
+ */
+function rethrowAsGroupIdsValidationError(
+  schema: typeof createMemberSchema | typeof updateMemberSchema,
+  error: unknown,
+): never {
+  if (error instanceof GroupMembershipError) {
+    returnValidationErrors(schema, { groupIds: { _errors: [error.message] } });
+  }
+  throw error;
 }
 
 async function assertMemberInScopeOrThrow(args: {
@@ -176,68 +200,6 @@ async function assertMemberInScopeOrThrow(args: {
   return member;
 }
 
-async function syncManageableGroupMemberships(args: {
-  memberId: string;
-  orgId: string;
-  allowedGroupIds: string[];
-  nextGroupIds: string[];
-  tx: Pick<typeof db, "select" | "insert" | "delete">;
-}) {
-  const uniqueAllowedGroupIds = [...new Set(args.allowedGroupIds)];
-  const uniqueNextGroupIds = [...new Set(args.nextGroupIds)];
-
-  if (uniqueAllowedGroupIds.length === 0) {
-    return;
-  }
-
-  const existingMemberships = await args.tx
-    .select({
-      id: groupMemberships.id,
-      groupId: groupMemberships.groupId,
-    })
-    .from(groupMemberships)
-    .where(
-      and(
-        eq(groupMemberships.orgId, args.orgId),
-        activeMembership(),
-        eq(groupMemberships.memberId, args.memberId),
-        inArray(groupMemberships.groupId, uniqueAllowedGroupIds),
-      ),
-    );
-
-  const existingGroupIds = new Set(
-    existingMemberships.map((membership) => membership.groupId),
-  );
-  const nextGroupIdsSet = new Set(uniqueNextGroupIds);
-
-  const membershipIdsToDelete = existingMemberships
-    .filter((membership) => !nextGroupIdsSet.has(membership.groupId))
-    .map((membership) => membership.id);
-
-  if (membershipIdsToDelete.length > 0) {
-    await args.tx
-      .delete(groupMemberships)
-      .where(
-        and(
-          eq(groupMemberships.orgId, args.orgId),
-          inArray(groupMemberships.id, membershipIdsToDelete),
-        ),
-      );
-  }
-
-  const groupIdsToInsert = uniqueNextGroupIds.filter(
-    (groupId) => !existingGroupIds.has(groupId),
-  );
-
-  for (const groupId of groupIdsToInsert) {
-    await upsertActiveMembership(args.tx, {
-      orgId: args.orgId,
-      groupId,
-      memberId: args.memberId,
-    });
-  }
-}
-
 export const createShadowMemberAction = authActionClient
   .metadata({ actionName: "createShadowMember" })
   .inputSchema(createMemberSchema)
@@ -246,7 +208,7 @@ export const createShadowMemberAction = authActionClient
       requireOrganization(),
       resolveMemberManagementScope(ctx.viewer),
     ]);
-    const groupIds = validateGroupSelectionOrThrow({
+    const groupIds = requireGroupIdsInScopeOrThrow({
       schema: createMemberSchema,
       scopeAccessLevel: scope.accessLevel,
       manageableGroupCategories: scope.manageableGroupCategories,
@@ -339,7 +301,9 @@ export const createShadowMemberAction = authActionClient
       });
 
       return id;
-    });
+    }).catch((error: unknown) =>
+      rethrowAsGroupIdsValidationError(createMemberSchema, error),
+    );
 
     // Workspace accounts are never created here. The member has to exist first
     // for the provisioning dialog to resolve its auto-filled fields, so the
@@ -804,7 +768,7 @@ export const updateMemberAction = authActionClient
       });
     }
 
-    const groupIds = validateGroupSelectionOrThrow({
+    const groupIds = requireGroupIdsInScopeOrThrow({
       schema: updateMemberSchema,
       scopeAccessLevel: scope.accessLevel,
       manageableGroupCategories: scope.manageableGroupCategories,
@@ -892,7 +856,9 @@ export const updateMemberAction = authActionClient
         success: true as const,
         customFieldErrors: {} as Record<string, string[]>,
       };
-    });
+    }).catch((error: unknown) =>
+      rethrowAsGroupIdsValidationError(updateMemberSchema, error),
+    );
 
     return result;
   });
