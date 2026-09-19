@@ -62,9 +62,14 @@ content. Props that matter:
 
 - `width="full"` (default) — tables, dashboards, anything that earns the
   whole canvas.
-- `width="content"` — forms, settings, reading pages. Capped at `max-w-4xl`
-  and centred, so the form does not sit in the corner of a wide screen. Do
-  not add another `max-w-*` inside; let the page cap decide.
+- `width="content"` — forms, settings, single-column reading pages. Capped
+  at `max-w-4xl` and centred, so the form does not sit in the corner of a
+  wide screen. Do not add another `max-w-*` inside; let the page cap decide.
+- `width="split"` — a reading column plus a 20rem aside, or a list with a
+  calendar view. `max-w-5xl`, centred.
+- `full` and the two caps are the *only* widths. A page that renders its own
+  header (see `DetailHeader`) puts `PAGE_WIDTH.content` or `PAGE_WIDTH.split`
+  on its root so it centres like the rest.
 - `aside` — a 20rem right column on large screens (help, status, related
   links). Use it to give a `content` page something to do with the leftover
   width instead of widening the form.
@@ -76,7 +81,9 @@ then leading visual (date leaf, avatar) beside status pills, the serif
 title, and one line of icon facts (`DetailMeta` / `DetailMetaItem`).
 Actions on the right. Pair it with `Tabs` for the sub-views and, when the
 body is long, a `lg:grid-cols-[minmax(0,1fr)_20rem]` split with facts in
-the right column (`FactRow` in a `factCardClassName` box).
+the right column (`FactRow` in a `factCardClassName` box). Portal detail
+pages (event, group, form) sit in `PAGE_WIDTH.split`; admin detail pages
+with table tabs stay full width.
 
 ### Tabs inside a page
 

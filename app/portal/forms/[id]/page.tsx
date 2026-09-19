@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarIcon, HourglassIcon } from "lucide-react";
 
+import { PAGE_WIDTH } from "@/components/app/app-page";
 import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { PortalFormFiller } from "@/components/app/forms/portal-form-filler";
 import { Badge } from "@/components/ui/badge";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 import { buildMemberIdentity, getFormById, getFormEvent, getFormForFiller } from "@/server/queries/forms";
 
@@ -36,7 +38,7 @@ export default async function PortalFormPage({ params }: { params: Promise<{ id:
     : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 pb-8">
+    <div className={cn("flex flex-1 flex-col gap-6 pb-8", PAGE_WIDTH.content)}>
       <DetailHeader
         backHref={event ? `/portal/events/${event.slug}` : "/portal/forms"}
         backLabel={event ? t.detail.backToEvent : t.detail.back}

@@ -26,12 +26,21 @@ type AppPageProps = {
   description?: string;
   actions?: ReactNode;
   tooltip?: ReactNode;
-  width?: "full" | "content";
+  width?: "full" | "content" | "split";
   aside?: ReactNode;
   children: ReactNode;
 };
 
-export const PAGE_CONTENT_WIDTH = "mx-auto w-full max-w-4xl";
+/**
+ * The two capped page widths. `content` fits a single column of fields or
+ * prose; `split` fits a reading column plus a 20rem aside. Pages that do not
+ * go through AppPage (detail pages with their own header) put the same class
+ * on their root so they centre like everything else.
+ */
+export const PAGE_WIDTH = {
+  content: "mx-auto w-full max-w-4xl",
+  split: "mx-auto w-full max-w-5xl",
+} as const;
 
 export function AppPage({
   children,
@@ -44,7 +53,7 @@ export function AppPage({
   aside,
 }: AppPageProps) {
   return (
-    <div className={cn("flex flex-1 flex-col pb-8", width === "content" && PAGE_CONTENT_WIDTH)}>
+    <div className={cn("flex flex-1 flex-col pb-8", width !== "full" && PAGE_WIDTH[width])}>
       <header className="flex flex-col gap-4 pb-4 md:pb-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="flex flex-col gap-1.5">

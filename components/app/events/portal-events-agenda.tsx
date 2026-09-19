@@ -12,7 +12,6 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { matchesSearch } from "@/lib/search";
 import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
-import { cn } from "@/lib/utils";
 import type { ViewerEventItem } from "@/server/queries/events";
 
 type Outcome = EventOutcome;
@@ -122,7 +121,7 @@ export function PortalEventsAgenda({
   const emptyBody = filtered ? l.noMatchBody : window === "upcoming" ? l.nothingUpcomingBody : l.nothingPastBody;
 
   return (
-    <div className={cn("flex flex-col gap-6", view === "list" ? "max-w-4xl" : "max-w-6xl")}>
+    <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup
           type="single"

@@ -23,7 +23,7 @@ export default async function PortalEventsPage() {
   }
 
   return (
-    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription}>
+    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription} width="split">
       <PortalEventsAgenda
         upcoming={[...buckets.invited, ...buckets.open]}
         past={buckets.past}

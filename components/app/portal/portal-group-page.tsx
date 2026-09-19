@@ -23,6 +23,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
+import { PAGE_WIDTH } from "@/components/app/app-page";
 import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { PageSectionHeader } from "@/components/app/page-section";
 import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/app/events/event-agenda-row";
@@ -168,7 +169,7 @@ function OverviewTab({
   ].filter(Boolean);
 
   return (
-    <div className={cn("grid gap-8", cards.length > 0 ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
+    <div className={cn("grid gap-8", cards.length > 0 && "lg:grid-cols-[minmax(0,1fr)_20rem]")}>
       <AnnouncementSection detail={detail} canManage={canManage} />
       {cards.length > 0 ? (
         <aside className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:sticky lg:top-6 lg:self-start">
@@ -188,7 +189,7 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
   const leaderNames = leaders.map((leader) => leader.name).join(", ");
 
   return (
-    <div className="flex flex-col gap-6 pb-6 md:pb-8">
+    <div className={cn("flex flex-col gap-6 pb-6 md:pb-8", PAGE_WIDTH.split)}>
       <DetailHeader
         backHref="/portal/groups"
         backLabel={t.allGroups}
@@ -396,7 +397,7 @@ function EventsTab({
         : t.nothingPast;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup
           type="single"
@@ -522,7 +523,7 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
   const { open, past } = detail.forms;
 
   return (
-    <section className="flex max-w-4xl flex-col gap-6">
+    <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <PageSectionHeader className="mb-0" title={t.forms} count={open.length} />
         {open.length === 0 ? (
@@ -736,7 +737,7 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
   const members = roster?.filter((person) => !leaderIds.has(person.id)) ?? null;
 
   return (
-    <div className="flex max-w-4xl flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {leaders.length > 0 ? (
         <section className="flex flex-col gap-3">
           <PageSectionHeader

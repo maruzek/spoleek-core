@@ -13,6 +13,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 
+import { PAGE_WIDTH } from "@/components/app/app-page";
 import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
 import { FactRow, factCardClassName } from "@/components/app/fact-row";
@@ -86,7 +87,7 @@ export function PortalEventDetail({
   const twoColumn = isLongDescription(event.descriptionHtml);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={cn("flex flex-col gap-6", PAGE_WIDTH.split)}>
       <DetailHeader
         backHref="/portal/events"
         backLabel={d.back}
@@ -132,7 +133,6 @@ export function PortalEventDetail({
 
       {cancelled ? (
         <Notice
-          className="max-w-4xl"
           tone="danger"
           icon={<BanIcon />}
           title={d.cancelledTitle}
@@ -140,7 +140,6 @@ export function PortalEventDetail({
         />
       ) : outcome === "reserve" ? (
         <Notice
-          className="max-w-4xl"
           tone="attention"
           icon={<HourglassIcon />}
           title={d.reserveTitle}
@@ -148,7 +147,7 @@ export function PortalEventDetail({
         />
       ) : null}
 
-      <div className={cn("grid gap-8", twoColumn ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
+      <div className={cn("grid gap-8", twoColumn && "lg:grid-cols-[minmax(0,1fr)_20rem]")}>
         <section className="min-w-0">
           {forms ? <div className="mb-8">{forms}</div> : null}
           {/* No placeholder when the organiser wrote nothing; `d.noDescription` is kept should one come back. */}
