@@ -638,6 +638,7 @@ export async function getMemberInviteEmailContent(memberId: string) {
   const payment = await getApprovalPaymentDetails(member.orgId, member.id);
 
   return {
+    orgId: member.orgId,
     organizationName: organization.name,
     subject: policy.memberInviteEmailSubject,
     body: policy.memberInviteEmailBody,

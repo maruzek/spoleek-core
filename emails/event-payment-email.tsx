@@ -18,6 +18,7 @@ import {
   pixelBasedPreset,
 } from "react-email";
 import { formatBankAccount } from "@/lib/iban";
+import { getDictionary } from "@/lib/i18n";
 
 export type EventPaymentEmailProps = {
   organizationName: string;
@@ -37,12 +38,6 @@ export type EventPaymentEmailProps = {
   /** True when a pending payment was re-priced (guest count changed). */
   updated: boolean;
 };
-
-export function eventPaymentEmailSubject(props: Pick<EventPaymentEmailProps, "eventTitle" | "updated">) {
-  return props.updated
-    ? `Updated payment for ${props.eventTitle}`
-    : `Payment for ${props.eventTitle}`;
-}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -77,7 +72,8 @@ export function EventPaymentEmail({
   const account = paymentDetails.bankAccount
     ? formatBankAccount(paymentDetails.bankAccount)
     : null;
-  const subject = eventPaymentEmailSubject({ eventTitle, updated });
+  const copy = getDictionary().emails.eventPayment;
+  const subject = updated ? copy.updatedSubject(eventTitle) : copy.subject(eventTitle);
 
   return (
     <Html lang="en">

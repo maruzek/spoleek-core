@@ -2,8 +2,8 @@ import { and, count, eq, gte, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { emailActivities } from "@/server/db/schema";
-import { getServerEnv } from "@/lib/env";
-import { getResendClient } from "@/server/lib/email";
+import type { ProviderAccount } from "@/server/notifications/send";
+import { getMailer, isMailerConfigured } from "@/server/notifications/send";
 
 export type EmailStatusCounts = Record<
   (typeof emailActivities.$inferSelect)["currentStatus"],
@@ -69,13 +69,7 @@ export async function getOrganizationEmailHealth(orgId: string): Promise<Organiz
   };
 }
 
-export type ProviderDomain = {
-  id: string;
-  name: string;
-  status: string;
-  region: string;
-  records: { record: string; type: string; name: string; status: string }[];
-};
+export type ProviderDomain = ProviderAccount["domains"][number];
 
 export type ProviderEmailHealth =
   | { configured: false }
@@ -96,60 +90,25 @@ export type ProviderEmailHealth =
  * show it to system admins.
  */
 export async function getProviderEmailHealth(): Promise<ProviderEmailHealth> {
-  if (!getServerEnv().RESEND_API_KEY) {
+  if (!isMailerConfigured()) {
     return { configured: false };
   }
 
   try {
-    const resend = getResendClient();
-    const [domainList, webhookList, emailList] = await Promise.all([
-      resend.domains.list(),
-      resend.webhooks.list(),
-      resend.emails.list({ limit: 100 }),
-    ]);
-
-    const firstError = domainList.error ?? webhookList.error ?? emailList.error;
-    if (firstError) {
-      return { configured: true, error: firstError.message };
-    }
-
-    // The list endpoint omits DNS records; one extra call per domain fills them in.
-    const domains = await Promise.all(
-      (domainList.data?.data ?? []).map(async (domain): Promise<ProviderDomain> => {
-        const detail = await resend.domains.get(domain.id);
-        return {
-          id: domain.id,
-          name: domain.name,
-          status: domain.status,
-          region: domain.region,
-          records: (detail.data?.records ?? []).map((record) => ({
-            record: record.record,
-            type: record.type,
-            name: record.name,
-            status: record.status,
-          })),
-        };
-      }),
-    );
+    const account = await getMailer().inspectAccount();
 
     const recentByLastEvent: Record<string, number> = {};
-    const emails = emailList.data?.data ?? [];
-    for (const email of emails) {
-      recentByLastEvent[email.last_event] = (recentByLastEvent[email.last_event] ?? 0) + 1;
+    for (const email of account.recentEmails) {
+      recentByLastEvent[email.lastEvent] = (recentByLastEvent[email.lastEvent] ?? 0) + 1;
     }
 
     return {
       configured: true,
       error: null,
-      domains,
-      webhooks: (webhookList.data?.data ?? []).map((hook) => ({
-        id: hook.id,
-        endpoint: hook.endpoint,
-        status: hook.status,
-        events: hook.events ?? [],
-      })),
+      domains: account.domains,
+      webhooks: account.webhooks,
       recentByLastEvent,
-      recentSample: emails.length,
+      recentSample: account.recentEmails.length,
     };
   } catch (error) {
     return {

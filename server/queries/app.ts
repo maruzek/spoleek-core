@@ -1,7 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 
 import { db } from "@/server/db";
-import { organizationPolicies, organizations } from "@/server/db/schema";
+import { organizationPolicies, organizations, tenantMembers } from "@/server/db/schema";
 
 export async function getAppOrganization() {
   const [organization] = await db
@@ -11,6 +11,29 @@ export async function getAppOrganization() {
     .limit(1);
 
   return organization ?? null;
+}
+
+/**
+ * Where an account's mail is logged when there is no request to resolve a
+ * Viewer from (Better Auth callbacks): the org of their live member row, or
+ * the app's organization for an account with no member row (a system admin).
+ */
+export async function resolveMembershipForUser(
+  userId: string,
+): Promise<{ orgId: string; memberId: string | null } | null> {
+  const [member] = await db
+    .select({ orgId: tenantMembers.orgId, memberId: tenantMembers.id })
+    .from(tenantMembers)
+    .where(and(eq(tenantMembers.userId, userId), ne(tenantMembers.status, "deleted")))
+    .orderBy(asc(tenantMembers.createdAt))
+    .limit(1);
+
+  if (member) {
+    return member;
+  }
+
+  const organization = await getAppOrganization();
+  return organization ? { orgId: organization.id, memberId: null } : null;
 }
 
 export async function getOrganizationPolicy(orgId: string) {

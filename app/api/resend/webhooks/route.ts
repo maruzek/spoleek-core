@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { updateEmailActivityStatusByProviderEmailId } from "@/server/lib/email-activity";
-import { getResendClient, getResendWebhookSecret } from "@/server/lib/email";
+import { verifyResendWebhook } from "@/server/notifications/send";
 import { updateMemberInviteDeliveryStatus } from "@/server/lib/member-invites";
 
 const deliveryStatusByEvent = {
@@ -26,22 +26,10 @@ export async function POST(request: Request) {
     );
   }
 
-  let event: Awaited<ReturnType<typeof getResendClient>>["webhooks"] extends {
-    verify: (input: infer TInput) => infer TOutput;
-  }
-    ? TOutput
-    : never;
+  let event: ReturnType<typeof verifyResendWebhook>;
 
   try {
-    event = getResendClient().webhooks.verify({
-      payload,
-      headers: {
-        id,
-        timestamp,
-        signature,
-      },
-      webhookSecret: getResendWebhookSecret(),
-    });
+    event = verifyResendWebhook({ payload, headers: { id, timestamp, signature } });
   } catch (error) {
     return NextResponse.json(
       {

@@ -33,6 +33,7 @@ import {
 } from "@/lib/members/approval";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { generateRandomPassword } from "@/lib/crypto";
+import { getDictionary } from "@/lib/i18n";
 import { authActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { groupCategories, groupMemberships, organizations, tenantMembers } from "@/server/db/schema";
@@ -40,7 +41,6 @@ import {
   canAccessMemberInScope,
   resolveMemberManagementScope,
 } from "@/server/lib/member-management-scope";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import {
   logMemberAuthEvent,
   sendMemberActivationInvite,
@@ -52,6 +52,7 @@ import {
   softDeleteMembers,
 } from "@/server/lib/member-lifecycle";
 import { notifyMembershipDeleted } from "@/server/notifications/membership";
+import { sendEmail } from "@/server/notifications/send";
 import { partitionFieldsByVisibility } from "@/server/lib/member-field-visibility";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
 import {
@@ -1121,7 +1122,7 @@ export const batchSuggestWorkspaceEmailsAction = authActionClient
 export const createWorkspaceAccountAction = authActionClient
   .metadata({ actionName: "createWorkspaceAccount" })
   .inputSchema(createWorkspaceAccountSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
 
     if (!isWorkspaceModuleReady(organization)) {
@@ -1179,33 +1180,27 @@ export const createWorkspaceAccountAction = authActionClient
         .trim() || primaryEmail;
       const signInUrl = buildAbsoluteAppUrl("/login");
 
-      try {
-        const resend = getResendClient();
-        const from = getResendFromEmail();
-        const { error } = await resend.emails.send(
-          {
-            from,
-            to: [notifyEmail!],
-            subject: `Your ${organizationName} account is ready`,
-            react: WorkspaceWelcomeEmail({
-              organizationName,
-              memberName,
-              workspaceEmail: primaryEmail,
-              temporaryPassword: password,
-              signInUrl,
-              // No member record is involved here, so there is no fee to quote.
-              payment: null,
-            }),
-          },
-          {
-            idempotencyKey: `workspace-welcome/${workspaceUserId}`,
-          },
-        );
-        if (error) throw new Error(error.message);
-        welcomeEmailSent = true;
-      } catch {
-        // Account created successfully, email failed — still a success
-      }
+      // Account created successfully; a refused email is logged by the door
+      // and reported through `welcomeEmailSent`, not as a failure.
+      const welcome = await sendEmail({
+        orgId: organization.id,
+        kind: "workspace_welcome",
+        to: { email: notifyEmail!, name: memberName },
+        actorUserId: ctx.auth.user.id,
+        metadata: { workspaceUserId },
+        subject: getDictionary().emails.workspaceWelcome.subject(organizationName),
+        react: WorkspaceWelcomeEmail({
+          organizationName,
+          memberName,
+          workspaceEmail: primaryEmail,
+          temporaryPassword: password,
+          signInUrl,
+          // No member record is involved here, so there is no fee to quote.
+          payment: null,
+        }),
+        idempotencyKey: `workspace-welcome/${workspaceUserId}`,
+      });
+      welcomeEmailSent = welcome.sent;
     }
 
     return {

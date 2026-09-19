@@ -11,9 +11,10 @@ import {
   tenantMembers,
   type MemberPreferredEmail,
 } from "@/server/db/schema";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
+import { getDictionary } from "@/lib/i18n";
 import { syncReportMemberForPayment } from "@/server/lib/membership-report";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
+import { sendEmail } from "@/server/notifications/send";
 
 
 /**
@@ -202,6 +203,8 @@ export async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date)
   try {
     const [row] = await db
       .select({
+        orgId: memberPayments.orgId,
+        eventId: memberPayments.eventId,
         memberId: memberPayments.memberId,
         memberEmail: tenantMembers.email,
         memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
@@ -233,13 +236,13 @@ export async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date)
     const recipient = resolvePaymentRecipient(row);
     if (!recipient) return;
 
-    const resend = getResendClient();
-    const from = getResendFromEmail();
-
-    await resend.emails.send({
-      from,
-      to: [recipient.email],
-      subject: `Payment confirmed — ${row.periodLabel}`,
+    await sendEmail({
+      orgId: row.orgId,
+      kind: "payment_confirmed",
+      to: { email: recipient.email, name: recipient.name, memberId: row.memberId },
+      eventId: row.eventId,
+      metadata: { paymentId },
+      subject: getDictionary().emails.paymentConfirmed.subject(row.periodLabel),
       react: PaymentConfirmedEmail({
         organizationName: row.orgName,
         memberName: recipient.name,
@@ -250,6 +253,6 @@ export async function sendPaymentConfirmedEmail(paymentId: string, paidAt: Date)
       }),
     });
   } catch {
-    // Email failure must not surface as an action error
+    // Loading the payment failed; the send itself never throws.
   }
 }

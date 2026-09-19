@@ -5,7 +5,7 @@ import { after } from "next/server";
 
 import { MemberActivationEmail } from "@/emails/member-activation-email";
 import { getServerEnv } from "@/lib/env";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
+import { getDictionary } from "@/lib/i18n";
 import { db } from "@/server/db";
 import { schema } from "@/server/db/schema";
 
@@ -65,126 +65,98 @@ export const auth = betterAuth({
     maxPasswordLength: 256,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url, token }) => {
+      // Dynamic: these modules reach back into `auth`, and the mailer door
+      // records to the database, which this module must not pull in at load.
       const inviteTools = await import("@/server/lib/member-invites");
-      const emailActivityTools = await import("@/server/lib/email-activity");
+      const { sendEmail } = await import("@/server/notifications/send");
       const activationTarget = inviteTools.isMemberActivationResetUrl(url);
-      const resend = getResendClient();
-      const from = getResendFromEmail();
 
       if (activationTarget) {
-        try {
-          const emailContent = await inviteTools.getMemberInviteEmailContent(
-            activationTarget.memberId,
-          );
-          const existingInvite = await inviteTools.getMemberInviteByMemberId(
-            activationTarget.memberId,
-          );
+        const { memberId } = activationTarget;
+        const emailContent = await inviteTools
+          .getMemberInviteEmailContent(memberId)
+          .catch(() => null);
+        const existingInvite = await inviteTools.getMemberInviteByMemberId(memberId);
 
-          if (!emailContent.email) {
-            throw new Error(
-              "Invite email could not be sent because the member has no email.",
-            );
-          }
+        const fail = async (message: string): Promise<never> => {
+          await inviteTools.markMemberInviteFailed({ memberId, error: message });
+          throw new Error(message);
+        };
 
-          const { data, error } = await resend.emails.send(
-            {
-              from,
-              to: [emailContent.email],
-              subject: emailContent.subject,
-              react: MemberActivationEmail({
-                organizationName: emailContent.organizationName,
-                subject: emailContent.subject,
-                body: emailContent.body,
-                activationUrl: url,
-                memberName: emailContent.memberName || user.name,
-                payment: emailContent.payment,
-              }),
-            },
-            {
-              idempotencyKey: `member-activation/${activationTarget.memberId}/${token}`,
-            },
-          );
-
-          if (error) {
-            throw new Error(error.message);
-          }
-
-          await inviteTools.markMemberInviteSent({
-            memberId: activationTarget.memberId,
-            token,
-            providerEmailId: data?.id ?? null,
-          });
-          await emailActivityTools.recordMemberInviteEmailSent({
-            memberId: activationTarget.memberId,
-            providerEmailId: data?.id ?? null,
-            fromEmail: from,
-            toEmail: emailContent.email,
-            toName: emailContent.memberName,
-            subject: emailContent.subject,
-            metadata: {
-              organizationName: emailContent.organizationName,
-            },
-          });
-          if (existingInvite) {
-            await inviteTools
-              .logMemberAuthEvent({
-                orgId: existingInvite.orgId,
-                memberId: activationTarget.memberId,
-                inviteId: existingInvite.id,
-                actorUserId: null,
-                eventType: "password_reset_sent",
-                metadata: {
-                  providerEmailId: data?.id ?? null,
-                },
-              })
-              .catch(() => undefined);
-          }
-          return;
-        } catch (error) {
-          const emailContent = await inviteTools
-            .getMemberInviteEmailContent(activationTarget.memberId)
-            .catch(() => null);
-          await inviteTools.markMemberInviteFailed({
-            memberId: activationTarget.memberId,
-            error:
-              error instanceof Error
-                ? error.message
-                : "Failed to send member invite email.",
-          });
-          if (emailContent?.email) {
-            await emailActivityTools.recordMemberInviteEmailFailed({
-              memberId: activationTarget.memberId,
-              fromEmail: from,
-              toEmail: emailContent.email,
-              toName: emailContent.memberName,
-              subject: emailContent.subject,
-              error:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to send member invite email.",
-              metadata: {
-                organizationName: emailContent.organizationName,
-              },
-            });
-          }
-          throw error;
+        if (!emailContent) {
+          return fail("Invite email could not be prepared because the member was not found.");
         }
+        if (!emailContent.email) {
+          return fail("Invite email could not be sent because the member has no email.");
+        }
+
+        const { getLatestInviteEmailActivity } = await import("@/server/lib/email-activity");
+        const previousActivity = await getLatestInviteEmailActivity(memberId);
+
+        const result = await sendEmail({
+          orgId: emailContent.orgId,
+          kind: "member_activation_invite",
+          to: { email: emailContent.email, name: emailContent.memberName, memberId },
+          inviteId: existingInvite?.id ?? null,
+          resendOfActivityId: previousActivity?.id ?? null,
+          metadata: { organizationName: emailContent.organizationName },
+          subject: emailContent.subject,
+          react: MemberActivationEmail({
+            organizationName: emailContent.organizationName,
+            subject: emailContent.subject,
+            body: emailContent.body,
+            activationUrl: url,
+            memberName: emailContent.memberName || user.name,
+            payment: emailContent.payment,
+          }),
+          idempotencyKey: `member-activation/${memberId}/${token}`,
+        });
+
+        if (!result.sent) {
+          return fail(result.error);
+        }
+
+        await inviteTools.markMemberInviteSent({
+          memberId,
+          token,
+          providerEmailId: result.providerEmailId,
+        });
+        if (existingInvite) {
+          await inviteTools
+            .logMemberAuthEvent({
+              orgId: existingInvite.orgId,
+              memberId,
+              inviteId: existingInvite.id,
+              actorUserId: null,
+              eventType: "password_reset_sent",
+              metadata: { providerEmailId: result.providerEmailId },
+            })
+            .catch(() => undefined);
+        }
+        return;
       }
 
-      const { error } = await resend.emails.send(
-        {
-          from,
-          to: [user.email],
-          subject: `${env.APP_NAME}: reset your password`,
-          text: `Open this link to reset your password: ${url}`,
-        },
-        {
-          idempotencyKey: `password-reset/${user.id}/${token}`,
-        },
-      );
+      // A plain reset is logged under the org the account belongs to — the
+      // subject only, never the link. An account with no member row (a
+      // system admin) falls back to the app's organization.
+      const { resolveMembershipForUser } = await import("@/server/queries/app");
+      const membership = await resolveMembershipForUser(user.id);
+      if (!membership) {
+        throw new Error("Password reset email could not be sent: no organization exists.");
+      }
 
-      if (error) {
-        throw new Error(error.message);
+      const copy = getDictionary().emails.passwordReset;
+      const result = await sendEmail({
+        orgId: membership.orgId,
+        kind: "password_reset",
+        to: { email: user.email, name: user.name, memberId: membership.memberId },
+        subject: copy.subject(env.APP_NAME),
+        text: copy.body(url),
+        idempotencyKey: `password-reset/${user.id}/${token}`,
+      });
+
+      if (!result.sent) {
+        throw new Error(result.error);
       }
     },
   },

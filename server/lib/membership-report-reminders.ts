@@ -21,7 +21,7 @@ import {
   resolveReportReminderRecipients,
 } from "@/server/notifications/recipients";
 import { sendNotificationEmails } from "@/server/notifications/send";
-import { orgFormatLocale } from "@/lib/i18n";
+import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 
 /**
  * The reminder ladder, in ascending urgency.
@@ -427,9 +427,11 @@ async function remindPendingAdditions(params: {
       orgId: org.id,
       kind: "report_reminder",
       recipients,
-      subject: `${row.groupName}: ${pendingAdditions} member${
-        pendingAdditions === 1 ? "" : "s"
-      } waiting to join the ${report.periodLabel} report`,
+      subject: getDictionary().emails.reportReminder.subject(
+        row.groupName,
+        pendingAdditions,
+        report.periodLabel,
+      ),
       react: MembershipReportPendingAdditionEmail({
         organizationName: org.name,
         groupName: row.groupName,
@@ -546,12 +548,14 @@ async function sendBoardDigest(params: {
     recipients,
     subject:
       outstandingGroups.length > 0
-        ? `${outstandingGroups.length} group${
-            outstandingGroups.length === 1 ? "" : "s"
-          } still to submit the ${report.periodLabel} report`
-        : `${awaitingApprovalGroups.length} ${report.periodLabel} report${
-            awaitingApprovalGroups.length === 1 ? "" : "s"
-          } waiting for approval`,
+        ? getDictionary().emails.reportDigest.outstandingSubject(
+            outstandingGroups.length,
+            report.periodLabel,
+          )
+        : getDictionary().emails.reportDigest.awaitingApprovalSubject(
+            awaitingApprovalGroups.length,
+            report.periodLabel,
+          ),
     react: MembershipReportDigestEmail({
       organizationName: org.name,
       periodLabel: report.periodLabel,

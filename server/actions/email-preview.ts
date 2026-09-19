@@ -6,7 +6,7 @@ import { z } from "zod";
 import { orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
 import { emailActivities } from "@/server/db/schema";
-import { getResendClient } from "@/server/lib/email";
+import { getMailer } from "@/server/notifications/send";
 import { requireOrgAdminAccess } from "@/server/queries/access";
 
 export type EmailPreview = {
@@ -65,29 +65,24 @@ export const getEmailPreviewAction = orgAdminActionClient
     }
 
     try {
-      const resend = getResendClient();
-      const { data, error } = await resend.emails.get(activity.providerEmailId);
+      const copy = await getMailer().fetchCopy(activity.providerEmailId);
 
-      if (error || !data) {
+      if (!copy) {
         return {
           html: null,
           text: null,
           subject: activity.subject,
           unavailableReason:
-            error?.message ??
             "Resend did not return a copy of this email. It may have aged out of retention.",
         };
       }
 
-      const html = data.html?.trim() || null;
-      const text = data.text?.trim() || null;
-
       return {
-        html,
-        text,
-        subject: data.subject ?? activity.subject,
+        html: copy.html,
+        text: copy.text,
+        subject: copy.subject ?? activity.subject,
         unavailableReason:
-          html || text
+          copy.html || copy.text
             ? null
             : "Resend holds this email but returned no body content.",
       };

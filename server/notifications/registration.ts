@@ -131,7 +131,7 @@ export async function notifyRegistrationSubmitted(params: {
       kind: "registration_submitted",
       memberId: params.memberId,
       recipients,
-      subject: `New membership application — ${displayName}`,
+      subject: t.emails.registrationSubmitted.subject(displayName),
       metadata: { groupIds: params.groupIds },
       react: RegistrationSubmittedEmail({
         organizationName: organization.name,

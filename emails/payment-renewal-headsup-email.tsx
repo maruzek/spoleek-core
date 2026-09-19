@@ -12,6 +12,7 @@ import {
   pixelBasedPreset,
 } from "react-email";
 import { formatBankAccount } from "@/lib/iban";
+import { getDictionary } from "@/lib/i18n";
 
 type PaymentRenewalHeadsupEmailProps = {
   organizationName: string;
@@ -34,7 +35,7 @@ export function PaymentRenewalHeadsupEmail({
 }: PaymentRenewalHeadsupEmailProps) {
   const account = bankAccount ? formatBankAccount(bankAccount) : null;
 
-  const subject = `Membership renewal coming up — ${periodLabel}`;
+  const subject = getDictionary().emails.renewalHeadsup.subject(periodLabel);
 
   return (
     <Html lang="en">

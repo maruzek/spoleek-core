@@ -112,6 +112,16 @@ export const emailKindEnum = pgEnum("email_kind", [
   // decision (to the member). Each is gated by its own organization switch.
   "group_join_requested",
   "group_join_decided",
+  // Payment mails to the payer: the "here is your payment" for a priced
+  // event, the confirmation once it is marked paid, the overdue chaser and
+  // the renewal heads-up before a new membership period.
+  "event_payment",
+  "payment_confirmed",
+  "payment_overdue",
+  "payment_renewal_headsup",
+  // Better Auth's own reset link. Logged so the member's Emails tab can
+  // answer "did the reset ever leave?" — the subject only, never the link.
+  "password_reset",
 ]);
 
 export const emailActivityStatusEnum = pgEnum("email_activity_status", [

@@ -13,6 +13,7 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import { getDictionary } from "@/lib/i18n";
 import {
   PaymentDetailsSection,
   previewPaymentDetails,
@@ -37,7 +38,7 @@ export function WorkspaceWelcomeEmail({
   signInUrl,
   payment = null,
 }: WorkspaceWelcomeEmailProps) {
-  const subject = `Your ${organizationName} Google Workspace account is ready`;
+  const subject = getDictionary().emails.workspaceWelcome.subject(organizationName);
 
   return (
     <Html lang="en">

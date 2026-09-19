@@ -12,6 +12,7 @@ import {
   pixelBasedPreset,
 } from "react-email";
 import { formatBankAccount } from "@/lib/iban";
+import { getDictionary } from "@/lib/i18n";
 
 type PaymentOverdueEmailProps = {
   organizationName: string;
@@ -25,12 +26,6 @@ type PaymentOverdueEmailProps = {
   /** Event fees name the event instead of a membership period. */
   feeKind?: "membership_fee" | "event";
 };
-
-export function paymentOverdueEmailSubject(props: Pick<PaymentOverdueEmailProps, "periodLabel" | "feeKind">) {
-  return props.feeKind === "event"
-    ? `Action required: payment overdue — ${props.periodLabel}`
-    : `Action required: membership fee overdue — ${props.periodLabel}`;
-}
 
 export function PaymentOverdueEmail({
   organizationName,
@@ -46,7 +41,8 @@ export function PaymentOverdueEmail({
   const account = bankAccount ? formatBankAccount(bankAccount) : null;
   const isEvent = feeKind === "event";
 
-  const subject = paymentOverdueEmailSubject({ periodLabel, feeKind });
+  const copy = getDictionary().emails.paymentOverdue;
+  const subject = isEvent ? copy.eventSubject(periodLabel) : copy.membershipSubject(periodLabel);
 
   return (
     <Html lang="en">

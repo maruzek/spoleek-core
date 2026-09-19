@@ -3,11 +3,12 @@ import { eq } from "drizzle-orm";
 import { WorkspaceWelcomeEmail } from "@/emails/workspace-welcome-email";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { generateRandomPassword } from "@/lib/crypto";
+import { getDictionary } from "@/lib/i18n";
 import { db } from "@/server/db";
 import { organizations, tenantMembers } from "@/server/db/schema";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { getApprovalPaymentDetails } from "@/server/lib/approval-payment-details";
 import { logMemberAuthEvent } from "@/server/lib/member-invites";
+import { sendEmail } from "@/server/notifications/send";
 import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
 import {
   WorkspaceApiError,
@@ -119,31 +120,26 @@ export async function provisionWorkspaceAccountForMember(
   // payment row before calling this so the details are already available.
   const payment = await getApprovalPaymentDetails(input.orgId, input.memberId);
 
-  try {
-    const resend = getResendClient();
-    const from = getResendFromEmail();
-    const { error } = await resend.emails.send(
-      {
-        from,
-        to: [input.toEmail],
-        subject: `Your ${organizationName} account is ready`,
-        react: WorkspaceWelcomeEmail({
-          organizationName,
-          memberName,
-          workspaceEmail: primaryEmail,
-          temporaryPassword: password,
-          signInUrl,
-          payment,
-        }),
-      },
-      {
-        idempotencyKey: `workspace-welcome/${input.memberId}/${workspaceUserId}`,
-      },
-    );
-    if (error) throw new Error(error.message);
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to send welcome email.";
+  const welcome = await sendEmail({
+    orgId: input.orgId,
+    kind: "workspace_welcome",
+    to: { email: input.toEmail, name: memberName, memberId: input.memberId },
+    actorUserId: input.actorUserId,
+    metadata: { workspaceUserId },
+    subject: getDictionary().emails.workspaceWelcome.subject(organizationName),
+    react: WorkspaceWelcomeEmail({
+      organizationName,
+      memberName,
+      workspaceEmail: primaryEmail,
+      temporaryPassword: password,
+      signInUrl,
+      payment,
+    }),
+    idempotencyKey: `workspace-welcome/${input.memberId}/${workspaceUserId}`,
+  });
+
+  if (!welcome.sent) {
+    const message = welcome.error;
     await logMemberAuthEvent({
       orgId: input.orgId,
       memberId: input.memberId,

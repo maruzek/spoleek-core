@@ -14,6 +14,8 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import { getDictionary } from "@/lib/i18n";
+
 type RegistrationSubmittedEmailProps = {
   organizationName: string;
   applicantName: string;
@@ -32,7 +34,7 @@ export function RegistrationSubmittedEmail({
   selections,
   reviewUrl,
 }: RegistrationSubmittedEmailProps) {
-  const subject = `New membership application — ${applicantName}`;
+  const subject = getDictionary().emails.registrationSubmitted.subject(applicantName);
 
   return (
     <Html lang="en">

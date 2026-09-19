@@ -1,7 +1,8 @@
 import { and, eq, inArray, lt } from "drizzle-orm";
 
-import { PaymentOverdueEmail, paymentOverdueEmailSubject } from "@/emails/payment-overdue-email";
+import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
 import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
+import { getDictionary } from "@/lib/i18n";
 import { resolveMembershipPeriod } from "@/lib/membership-period";
 import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
@@ -16,10 +17,10 @@ import {
   tenantMembers,
 } from "@/server/db/schema";
 import type { MembershipPeriodMode } from "@/server/db/schema";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { formatLongDate } from "@/lib/format";
 import { activeMembership } from "@/server/lib/group-membership";
+import { sendEmail } from "@/server/notifications/send";
 
 const RENEWAL_WINDOW_DAYS = 14;
 
@@ -182,6 +183,9 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
   try {
     const rows = await db
       .select({
+        paymentId: memberPayments.id,
+        orgId: memberPayments.orgId,
+        eventId: memberPayments.eventId,
         memberId: memberPayments.memberId,
         memberEmail: tenantMembers.email,
         memberWorkspaceEmail: tenantMembers.workspaceUserEmail,
@@ -211,8 +215,7 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
       .innerJoin(organizations, eq(memberPayments.orgId, organizations.id))
       .where(inArray(memberPayments.id, overdueIds));
 
-    const resend = getResendClient();
-    const from = getResendFromEmail();
+    const copy = getDictionary().emails.paymentOverdue;
 
     for (const row of rows) {
       const toEmail = row.memberId
@@ -236,29 +239,32 @@ async function sendOverdueEmails(overdueIds: string[], orgEmailEnabled: boolean)
         [row.memberFirstName, row.memberLastName].filter(Boolean).join(" ") ||
         row.guestName ||
         toEmail;
-      try {
-        await resend.emails.send({
-          from,
-          to: [toEmail],
-          subject: paymentOverdueEmailSubject({ periodLabel: row.periodLabel, feeKind: row.type }),
-          react: PaymentOverdueEmail({
-            organizationName: row.orgName,
-            memberName,
-            periodLabel: row.periodLabel,
-            amount: feeAmountToDecimal(row.amount),
-            currency: row.currency,
-            dueAt: formatLongDate(row.dueAt),
-            bankAccount: row.bankAccount,
-            variableSymbol: row.variableSymbol,
-            feeKind: row.type,
-          }),
-        });
-      } catch {
-        // Individual email failures must not abort the batch
-      }
+      // A refused send is logged by the door and does not abort the batch.
+      await sendEmail({
+        orgId: row.orgId,
+        kind: "payment_overdue",
+        to: { email: toEmail, name: memberName, memberId: row.memberId },
+        eventId: row.eventId,
+        metadata: { paymentId: row.paymentId },
+        subject:
+          row.type === "event"
+            ? copy.eventSubject(row.periodLabel)
+            : copy.membershipSubject(row.periodLabel),
+        react: PaymentOverdueEmail({
+          organizationName: row.orgName,
+          memberName,
+          periodLabel: row.periodLabel,
+          amount: feeAmountToDecimal(row.amount),
+          currency: row.currency,
+          dueAt: formatLongDate(row.dueAt),
+          bankAccount: row.bankAccount,
+          variableSymbol: row.variableSymbol,
+          feeKind: row.type,
+        }),
+      });
     }
   } catch {
-    // Email sending is non-critical — lifecycle continues
+    // Loading the payments failed — lifecycle continues
   }
 }
 
@@ -317,8 +323,7 @@ async function sendRenewalHeadsupEmails(
       ),
     );
 
-    const resend = getResendClient();
-    const from = getResendFromEmail();
+    const subject = getDictionary().emails.renewalHeadsup.subject(periodLabel);
 
     for (const member of activeMembers) {
       if (alreadyHasPayment.has(member.id)) continue;
@@ -335,27 +340,25 @@ async function sendRenewalHeadsupEmails(
       if (!toEmail) continue;
       const memberName =
         [member.firstName, member.lastName].filter(Boolean).join(" ") || toEmail;
-      try {
-        await resend.emails.send({
-          from,
-          to: [toEmail],
-          subject: `Membership renewal coming up — ${periodLabel}`,
-          react: PaymentRenewalHeadsupEmail({
-            organizationName: org.name,
-            memberName,
-            periodLabel,
-            renewalDate,
-            amount: feeAmountToDecimal(feeAmount),
-            currency: feeCurrency,
-            bankAccount: org.membershipFeeBankAccount,
-          }),
-        });
-      } catch {
-        // Individual email failures must not abort the batch
-      }
+      await sendEmail({
+        orgId: org.id,
+        kind: "payment_renewal_headsup",
+        to: { email: toEmail, name: memberName, memberId: member.id },
+        metadata: { periodLabel },
+        subject,
+        react: PaymentRenewalHeadsupEmail({
+          organizationName: org.name,
+          memberName,
+          periodLabel,
+          renewalDate,
+          amount: feeAmountToDecimal(feeAmount),
+          currency: feeCurrency,
+          bankAccount: org.membershipFeeBankAccount,
+        }),
+      });
     }
   } catch {
-    // Email sending is non-critical — lifecycle continues
+    // Loading the members failed — lifecycle continues
   }
 }
 

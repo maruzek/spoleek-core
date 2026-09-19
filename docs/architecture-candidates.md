@@ -96,34 +96,38 @@ Concurrent writes are serialised by a `FOR UPDATE` lock on the member row.
 
 ---
 
-## 5 · Make the email door the only door — **Worth exploring**
+## ✅ 5 · Make the email door the only door — DONE (2026-09-19)
 
-**Files**
-- `server/notifications/send.ts` :13 `sendNotificationEmails` — documented as
-  "the single door every admin notification goes through"; records
-  `email_activities`
-- bypassers calling `resend.emails.send` directly: `server/lib/payment-lifecycle.ts`
-  (×2), `server/lib/payment-status.ts` :236-251,
-  `server/lib/events/payment-emails.ts`, `server/lib/workspace/provision.ts`,
-  `server/actions/member-admin.ts` :1427, `lib/auth/auth.ts` (×2)
-- `getResendClient` imported in 11 files; 7 hardcoded English subjects outside
-  `lib/i18n`
-
-**Problem.** `server/queries/email-health.ts` and the per-member "Emails" tab
-are blind to payment-confirmed, welcome and provisioning mails. Subjects for
-those bypass i18n. The seam exists; the adapters go around it.
-
-**Deepening.** One `send(kind, recipients, react, subjectKey)` that always logs;
-`getResendClient` exported only to it and the webhook route. Two adapters
-justify the seam: Resend in prod, in-memory in tests (replaces the single
-`vi.mock` in `tests/member-workspace-purge.test.ts`).
-
-**Done when**
-- `grep -rl getResendClient server lib` returns the send module and the
-  webhook route only.
-- Every subject comes from `lib/i18n/messages.ts`.
-- A test asserts a payment-confirmed email through the in-memory adapter and
-  finds its `email_activities` row.
+`server/notifications/send.ts` is now the only module that imports the
+Resend SDK: `getResendClient` is not exported at all. It holds the seam
+(`Mailer` — `send`, `fetchCopy`, `inspectAccount`; `resendMailer` and
+`createMemoryMailer`, swapped with `installMailer`), the door (`sendEmail`:
+one message, one `email_activities` row, never throws, returns `sent` +
+`activityId`) and `sendNotificationEmails` as the batch form over it. The
+seven bypassers are gone: payment confirmed / overdue / renewal / event
+payment, both workspace welcomes, the activation invite and the password
+reset all go through the door, under five new `email_kind`s (`event_payment`,
+`payment_confirmed`, `payment_overdue`, `payment_renewal_headsup`,
+`password_reset`; migration `0067`). `recordMemberInviteEmailSent/Failed`
+were folded into one `recordEmailActivity` that takes `inviteId` /
+`resendOfActivityId` / `actorUserId`, so the invite path is the door plus
+three fields. The preview action and the health page read through the
+adapter; the webhook route calls `verifyResendWebhook`. Every subject is a
+dictionary entry (nine added, en + cs, including the report reminder /
+digest subjects that had inline English plurals) and the five templates'
+preview lines read the same entry; `paymentOverdueEmailSubject` /
+`eventPaymentEmailSubject` are deleted. `tests/email-door-db.test.ts` drives
+a payment-confirmed mail through the memory adapter to its row, the org
+switch, a refused send (failed row + `failed` event, no throw) and an
+idempotent retry; `tests/member-approval-db.test.ts` installs the memory
+mailer instead of mocking the module. **Mailer** added to `CONTEXT.md`.
+Found on the way: `email_activities.provider_email_id` is unique, and a
+Resend idempotent retry returns the first id — the door now returns the
+existing row for it instead of failing the insert. The password reset is
+logged under the account's live member row (`resolveMembershipForUser`),
+falling back to the app organization for a system admin. Left as is:
+`scripts/send-payment-emails-test.ts` sends through the adapter, not the
+door, on purpose — review mail must not appear in an org's activity log.
 
 ---
 

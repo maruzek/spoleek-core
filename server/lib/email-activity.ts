@@ -8,19 +8,6 @@ import {
   type EmailKind,
   type EmailActivityStatus,
 } from "@/server/db/schema";
-import { getMemberInviteByMemberId } from "@/server/lib/member-invites";
-import { getAppOrganization } from "@/server/queries/app";
-
-type InviteEmailActivityPayload = {
-  memberId: string;
-  actorUserId?: string | null;
-  providerEmailId?: string | null;
-  fromEmail: string;
-  toEmail: string;
-  toName?: string | null;
-  subject: string;
-  metadata?: Record<string, unknown> | null;
-};
 
 async function createEmailActivityEvent(params: {
   orgId: string;
@@ -69,144 +56,6 @@ export async function getLatestInviteEmailActivity(memberId: string) {
     .limit(1);
 
   return activity ?? null;
-}
-
-export async function recordMemberInviteEmailSent(
-  params: InviteEmailActivityPayload,
-) {
-  const organization = await getAppOrganization();
-  const invite = await getMemberInviteByMemberId(params.memberId);
-
-  if (!organization || !invite) {
-    return null;
-  }
-
-  const previousActivity = await getLatestInviteEmailActivity(params.memberId);
-  const now = new Date();
-  const [activity] = await db
-    .insert(emailActivities)
-    .values({
-  
-      orgId: organization.id,
-      direction: "outbound",
-      kind: "member_activation_invite",
-      currentStatus: "sent",
-      memberId: params.memberId,
-      inviteId: invite.id,
-      resendOfEmailActivityId: previousActivity?.id ?? null,
-      actorUserId: params.actorUserId ?? null,
-      providerEmailId: params.providerEmailId ?? null,
-      fromEmail: params.fromEmail,
-      toEmail: params.toEmail,
-      toName: params.toName ?? null,
-      subject: params.subject,
-      providerEventType: "api.accepted",
-      sentAt: now,
-      lastStatusAt: now,
-      metadata: params.metadata ?? null,
-    })
-    .returning({ id: emailActivities.id, orgId: emailActivities.orgId });
-
-  if (!activity) {
-    return null;
-  }
-
-  if (previousActivity) {
-    await createEmailActivityEvent({
-      orgId: activity.orgId,
-      emailActivityId: activity.id,
-      actorUserId: params.actorUserId,
-      eventType: "resend_requested",
-      message: "A replacement invite email was requested.",
-      metadata: {
-        resendOfEmailActivityId: previousActivity.id,
-      },
-      occurredAt: now,
-    });
-  }
-
-  await createEmailActivityEvent({
-    orgId: activity.orgId,
-    emailActivityId: activity.id,
-    actorUserId: params.actorUserId,
-    eventType: "api_accepted",
-    providerEventType: "api.accepted",
-    message: "The invite email was accepted for delivery by Resend.",
-    metadata: params.metadata ?? null,
-    occurredAt: now,
-  });
-
-  return activity.id;
-}
-
-export async function recordMemberInviteEmailFailed(
-  params: InviteEmailActivityPayload & { error: string },
-) {
-  const organization = await getAppOrganization();
-  const invite = await getMemberInviteByMemberId(params.memberId);
-
-  if (!organization) {
-    return null;
-  }
-
-  const previousActivity = await getLatestInviteEmailActivity(params.memberId);
-  const now = new Date();
-  const [activity] = await db
-    .insert(emailActivities)
-    .values({
-  
-      orgId: organization.id,
-      direction: "outbound",
-      kind: "member_activation_invite",
-      currentStatus: "failed",
-      memberId: params.memberId,
-      inviteId: invite?.id ?? null,
-      resendOfEmailActivityId: previousActivity?.id ?? null,
-      actorUserId: params.actorUserId ?? null,
-      providerEmailId: params.providerEmailId ?? null,
-      fromEmail: params.fromEmail,
-      toEmail: params.toEmail,
-      toName: params.toName ?? null,
-      subject: params.subject,
-      providerEventType: "api.failed",
-      lastError: params.error,
-      problemAt: now,
-      failedAt: now,
-      lastStatusAt: now,
-      metadata: params.metadata ?? null,
-    })
-    .returning({ id: emailActivities.id, orgId: emailActivities.orgId });
-
-  if (!activity) {
-    return null;
-  }
-
-  if (previousActivity) {
-    await createEmailActivityEvent({
-      orgId: activity.orgId,
-      emailActivityId: activity.id,
-      actorUserId: params.actorUserId,
-      eventType: "resend_requested",
-      message: "A replacement invite email was requested.",
-      metadata: {
-        resendOfEmailActivityId: previousActivity.id,
-      },
-      occurredAt: now,
-    });
-  }
-
-  await createEmailActivityEvent({
-    orgId: activity.orgId,
-    emailActivityId: activity.id,
-    actorUserId: params.actorUserId,
-    eventType: "failed",
-    providerEventType: "api.failed",
-    message: params.error,
-    metadata: params.metadata ?? null,
-    occurredAt: now,
-  });
-
-  return activity.id;
 }
 
 export async function updateEmailActivityStatusByProviderEmailId(params: {
@@ -291,12 +140,17 @@ export async function updateEmailActivityStatusByProviderEmailId(params: {
   return activity.id;
 }
 
-type NotificationEmailActivityPayload = {
+type EmailActivityPayload = {
   orgId: string;
   kind: EmailKind;
   memberId?: string | null;
   /** Set for event invites so the per-event send log can be read back. */
   eventId?: string | null;
+  /** Set for activation invites; the Emails tab offers those rows as resendable. */
+  inviteId?: string | null;
+  /** The earlier activity this one replaces — a re-sent invite. */
+  resendOfActivityId?: string | null;
+  actorUserId?: string | null;
   fromEmail: string;
   toEmail: string;
   toName?: string | null;
@@ -307,13 +161,11 @@ type NotificationEmailActivityPayload = {
 };
 
 /**
- * Logs an admin-facing notification email. Unlike the invite recorder this one
- * is not backed by a member invite, so `inviteId` stays null and the row is
- * never offered as resendable.
+ * Logs one outbound email: the row plus its first event. Called only by the
+ * mailer door (`server/notifications/send.ts`), once per send, whether the
+ * provider accepted the message or not.
  */
-export async function recordNotificationEmail(
-  params: NotificationEmailActivityPayload,
-) {
+export async function recordEmailActivity(params: EmailActivityPayload) {
   const now = new Date();
   const failed = Boolean(params.error);
 
@@ -325,8 +177,10 @@ export async function recordNotificationEmail(
       kind: params.kind,
       currentStatus: failed ? "failed" : "sent",
       memberId: params.memberId ?? null,
-      inviteId: null,
+      inviteId: params.inviteId ?? null,
       eventId: params.eventId ?? null,
+      resendOfEmailActivityId: params.resendOfActivityId ?? null,
+      actorUserId: params.actorUserId ?? null,
       providerEmailId: params.providerEmailId ?? null,
       fromEmail: params.fromEmail,
       toEmail: params.toEmail,
@@ -346,14 +200,25 @@ export async function recordNotificationEmail(
     return null;
   }
 
+  if (params.resendOfActivityId) {
+    await createEmailActivityEvent({
+      orgId: activity.orgId,
+      emailActivityId: activity.id,
+      actorUserId: params.actorUserId,
+      eventType: "resend_requested",
+      message: "A replacement email was requested.",
+      metadata: { resendOfEmailActivityId: params.resendOfActivityId },
+      occurredAt: now,
+    });
+  }
+
   await createEmailActivityEvent({
     orgId: activity.orgId,
     emailActivityId: activity.id,
+    actorUserId: params.actorUserId,
     eventType: failed ? "failed" : "api_accepted",
     providerEventType: failed ? "api.failed" : "api.accepted",
-    message: failed
-      ? params.error
-      : "The notification email was accepted for delivery by Resend.",
+    message: failed ? params.error : "The email was accepted for delivery by Resend.",
     metadata: params.metadata ?? null,
     occurredAt: now,
   });

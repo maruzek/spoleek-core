@@ -470,6 +470,13 @@
       "when": 1789745189116,
       "tag": "0066_thin_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789834095534,
+      "tag": "0067_rapid_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

@@ -28,11 +28,12 @@ import { PaymentOverdueEmail } from "@/emails/payment-overdue-email";
 import { PaymentRenewalHeadsupEmail } from "@/emails/payment-renewal-headsup-email";
 import { WorkspaceWelcomeEmail } from "@/emails/workspace-welcome-email";
 import { getServerEnv } from "@/lib/env";
+import { getDictionary } from "@/lib/i18n";
 import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import { memberPayments, organizations, tenantMembers } from "@/server/db/schema";
 import { getApprovalPaymentDetails } from "@/server/lib/approval-payment-details";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
+import { getMailer, getResendFromEmail } from "@/server/notifications/send";
 
 const ALL = ["headsup", "overdue", "confirmed", "activation", "workspace-welcome"] as const;
 type Template = (typeof ALL)[number];
@@ -86,8 +87,11 @@ async function main() {
   const amount = feeAmountToDecimal(payment.amount);
   const paymentBlock = await getApprovalPaymentDetails(org.id, row.memberId);
 
-  const resend = getResendClient();
+  // The adapter, not the door: review sends must not land in the org's
+  // email activity log as if a member had been written to.
+  const mailer = getMailer();
   const from = getResendFromEmail();
+  const copy = getDictionary().emails;
   const { APP_URL } = getServerEnv();
 
   const jobs: Array<{ name: Template; subject: string; react: ReactElement }> = [];
@@ -95,7 +99,7 @@ async function main() {
   if (only.includes("headsup")) {
     jobs.push({
       name: "headsup",
-      subject: `Membership renewal coming up — ${payment.periodLabel}`,
+      subject: copy.renewalHeadsup.subject(payment.periodLabel),
       react: PaymentRenewalHeadsupEmail({
         organizationName: org.name,
         memberName,
@@ -117,7 +121,7 @@ async function main() {
   if (only.includes("overdue")) {
     jobs.push({
       name: "overdue",
-      subject: `Action required: membership fee overdue — ${payment.periodLabel}`,
+      subject: copy.paymentOverdue.membershipSubject(payment.periodLabel),
       react: PaymentOverdueEmail({
         organizationName: org.name,
         memberName,
@@ -134,7 +138,7 @@ async function main() {
   if (only.includes("confirmed")) {
     jobs.push({
       name: "confirmed",
-      subject: `Payment confirmed — ${payment.periodLabel}`,
+      subject: copy.paymentConfirmed.subject(payment.periodLabel),
       react: PaymentConfirmedEmail({
         organizationName: org.name,
         memberName,
@@ -164,7 +168,7 @@ async function main() {
   if (only.includes("workspace-welcome")) {
     jobs.push({
       name: "workspace-welcome",
-      subject: `Your ${org.name} Google Workspace account is ready`,
+      subject: copy.workspaceWelcome.subject(org.name),
       react: WorkspaceWelcomeEmail({
         organizationName: org.name,
         memberName,
@@ -188,17 +192,17 @@ async function main() {
       continue;
     }
 
-    const result = await resend.emails.send({
-      from,
-      to: [to],
-      subject: `[TEST ${job.name}] ${job.subject}`,
-      react: job.react,
-    });
-    console.log(
-      result.error
-        ? `  ✗ ${job.name}: ${result.error.message}`
-        : `  ✓ ${job.name}: ${result.data?.id}`,
-    );
+    try {
+      const { id } = await mailer.send({
+        from,
+        to,
+        subject: `[TEST ${job.name}] ${job.subject}`,
+        react: job.react,
+      });
+      console.log(`  ✓ ${job.name}: ${id}`);
+    } catch (error) {
+      console.log(`  ✗ ${job.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

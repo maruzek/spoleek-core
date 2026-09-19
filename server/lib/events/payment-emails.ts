@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 
-import { EventPaymentEmail, eventPaymentEmailSubject } from "@/emails/event-payment-email";
+import { EventPaymentEmail } from "@/emails/event-payment-email";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { formatLongDate } from "@/lib/format";
+import { getDictionary } from "@/lib/i18n";
 import { feeAmountToDecimal } from "@/lib/payments";
 import { db } from "@/server/db";
 import {
@@ -12,10 +13,10 @@ import {
   organizations,
   tenantMembers,
 } from "@/server/db/schema";
-import { getResendClient, getResendFromEmail } from "@/server/lib/email";
 import { issueRsvpToken } from "@/server/lib/events/tokens";
 import { resolvePaymentRecipient } from "@/server/lib/payment-status";
 import { PAYMENT_QR_GRACE_DAYS, buildPaymentQrUrl } from "@/server/lib/payment-qr";
+import { sendEmail } from "@/server/notifications/send";
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -23,8 +24,8 @@ function addDays(date: Date, days: number) {
 
 /**
  * The "here is your payment" email after a confirmed yes created or re-priced
- * a payment. Called via `after()` outside the RSVP transaction; failures are
- * swallowed like every other payment email.
+ * a payment. Called via `after()` outside the RSVP transaction; a refused
+ * send is logged by the mailer door and never reaches the RSVP.
  *
  * Members land on the portal event page; guests and token holders get their
  * RSVP token page, which is the only place they can see the payment. A guest
@@ -83,13 +84,15 @@ export async function sendEventPaymentEmail(
     const link = await resolveEventLink(row, options.rsvpToken ?? null);
     if (!link) return;
 
-    const resend = getResendClient();
-    const from = getResendFromEmail();
+    const copy = getDictionary().emails.eventPayment;
 
-    await resend.emails.send({
-      from,
-      to: [recipient.email],
-      subject: eventPaymentEmailSubject({ eventTitle: row.eventTitle, updated: options.updated }),
+    await sendEmail({
+      orgId: row.orgId,
+      kind: "event_payment",
+      to: { email: recipient.email, name: recipient.name, memberId: row.memberId },
+      eventId: row.eventId,
+      metadata: { paymentId, updated: options.updated },
+      subject: options.updated ? copy.updatedSubject(row.eventTitle) : copy.subject(row.eventTitle),
       react: EventPaymentEmail({
         organizationName: row.orgName,
         recipientName: recipient.name,
@@ -109,7 +112,7 @@ export async function sendEventPaymentEmail(
       }),
     });
   } catch {
-    // Email failure must never surface to the RSVP
+    // Loading the payment or minting the token failed; the send itself never throws.
   }
 }
 

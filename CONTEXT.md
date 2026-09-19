@@ -38,6 +38,28 @@ concept lives here.
   invite. A refused Google account leaves the member `pending` for a retry.
   Only a pending member is ever approved; the action is guard → call.
 
+## Email
+
+- **Mailer** — the one door every outbound email leaves through, and the seam
+  behind it. The door is `sendEmail` (`server/notifications/send.ts`): one
+  message to one address, always paired with one `email_activities` row —
+  `sent` with the provider's id, or `failed` with the reason — so the
+  member's Emails tab and the health page see every mail, not only admin
+  notifications. It never throws; a caller that must react to a refusal (the
+  activation invite marks its invite failed) reads `sent` off the result.
+  `sendNotificationEmails` is the batch form for admin notifications, one
+  row per recipient with why the address was on the list. Every subject is
+  a `lib/i18n/messages.ts` entry, and the template's preview line reads the
+  same entry. The seam is the `Mailer` adapter — Resend in production, an
+  in-memory list in tests (`createMemoryMailer` + `installMailer`, never a
+  module mock) — and it also answers the two provider *reads*: a sent copy
+  for the preview, the account view for health. Nothing outside the module
+  can reach the Resend SDK; the webhook route verifies through
+  `verifyResendWebhook`. Two things are deliberately not rows: a mailer
+  that is not configured at all (a deployment problem, reported once on the
+  console) and a retry under an idempotency key the provider has already
+  honoured (the result points at the row already there).
+
 ## Payments
 
 - **Payment scope** — what a viewer may see *and* act on in the payments

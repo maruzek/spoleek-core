@@ -876,6 +876,52 @@ const en = {
       helpNote:
         "If this was you and you cannot get in, use Forgot password on the sign-in page. If it was not you, someone typed your address into a public form — there is nothing to fix, but tell an administrator if it keeps happening.",
     },
+
+    /**
+     * Subjects only, for mails whose body is still English-only. They live
+     * here so every subject the mailer sends has exactly one source — the
+     * template's preview line and the `email_activities` row read the same
+     * string.
+     */
+    /** To the approvers: someone applied to join the organization. */
+    registrationSubmitted: {
+      subject: (applicantName: string) => `New membership application — ${applicantName}`,
+    },
+    workspaceWelcome: {
+      subject: (organizationName: string) => `Your ${organizationName} account is ready`,
+    },
+    passwordReset: {
+      subject: (appName: string) => `${appName}: reset your password`,
+      body: (url: string) => `Open this link to reset your password: ${url}`,
+    },
+    eventPayment: {
+      subject: (eventTitle: string) => `Payment for ${eventTitle}`,
+      updatedSubject: (eventTitle: string) => `Updated payment for ${eventTitle}`,
+    },
+    paymentConfirmed: {
+      subject: (periodLabel: string) => `Payment confirmed — ${periodLabel}`,
+    },
+    paymentOverdue: {
+      membershipSubject: (periodLabel: string) =>
+        `Action required: membership fee overdue — ${periodLabel}`,
+      eventSubject: (periodLabel: string) =>
+        `Action required: payment overdue — ${periodLabel}`,
+    },
+    renewalHeadsup: {
+      subject: (periodLabel: string) => `Membership renewal coming up — ${periodLabel}`,
+    },
+    reportReminder: {
+      subject: (groupName: string, pendingAdditions: number, periodLabel: string) =>
+        `${groupName}: ${pendingAdditions} member${
+          pendingAdditions === 1 ? "" : "s"
+        } waiting to join the ${periodLabel} report`,
+    },
+    reportDigest: {
+      outstandingSubject: (count: number, periodLabel: string) =>
+        `${count} group${count === 1 ? "" : "s"} still to submit the ${periodLabel} report`,
+      awaitingApprovalSubject: (count: number, periodLabel: string) =>
+        `${count} ${periodLabel} report${count === 1 ? "" : "s"} waiting for approval`,
+    },
   },
 };
 
@@ -1746,6 +1792,59 @@ const cs: Dictionary = {
       cta: "Přejít na přihlášení",
       helpNote:
         "Pokud jste to byli vy a nemůžete se přihlásit, použijte na přihlašovací stránce odkaz Zapomenuté heslo. Pokud jste to nebyli vy, někdo zadal vaši adresu do veřejného formuláře — není třeba nic řešit, ale pokud se to bude opakovat, dejte vědět správci.",
+    },
+
+    registrationSubmitted: {
+      subject: (applicantName: string) => `Nová přihláška ke členství — ${applicantName}`,
+    },
+    workspaceWelcome: {
+      subject: (organizationName: string) =>
+        `Váš účet v organizaci ${organizationName} je připraven`,
+    },
+    passwordReset: {
+      subject: (appName: string) => `${appName}: obnovení hesla`,
+      body: (url: string) => `Heslo obnovíte otevřením tohoto odkazu: ${url}`,
+    },
+    eventPayment: {
+      subject: (eventTitle: string) => `Platba za ${eventTitle}`,
+      updatedSubject: (eventTitle: string) => `Upravená platba za ${eventTitle}`,
+    },
+    paymentConfirmed: {
+      subject: (periodLabel: string) => `Platba potvrzena — ${periodLabel}`,
+    },
+    paymentOverdue: {
+      membershipSubject: (periodLabel: string) =>
+        `Nutná akce: členský příspěvek po splatnosti — ${periodLabel}`,
+      eventSubject: (periodLabel: string) =>
+        `Nutná akce: platba po splatnosti — ${periodLabel}`,
+    },
+    renewalHeadsup: {
+      subject: (periodLabel: string) => `Blíží se obnova členství — ${periodLabel}`,
+    },
+    reportReminder: {
+      subject: (groupName: string, pendingAdditions: number, periodLabel: string) =>
+        `${groupName}: ${pendingAdditions} ${csPlural(
+          pendingAdditions,
+          "člen čeká",
+          "členové čekají",
+          "členů čeká",
+        )} na zařazení do výkazu ${periodLabel}`,
+    },
+    reportDigest: {
+      outstandingSubject: (count: number, periodLabel: string) =>
+        `${count} ${csPlural(
+          count,
+          "skupina ještě neodevzdala",
+          "skupiny ještě neodevzdaly",
+          "skupin ještě neodevzdalo",
+        )} výkaz ${periodLabel}`,
+      awaitingApprovalSubject: (count: number, periodLabel: string) =>
+        `${count} ${csPlural(count, "výkaz", "výkazy", "výkazů")} ${periodLabel} ${csPlural(
+          count,
+          "čeká",
+          "čekají",
+          "čeká",
+        )} na schválení`,
     },
   },
 };

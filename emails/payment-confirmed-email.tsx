@@ -12,6 +12,8 @@ import {
   pixelBasedPreset,
 } from "react-email";
 
+import { getDictionary } from "@/lib/i18n";
+
 type PaymentConfirmedEmailProps = {
   organizationName: string;
   memberName: string;
@@ -29,7 +31,7 @@ export function PaymentConfirmedEmail({
   currency,
   paidAt,
 }: PaymentConfirmedEmailProps) {
-  const subject = `Payment confirmed — ${periodLabel}`;
+  const subject = getDictionary().emails.paymentConfirmed.subject(periodLabel);
 
   return (
     <Html lang="en">

@@ -9,15 +9,14 @@ import { makeViewer } from "./helpers/viewer";
  * what each leaves in the database — and, for a refusal, that it leaves
  * nothing.
  *
- * The three network edges are faked before anything that reaches them is
- * imported: Google's directory (creating the account), Resend (the welcome
- * email) and Better Auth (the activation invite, which also needs a request
- * because it reads `headers()`).
+ * The three network edges are faked: Google's directory (creating the
+ * account) and Better Auth (the activation invite, which also needs a request
+ * because it reads `headers()`) are mocked before anything that reaches them
+ * is imported; the mailer takes its in-memory adapter through `installMailer`.
  *
  * Needs a database. Creates its own organizations and removes them afterwards.
  */
 const createWorkspaceUser = vi.fn();
-const sendEmail = vi.fn(async () => ({ error: null }));
 const requestPasswordReset = vi.fn(async (_input: unknown) => ({ status: true }));
 
 vi.mock("@/server/lib/workspace/client", () => {
@@ -32,11 +31,6 @@ vi.mock("@/server/lib/workspace/client", () => {
     WorkspaceNotConnectedError,
   };
 });
-
-vi.mock("@/server/lib/email", () => ({
-  getResendClient: () => ({ emails: { send: sendEmail } }),
-  getResendFromEmail: () => "noreply@example.test",
-}));
 
 vi.mock("@/lib/auth/auth", () => ({
   auth: {
@@ -63,6 +57,10 @@ const {
 const { approveMember, MemberApprovalError } = await import(
   "@/server/lib/member-lifecycle"
 );
+const { createMemoryMailer, installMailer } = await import("@/server/notifications/send");
+
+const mailer = createMemoryMailer();
+installMailer(mailer);
 
 const canReachDb = await pool
   .query("select 1")
@@ -99,7 +97,7 @@ suite("approving a member", () => {
 
   beforeEach(() => {
     createWorkspaceUser.mockReset();
-    sendEmail.mockClear();
+    mailer.reset();
     requestPasswordReset.mockClear();
   });
 
@@ -249,7 +247,10 @@ suite("approving a member", () => {
       organization.id,
       expect.objectContaining({ primaryEmail: "jane@example.test" }),
     );
-    expect(sendEmail).toHaveBeenCalledTimes(1);
+    // The welcome carries the temporary password, so it goes to the personal
+    // address, never to the mailbox it unlocks.
+    expect(mailer.sent).toHaveLength(1);
+    expect(mailer.sent[0]?.to).toBe(member.email);
     expect((await readMember(member.id)).status).toBe("active");
     expect((await approvalEvents(member.id))[0].metadata).toMatchObject({
       via: "workspace",
