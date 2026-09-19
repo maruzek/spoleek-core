@@ -222,7 +222,9 @@ export function ProfileForm({
         </Stat>
         <Stat>
           <StatLabel>We write to</StatLabel>
-          <StatValue className="truncate text-2xl">{contactEmail ?? "—"}</StatValue>
+          <StatValue className="min-w-0 text-lg" title={contactEmail ?? undefined}>
+            <span className="block min-w-0 truncate">{contactEmail ?? "—"}</span>
+          </StatValue>
           <StatDescription>
             {workspaceReady && workspaceEmail
               ? "Change it under Contact"

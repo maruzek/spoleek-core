@@ -64,7 +64,7 @@ function Stat({
     <Comp
       data-slot="stat"
       className={cn(
-        "grid grid-cols-[1fr_auto] content-start gap-x-4 gap-y-1 rounded-xl bg-card p-4 text-left text-card-foreground ring-1 ring-foreground/10",
+        "grid grid-cols-[minmax(0,1fr)_auto] content-start gap-x-4 gap-y-1 rounded-xl bg-card p-4 text-left text-card-foreground ring-1 ring-foreground/10",
         // Inside a strip the group owns the frame. The inset tint is opaque:
         // the group's background is the hairline colour, and a translucent
         // stat over it read as a much darker grey than intended.
