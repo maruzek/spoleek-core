@@ -80,7 +80,7 @@ export function PortalGroupPage({
   const hasPeople = detail.leaders.length > 0 || detail.roster !== null;
 
   return (
-    <div className="flex flex-1 flex-col pb-8">
+    <div className={cn("flex flex-1 flex-col pb-8", PAGE_WIDTH.split)}>
       <Header detail={detail} canManage={canManage} />
 
       <Tabs defaultValue="overview">
@@ -189,7 +189,7 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
   const leaderNames = leaders.map((leader) => leader.name).join(", ");
 
   return (
-    <div className={cn("flex flex-col gap-6 pb-6 md:pb-8", PAGE_WIDTH.split)}>
+    <div className="flex flex-col gap-6 pb-6 md:pb-8">
       <DetailHeader
         backHref="/portal/groups"
         backLabel={t.allGroups}
