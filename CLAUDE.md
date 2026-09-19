@@ -39,6 +39,8 @@ Run `pnpm typecheck`, `pnpm lint` and `pnpm test` before declaring a task done.
 
 # Conventions
 
+- **Design**: read `docs/design-guide.md` before building or restyling any page. It names the page frames (`AppPage`, `DetailHeader`), when the serif is allowed, and which message/overlay component to use.
+
 - **Safe actions**: import from `lib/safe-action-auth.ts`:
   - `authActionClient` — requires an authenticated session.
   - `orgAdminActionClient` — requires `system_admin` OR org admin (via `requireOrgAdminAccess`).
