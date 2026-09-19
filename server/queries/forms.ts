@@ -14,7 +14,6 @@ import type { Viewer } from "@/lib/access/viewer";
 
 import { db } from "@/server/db";
 import {
-  categoryAdminAssignments,
   eventAudience,
   eventResponses,
   events,
@@ -24,7 +23,6 @@ import {
   formSubmissions,
   forms,
   groupCategories,
-  groupMemberships,
   groups,
   memberCustomFields,
   organizations,
@@ -43,9 +41,8 @@ import { viewerOf, type SubmissionIdentity } from "@/server/lib/forms/submission
 import type { FieldViewerAccess } from "@/server/lib/member-field-visibility";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { listManageableOwners, requireGroupAdminModuleAccess } from "@/server/queries/access";
-import { listEligibleMemberIds } from "@/server/queries/events";
+import { listEligibleMemberIds, loadAudienceSnapshot } from "@/server/queries/event-eligibility";
 import { getMemberCustomFieldAnswerRows } from "@/server/queries/member-custom-fields";
-import { activeMembership } from "@/server/lib/group-membership";
 
 const liveForm = (orgId: string) => and(eq(forms.orgId, orgId), isNull(forms.deletedAt));
 
@@ -114,20 +111,6 @@ export async function listFormAudience(orgId: string, formId: string) {
 
 // ─── Eligibility ────────────────────────────────────────────────────────────
 
-async function listActiveMemberIds(orgId: string) {
-  const rows = await db
-    .select({ id: tenantMembers.id })
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.orgId, orgId),
-        eq(tenantMembers.status, "active"),
-        isNull(tenantMembers.deletedAt),
-      ),
-    );
-  return new Set(rows.map((row) => row.id));
-}
-
 /**
  * Members who may fill the form in the portal.
  *
@@ -145,12 +128,13 @@ export async function listFormEligibleMemberIds(
   if (form.eventId) {
     if (!event) return new Set();
     if (event.visibility === "targeted") return listEligibleMemberIds(orgId, event.id);
-    return listActiveMemberIds(orgId);
+    return (await loadAudienceSnapshot(orgId)).activeMemberIds;
   }
 
-  if (form.visibility === "org") return listActiveMemberIds(orgId);
+  if (form.visibility === "org") return (await loadAudienceSnapshot(orgId)).activeMemberIds;
 
-  const [rules, memberships, groupRows, admins, activeMemberIds] = await Promise.all([
+  const [snapshot, rules] = await Promise.all([
+    loadAudienceSnapshot(orgId),
     db
       .select({
         kind: formAudience.kind,
@@ -161,32 +145,9 @@ export async function listFormEligibleMemberIds(
       })
       .from(formAudience)
       .where(and(eq(formAudience.orgId, orgId), eq(formAudience.formId, form.id))),
-    db
-      .select({
-        groupId: groupMemberships.groupId,
-        memberId: groupMemberships.memberId,
-        role: groupMemberships.role,
-      })
-      .from(groupMemberships)
-      .where(and(eq(groupMemberships.orgId, orgId), activeMembership())),
-    db.select({ id: groups.id, categoryId: groups.categoryId }).from(groups).where(eq(groups.orgId, orgId)),
-    db
-      .select({
-        categoryId: categoryAdminAssignments.categoryId,
-        memberId: categoryAdminAssignments.memberId,
-      })
-      .from(categoryAdminAssignments)
-      .where(eq(categoryAdminAssignments.orgId, orgId)),
-    listActiveMemberIds(orgId),
   ]);
 
-  return resolveEligibleMemberIds({
-    rules,
-    groupMemberships: memberships,
-    groupsByCategory: new Map(groupRows.map((row) => [row.id, row.categoryId])),
-    activeMemberIds,
-    categoryAdmins: admins,
-  });
+  return resolveEligibleMemberIds({ ...snapshot, rules });
 }
 
 export async function getMemberRsvpAnswer(

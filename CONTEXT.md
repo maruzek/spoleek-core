@@ -49,3 +49,25 @@ concept lives here.
   the member-form picker) delete the old row first in the same transaction.
   The portal's `resolveAvailableAction` only *explains* the limit ahead of
   time; it never enforces it.
+
+## Events
+
+- **Eligibility** — whether a member may view and answer an event, decided by
+  visibility first: `public` needs nobody, `org` needs a member, `targeted`
+  needs a member the event's **audience** reaches. The audience is the set of
+  active members the `event_audience` rules resolve to (`group` → its active
+  members, `category` → the active members of its groups, `member` → that
+  member, `external` → nobody); it exists independently of visibility, so an
+  `org` event can still carry an invite list. "Reaches" always implies
+  "active member" — a suspended or pending person is never eligible, even when
+  named. Nothing is stored: a member who joins a targeted group tomorrow is
+  invited tomorrow.
+  One pure resolver (`lib/events/eligibility.ts` `resolveEligibleMemberIds`)
+  is the oracle. `server/queries/event-eligibility.ts` answers the two shapes
+  of question differently: *one member, many events* (`isEligible`,
+  `listEligibleEventIds`) is one SQL query over the member's own memberships,
+  never an org-wide load; *many members* (`resolveAudiences`,
+  `listEligibleMemberIds`) runs the resolver over an **audience snapshot** —
+  the org's active memberships, group→category map, active member ids and
+  category admins — loaded once per request. Forms resolve their own rules
+  against the same snapshot.

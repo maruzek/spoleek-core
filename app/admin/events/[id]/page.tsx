@@ -2,21 +2,19 @@ import { EventAdminDetail } from "@/components/app/events/event-admin-detail";
 import type { AudienceRow } from "@/components/app/events/event-audience-panel";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { countNoAnswer } from "@/lib/events/no-answer";
-import { eventRecipientFilterSchema, type EventRecipientFilter } from "@/lib/events/schemas";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { listManageableOwners, requireEventManagementAccess } from "@/server/queries/access";
 import { requireViewer } from "@/server/queries/viewer";
 import { listEventEmailActivities } from "@/server/queries/email-activity";
+import { listEligibleMemberIds } from "@/server/queries/event-eligibility";
 import {
   getEventById,
   getEventCounts,
   getEventRecipients,
-  listEligibleMemberIds,
   listEventAudience,
   listEventResponses,
   listEventsForOwnerPicker,
 } from "@/server/queries/events";
-import type { EventRecipient } from "@/server/queries/events";
 import { listEventFormsForManager, listFormsForManager } from "@/server/queries/forms";
 
 export default async function AdminEventPage({
@@ -32,7 +30,7 @@ export default async function AdminEventPage({
   const { context, event } = await requireEventManagementAccess(viewer, id);
   const orgId = context.organization.id;
 
-  const [row, owners, picker, audience, eligibleIds, responses, counts, sendLog] =
+  const [row, owners, picker, audience, eligibleIds, responses, counts, sendLog, recipients] =
     await Promise.all([
       getEventById(orgId, event.id),
       listManageableOwners(viewer),
@@ -42,6 +40,7 @@ export default async function AdminEventPage({
       listEventResponses(orgId, event.id),
       getEventCounts(orgId, event.id),
       listEventEmailActivities(orgId, event.id),
+      getEventRecipients(orgId, event.id),
     ]);
 
   const [formRows, managed, templates] = await Promise.all([
@@ -49,13 +48,6 @@ export default async function AdminEventPage({
     listFormsForManager(viewer, { templates: false }),
     listFormsForManager(viewer, { templates: true }),
   ]);
-
-  const recipientEntries = await Promise.all(
-    eventRecipientFilterSchema.options.map(
-      async (filter) => [filter, await getEventRecipients(orgId, event.id, filter)] as const,
-    ),
-  );
-  const recipients = Object.fromEntries(recipientEntries) as Record<EventRecipientFilter, EventRecipient[]>;
 
   const notRespondedCount = countNoAnswer({
     eligibleMemberIds: eligibleIds,

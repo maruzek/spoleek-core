@@ -2,7 +2,7 @@
  * The "No answer" stat next to "Invited".
  *
  * "Invited" counts people: every eligible member plus every external invitee.
- * The email recipient list (`getEventRecipients(…, "not_responded")`) is the
+ * The email recipient list (`getEventRecipients(…).not_responded`) is the
  * wrong source for the matching count — it drops members with no usable email
  * and folds members who share one, so the two numbers drift apart on any real
  * org. This counts people the same way "Invited" does.

@@ -1,6 +1,5 @@
 import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
-import { resolveEligibleMemberIds } from "@/lib/events/eligibility";
 import { isLivePayment, type EventPaymentView } from "@/lib/events/payment-plan";
 import { eventEndInstant, seatsTaken } from "@/lib/events/rsvp";
 import type { EventRecipientFilter } from "@/lib/events/schemas";
@@ -12,7 +11,6 @@ import {
   eventResponses,
   events,
   groupCategories,
-  groupMemberships,
   groups,
   memberPayments,
   organizations,
@@ -22,7 +20,7 @@ import {
 } from "@/server/db/schema";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { listManageableOwners, requireGroupAdminModuleAccess } from "@/server/queries/access";
-import { activeMembership } from "@/server/lib/group-membership";
+import { isEligible, listEligibleEventIds, resolveAudiences } from "@/server/queries/event-eligibility";
 
 const liveEvent = (orgId: string) => and(eq(events.orgId, orgId), isNull(events.deletedAt));
 
@@ -42,66 +40,6 @@ async function selectEventsWithOwner(where: ReturnType<typeof and>) {
   return rows as OwnerJoined[];
 }
 
-// ─── Eligibility ────────────────────────────────────────────────────────────
-
-/** Loads everything `resolveEligibleMemberIds` needs for one event. */
-async function loadEligibilityInputs(orgId: string, eventId: string) {
-  const [rules, memberships, groupRows, activeRows] = await Promise.all([
-    db
-      .select({
-        kind: eventAudience.kind,
-        groupId: eventAudience.groupId,
-        categoryId: eventAudience.categoryId,
-        memberId: eventAudience.memberId,
-      })
-      .from(eventAudience)
-      .where(and(eq(eventAudience.orgId, orgId), eq(eventAudience.eventId, eventId))),
-    db
-      .select({ groupId: groupMemberships.groupId, memberId: groupMemberships.memberId })
-      .from(groupMemberships)
-      .where(and(eq(groupMemberships.orgId, orgId), activeMembership())),
-    db
-      .select({ id: groups.id, categoryId: groups.categoryId })
-      .from(groups)
-      .where(eq(groups.orgId, orgId)),
-    db
-      .select({ id: tenantMembers.id })
-      .from(tenantMembers)
-      .where(
-        and(
-          eq(tenantMembers.orgId, orgId),
-          eq(tenantMembers.status, "active"),
-          isNull(tenantMembers.deletedAt),
-        ),
-      ),
-  ]);
-
-  return {
-    rules,
-    groupMemberships: memberships,
-    groupsByCategory: new Map(groupRows.map((row) => [row.id, row.categoryId])),
-    activeMemberIds: new Set(activeRows.map((row) => row.id)),
-  };
-}
-
-export async function listEligibleMemberIds(orgId: string, eventId: string) {
-  return resolveEligibleMemberIds(await loadEligibilityInputs(orgId, eventId));
-}
-
-/**
- * Whether a member may view and answer an event, per visibility. Drafts are
- * for managers only and are handled by the caller.
- */
-export async function isMemberEligibleForEvent(params: {
-  orgId: string;
-  event: Pick<Event, "id" | "visibility">;
-  memberId: string;
-}) {
-  if (params.event.visibility !== "targeted") return true;
-  const ids = await listEligibleMemberIds(params.orgId, params.event.id);
-  return ids.has(params.memberId);
-}
-
 const memberColumns = {
   id: tenantMembers.id,
   firstName: tenantMembers.firstName,
@@ -111,17 +49,6 @@ const memberColumns = {
   preferredEmail: tenantMembers.preferredEmail,
   userId: tenantMembers.userId,
 };
-
-export async function listEligibleMembers(orgId: string, eventId: string) {
-  const ids = [...(await listEligibleMemberIds(orgId, eventId))];
-  if (ids.length === 0) return [];
-
-  return db
-    .select(memberColumns)
-    .from(tenantMembers)
-    .where(and(eq(tenantMembers.orgId, orgId), inArray(tenantMembers.id, ids)))
-    .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName));
-}
 
 // ─── Counts and responses ───────────────────────────────────────────────────
 
@@ -296,40 +223,34 @@ export type EventRecipient = {
 };
 
 /**
- * The one list behind both the copy buttons and the send dialog, so the
- * number the manager approves is the number that gets mailed. Deduped by
- * lower-cased address; the first entry wins.
+ * Every recipient list at once, keyed by filter: the copy buttons and the
+ * send dialog read the same lists, so the number the manager approves is the
+ * number that gets mailed. Each list is deduped by lower-cased address; the
+ * first entry wins. The event's audience is resolved once for all filters.
  */
 export async function getEventRecipients(
   orgId: string,
   eventId: string,
-  filter: EventRecipientFilter,
-): Promise<EventRecipient[]> {
+): Promise<Record<EventRecipientFilter, EventRecipient[]>> {
   const [organization] = await db
     .select()
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
 
-  if (!organization) return [];
+  if (!organization) {
+    return {
+      all_eligible: [],
+      not_responded: [],
+      not_activated: [],
+      accepted: [],
+      reserve: [],
+      externals: [],
+    };
+  }
 
-  const out: EventRecipient[] = [];
-  const seen = new Set<string>();
-
-  const push = (recipient: EventRecipient) => {
-    const key = recipient.email.trim().toLowerCase();
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    out.push({ ...recipient, email: key });
-  };
-
-  const memberName = (member: { firstName: string; lastName: string }) => {
-    const name = `${member.firstName} ${member.lastName}`.trim();
-    return name.length > 0 ? name : null;
-  };
-
-  if (filter === "externals") {
-    const rows = await db
+  const [externals, responses, audience] = await Promise.all([
+    db
       .select({ email: eventAudience.externalEmail, name: eventAudience.externalName })
       .from(eventAudience)
       .where(
@@ -338,52 +259,77 @@ export async function getEventRecipients(
           eq(eventAudience.eventId, eventId),
           eq(eventAudience.kind, "external"),
         ),
-      );
+      ),
+    listEventResponses(orgId, eventId),
+    resolveAudiences(orgId, [eventId]),
+  ]);
+  const eligibleIds = [...(audience.get(eventId) ?? [])];
+  const members =
+    eligibleIds.length === 0
+      ? []
+      : await db
+          .select(memberColumns)
+          .from(tenantMembers)
+          .where(and(eq(tenantMembers.orgId, orgId), inArray(tenantMembers.id, eligibleIds)))
+          .orderBy(asc(tenantMembers.lastName), asc(tenantMembers.firstName));
 
-    for (const row of rows) {
+  const memberName = (member: { firstName: string; lastName: string }) => {
+    const name = `${member.firstName} ${member.lastName}`.trim();
+    return name.length > 0 ? name : null;
+  };
+
+  /** One deduped list per filter. */
+  const collect = (fill: (push: (recipient: EventRecipient) => void) => void) => {
+    const list: EventRecipient[] = [];
+    const seen = new Set<string>();
+    fill((recipient) => {
+      const key = recipient.email.trim().toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      list.push({ ...recipient, email: key });
+    });
+    return list;
+  };
+
+  const externalRecipients = collect((push) => {
+    for (const row of externals) {
       if (row.email) push({ email: row.email, name: row.name, externalEmail: row.email.toLowerCase() });
     }
+  });
 
-    return out;
-  }
-
-  if (filter === "accepted" || filter === "reserve") {
-    const rows = await listEventResponses(orgId, eventId);
-    const standing = filter === "accepted" ? "confirmed" : "reserve";
-
-    for (const row of rows) {
-      if (row.answer !== "yes" || row.standing !== standing) continue;
-
-      if (row.member) {
-        const email = resolveMemberEmailForOrg({ member: row.member, organization });
-        if (email) push({ email, name: memberName(row.member), memberId: row.member.id });
-      } else if (row.guestEmail) {
-        push({ email: row.guestEmail, name: row.guestName, externalEmail: row.guestEmail.toLowerCase() });
+  const byStanding = (standing: "confirmed" | "reserve") =>
+    collect((push) => {
+      for (const row of responses) {
+        if (row.answer !== "yes" || row.standing !== standing) continue;
+        if (row.member) {
+          const email = resolveMemberEmailForOrg({ member: row.member, organization });
+          if (email) push({ email, name: memberName(row.member), memberId: row.member.id });
+        } else if (row.guestEmail) {
+          push({ email: row.guestEmail, name: row.guestName, externalEmail: row.guestEmail.toLowerCase() });
+        }
       }
-    }
+    });
 
-    return out;
-  }
+  const responded = new Set(
+    responses.map((row) => row.memberId).filter((id): id is string => id != null),
+  );
+  const eligibleWhere = (keep: (member: (typeof members)[number]) => boolean) =>
+    collect((push) => {
+      for (const member of members) {
+        if (!keep(member)) continue;
+        const email = resolveMemberEmailForOrg({ member, organization });
+        if (email) push({ email, name: memberName(member), memberId: member.id });
+      }
+    });
 
-  const members = await listEligibleMembers(orgId, eventId);
-  const responded =
-    filter === "not_responded"
-      ? new Set(
-          (await listEventResponses(orgId, eventId))
-            .map((row) => row.memberId)
-            .filter((id): id is string => id != null),
-        )
-      : null;
-
-  for (const member of members) {
-    if (responded && responded.has(member.id)) continue;
-    if (filter === "not_activated" && member.userId) continue;
-
-    const email = resolveMemberEmailForOrg({ member, organization });
-    if (email) push({ email, name: memberName(member), memberId: member.id });
-  }
-
-  return out;
+  return {
+    all_eligible: eligibleWhere(() => true),
+    not_responded: eligibleWhere((member) => !responded.has(member.id)),
+    not_activated: eligibleWhere((member) => !member.userId),
+    accepted: byStanding("confirmed"),
+    reserve: byStanding("reserve"),
+    externals: externalRecipients,
+  };
 }
 
 // ─── Lists and detail ───────────────────────────────────────────────────────
@@ -474,15 +420,12 @@ export async function listEventsForViewer(params: { orgId: string; memberId: str
   );
   const all = [...rows, ...cancelled];
 
-  const visible: OwnerJoined[] = [];
-  for (const row of all) {
-    if (row.event.visibility !== "targeted") {
-      visible.push(row);
-      continue;
-    }
-    const ids = await listEligibleMemberIds(orgId, row.event.id);
-    if (ids.has(memberId)) visible.push(row);
-  }
+  const eligibleIds = await listEligibleEventIds(
+    orgId,
+    memberId,
+    all.map((row) => row.event),
+  );
+  const visible = all.filter((row) => eligibleIds.has(row.event.id));
 
   const items = await attachCounts(orgId, visible);
   const responses =
@@ -557,10 +500,8 @@ export async function getEventDetail(
 
   if (event.visibility === "public") return row;
   if (!viewer) return null;
-  if (event.visibility === "org") return row;
 
-  const ids = await listEligibleMemberIds(orgId, event.id);
-  return ids.has(viewer.memberId) ? row : null;
+  return (await isEligible(orgId, viewer.memberId, event)) ? row : null;
 }
 
 export async function listEventsForOwnerPicker(orgId: string) {

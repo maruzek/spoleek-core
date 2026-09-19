@@ -56,9 +56,9 @@ import {
   eventPaymentViewColumns,
   getEventBySlug,
   getEventRecipients,
-  isMemberEligibleForEvent,
   listEventsForOwnerPicker,
 } from "@/server/queries/events";
+import { isEligible } from "@/server/queries/event-eligibility";
 import { listAssignableTenantMembers } from "@/server/queries/groups";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -537,7 +537,7 @@ export const sendEventInviteEmailsAction = authActionClient
   .inputSchema(sendEventInviteEmailsSchema)
   .action(async ({ parsedInput, ctx }) => {
     const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
-    const recipients = await getEventRecipients(context.organization.id, event.id, parsedInput.filter);
+    const recipients = (await getEventRecipients(context.organization.id, event.id))[parsedInput.filter];
 
     if (parsedInput.dryRun) {
       return { success: true as const, dryRun: true as const, recipientCount: recipients.length };
@@ -571,7 +571,7 @@ export const respondToEventAction = authActionClient
 
     if (!event || event.status === "draft") throw new EventError("NOT_FOUND");
 
-    if (!(await isMemberEligibleForEvent({ orgId, event, memberId: member.id }))) {
+    if (!(await isEligible(orgId, member.id, event))) {
       throw new EventError("NOT_ELIGIBLE");
     }
 

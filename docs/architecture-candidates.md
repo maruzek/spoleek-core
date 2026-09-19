@@ -55,43 +55,26 @@ has 18 action call sites (now cached, so harmless); replace with
 
 ---
 
-## 3 · Deepen Event eligibility — **Strong**
+## ✅ 3 · Event eligibility — DONE (2026-09-19)
 
-**Files**
-- `lib/events/eligibility.ts` :56-137 `resolveEligibleMemberIds` (pure, tested
-  in `tests/events-eligibility.test.ts`)
-- `server/queries/events.ts` :46-83 `loadEligibilityInputs`, :85
-  `listEligibleMemberIds`, :93-101 `isMemberEligibleForEvent`, :113-123
-  `listEligibleMembers`, :462-522 `listEventsForViewer` (loop :475-482),
-  :301-388 `getEventRecipients`
-- `app/admin/events/[id]/page.tsx` :33-53
-- consumers of `listEventsForViewer`: `server/queries/portal-group-detail.ts`,
-  `server/queries/portal-dashboard.ts`
-
-**Problem.** The pure function's interface takes *all* active group
-memberships, *all* groups and *all* active members of the org. That is easy to
-unit-test and impossible to call cheaply: `loadEligibilityInputs` is 4 queries
-including the whole `group_memberships` table, run once **per targeted event**
-in the portal agenda and 1 + 6 times on the admin event page (once per
-`eventRecipientFilterSchema` option inside `getEventRecipients`).
-`isMemberEligibleForEvent` answers a one-member question by materialising the
-whole set. None of the callers are tested.
-
-**Deepening.** One eligibility module that owns a per-request org snapshot and
-answers the two real questions: `isEligible(viewer, event)` and
-`eligibleSets(viewer, events[])`. The pure function stays as the oracle the DB
-path is tested against.
-
-**Deletion test.** `isMemberEligibleForEvent` (3 callers) and
-`listEligibleMembers` (1 caller) inline to one line each → shallow, delete.
-
-**Done when**
-- Portal agenda issues one snapshot load regardless of event count (assert the
-  query count in a DB test, or at least assert one `loadEligibilityInputs`
-  call via a spy).
-- `getEventRecipients` loads the snapshot once for all filter options.
-- A DB test compares the new path against `resolveEligibleMemberIds` on a
-  seeded org.
+`server/queries/event-eligibility.ts` splits the question by shape. *One
+member, many events* — `isEligible`, `listEligibleEventIds` — is one SQL query
+(`event_audience` rows whose group / category / member reaches the member via
+`IN (SELECT …)` over their own active memberships, gated by an `EXISTS` on
+the active member row); the portal agenda and `getEventDetail` no longer load
+anything org-wide. *Many members* — `resolveAudiences`, `listEligibleMemberIds`
+— runs the pure resolver over `loadAudienceSnapshot` (React `cache()`, so a
+request loads it once). `getEventRecipients` returns every filter's list from
+one resolution; the admin page and the send action pick from it.
+`isMemberEligibleForEvent`, `listEligibleMembers` and `loadEligibilityInputs`
+are deleted; `server/queries/forms.ts` resolves form audiences against the
+same snapshot. `tests/event-eligibility-db.test.ts` pins the SQL path to the
+pure resolver on a seeded org and asserts the portal agenda's query count is
+constant in the number of events. **Eligibility** / **audience snapshot**
+added to `CONTEXT.md`. Left as is: the module is keyed on `memberId`, not a
+`Viewer` as sketched — the token and guest RSVP surfaces have no Viewer, so
+`memberId` is the honest common denominator until candidate 6 introduces a
+**Responder**; fold `isEligible` behind it then.
 
 ---
 
@@ -153,6 +136,8 @@ justify the seam: Resend in prod, in-memory in tests (replaces the single
   `token-event-rsvp.tsx` (114 lines) — 23 lines differ after renaming
 - `server/actions/events.ts` — three respond actions (member / token / guest)
   that already converge on `upsertResponse`
+- `server/queries/event-eligibility.ts` `isEligible(orgId, memberId, event)` —
+  takes a `memberId` for the same reason; the Responder is the natural key
 
 **Problem.** detail → counts → own response → live payment → forms → after-RSVP
 dialog → props is rebuilt per surface with drifts (the token page filters

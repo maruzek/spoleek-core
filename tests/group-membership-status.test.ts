@@ -21,7 +21,7 @@ import {
   resolveRegistrationRecipients,
 } from "@/server/notifications/recipients";
 import { loadViewerScope } from "@/server/queries/viewer";
-import { listEligibleMemberIds } from "@/server/queries/events";
+import { listEligibleMemberIds } from "@/server/queries/event-eligibility";
 import { listGroupMembers } from "@/server/queries/groups";
 
 /**
