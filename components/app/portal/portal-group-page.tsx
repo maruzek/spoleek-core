@@ -4,7 +4,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowDownNarrowWideIcon,
-  ArrowLeftIcon,
   ArrowRightIcon,
   ArrowUpNarrowWideIcon,
   CalendarIcon,
@@ -24,6 +23,8 @@ import {
   UsersIcon,
 } from "lucide-react";
 
+import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
+import { PageSectionHeader } from "@/components/app/page-section";
 import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/app/events/event-agenda-row";
 import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { PortalFormCard } from "@/components/app/forms/portal-form-card";
@@ -188,87 +189,75 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
 
   return (
     <div className="flex flex-col gap-6 pb-6 md:pb-8">
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/portal/groups">
-            <ArrowLeftIcon data-icon="inline-start" />
-            {t.allGroups}
-          </Link>
-        </Button>
-      </div>
-
-      {/* Same shape as the event header: pill, serif title, one icon meta line, actions on the right. */}
-      <header className="flex items-start gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          {standing?.role === "group_admin" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Status variant="success">
-                <StatusIndicator />
-                <StatusLabel>{t.youLead}</StatusLabel>
-              </Status>
-            </div>
-          ) : null}
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            {group.name}
-          </h1>
-          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <FolderIcon className="size-3.5" aria-hidden />
-              <dd>{group.categoryName}</dd>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <UserRoundIcon className="size-3.5" aria-hidden />
-              <dd className="truncate">{leaders.length > 0 ? t.ledBy(leaderNames) : t.noLeaderYet}</dd>
-            </div>
-            {detail.roster ? (
-              <div className="flex items-center gap-1.5">
-                <UsersIcon className="size-3.5" aria-hidden />
-                <dd>{t.memberCount(detail.roster.length)}</dd>
-              </div>
+      <DetailHeader
+        backHref="/portal/groups"
+        backLabel={t.allGroups}
+        badges={
+          standing?.role === "group_admin" ? (
+            <Status variant="success">
+              <StatusIndicator />
+              <StatusLabel>{t.youLead}</StatusLabel>
+            </Status>
+          ) : null
+        }
+        title={group.name}
+        meta={
+          <>
+            <DetailMeta>
+              <DetailMetaItem icon={<FolderIcon aria-hidden />}>{group.categoryName}</DetailMetaItem>
+              <DetailMetaItem icon={<UserRoundIcon aria-hidden />}>
+                {leaders.length > 0 ? t.ledBy(leaderNames) : t.noLeaderYet}
+              </DetailMetaItem>
+              {detail.roster ? (
+                <DetailMetaItem icon={<UsersIcon aria-hidden />}>
+                  {t.memberCount(detail.roster.length)}
+                </DetailMetaItem>
+              ) : null}
+            </DetailMeta>
+            {group.description ? (
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground md:text-base">{group.description}</p>
             ) : null}
-          </dl>
-          {group.description ? (
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground md:text-base">{group.description}</p>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          {standing ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon-sm" aria-label={tg.moreActions}>
-                  <MoreHorizontalIcon />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-56">
-                <LeaveMenuItem
-                  group={{
-                    id: group.id,
-                    name: group.name,
-                    canLeave: standing.canLeave,
-                    leaveBlockedReason: standing.leaveBlockedReason,
-                    role: standing.role,
-                    isLastAdmin: standing.isLastAdmin,
-                  }}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : detail.action ? (
-            <AvailableActionSlot
-              group={{ id: group.id, name: group.name, joinPolicy: group.joinPolicy, leaders }}
-              action={detail.action}
-            />
-          ) : null}
-          {canManage && detail.leaderPanel ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={detail.leaderPanel.adminHref}>
-                <span className="hidden sm:inline">{t.manageInAdmin}</span>
-                <ArrowRightIcon data-icon="inline-end" />
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-      </header>
+          </>
+        }
+        actions={
+          <>
+            {standing ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon-sm" aria-label={tg.moreActions}>
+                    <MoreHorizontalIcon />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-56">
+                  <LeaveMenuItem
+                    group={{
+                      id: group.id,
+                      name: group.name,
+                      canLeave: standing.canLeave,
+                      leaveBlockedReason: standing.leaveBlockedReason,
+                      role: standing.role,
+                      isLastAdmin: standing.isLastAdmin,
+                    }}
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : detail.action ? (
+              <AvailableActionSlot
+                group={{ id: group.id, name: group.name, joinPolicy: group.joinPolicy, leaders }}
+                action={detail.action}
+              />
+            ) : null}
+            {canManage && detail.leaderPanel ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={detail.leaderPanel.adminHref}>
+                  <span className="hidden sm:inline">{t.manageInAdmin}</span>
+                  <ArrowRightIcon data-icon="inline-end" />
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
+      />
     </div>
   );
 }
@@ -282,15 +271,15 @@ function AnnouncementSection({ detail, canManage }: { detail: PortalGroupDetail;
 
   return (
     <section className="flex flex-col gap-3">
-      <PageSectionHeading
-        hint={
+      <PageSectionHeader
+        className="mb-0"
+        title={t.announcement}
+        action={
           canManage ? (
             <GroupAnnouncementEditor groupId={detail.group.id} initialHtml={announcement?.html ?? ""} />
           ) : undefined
         }
-      >
-        {t.announcement}
-      </PageSectionHeading>
+      />
       {announcement ? (
         <article>
           <div
@@ -535,7 +524,7 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
   return (
     <section className="flex max-w-4xl flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <PageSectionHeading count={open.length}>{t.forms}</PageSectionHeading>
+        <PageSectionHeader className="mb-0" title={t.forms} count={open.length} />
         {open.length === 0 ? (
           <EmptyRow icon={<ClipboardListIcon className="size-4" aria-hidden />}>{t.noForms}</EmptyRow>
         ) : (
@@ -548,7 +537,7 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
       </div>
       {past.length > 0 ? (
         <div className="flex flex-col gap-3">
-          <PageSectionHeading count={past.length}>{t.answeredForms}</PageSectionHeading>
+          <PageSectionHeader className="mb-0" title={t.answeredForms} count={past.length} />
           <ul className="flex flex-col gap-2 opacity-80">
             {past.map((item) => (
               <PortalFormCard key={item.form.id} item={item} hideEvent />
@@ -561,24 +550,6 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
 }
 
 // ─── Aside cards ────────────────────────────────────────────────────────────
-
-/**
- * A heading in the event page's voice: serif, with a muted count and an
- * optional action or hint on the right.
- */
-function PageSectionHeading({ children, count, hint }: { children: ReactNode; count?: number; hint?: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <h2 className="flex items-baseline gap-2 text-lg font-semibold tracking-tight text-foreground">
-        {children}
-        {count != null && count > 0 ? (
-          <span className="font-sans text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
-        ) : null}
-      </h2>
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-    </div>
-  );
-}
 
 /** Same shell as the event page's RSVP and facts cards. */
 function AsideCard({
@@ -768,16 +739,16 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
     <div className="flex max-w-4xl flex-col gap-6">
       {leaders.length > 0 ? (
         <section className="flex flex-col gap-3">
-          <PageSectionHeading
+          <PageSectionHeader
+            className="mb-0"
+            title={t.leadersHeading}
             count={leaders.length}
-            hint={
+            action={
               leaderEmails.length > 1 ? (
                 <CopyButton variant="outline" value={leaderEmails.join(", ")} label={t.copyLeaderEmails} />
               ) : undefined
             }
-          >
-            {t.leadersHeading}
-          </PageSectionHeading>
+          />
           <ul className="grid gap-2 sm:grid-cols-2">
             {leaders.map((leader, index) => (
               <PersonRow
@@ -806,9 +777,7 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
 
       {members ? (
         <section className="flex flex-col gap-3">
-          <PageSectionHeading count={members.length} hint={t.rosterHint}>
-            {t.membersHeading}
-          </PageSectionHeading>
+          <PageSectionHeader className="mb-0" title={t.membersHeading} count={members.length} hint={t.rosterHint} />
           {members.length === 0 ? (
             <EmptyRow icon={<UsersIcon className="size-4" aria-hidden />}>{tg.notAssignedYet}</EmptyRow>
           ) : (

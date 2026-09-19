@@ -55,7 +55,7 @@ import {
 } from "@/components/ui/stat";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ReportHistoryChart } from "@/components/app/report-history-chart";
-import { ReportNotice } from "@/components/app/report-notice";
+import { Notice } from "@/components/ui/notice";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Dialog,
@@ -457,7 +457,7 @@ export function MembershipReportBoard({
         are on no row at all, which is exactly why they need saying here.
       */}
       {unassigned.length > 0 ? (
-        <ReportNotice
+        <Notice
           tone="attention"
           icon={<UserRoundXIcon />}
           title={`${unassigned.length} confirmed member${

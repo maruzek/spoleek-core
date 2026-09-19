@@ -13,7 +13,7 @@ export default async function PortalFormsPage() {
   const buckets = await listFormsForViewer({ orgId: organization.id, memberId: member.id });
 
   return (
-    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription}>
+    <AppPage eyebrow={t.portalEyebrow} title={t.portalTitle} description={t.portalDescription} width="content">
       <PortalFormsList pending={buckets.pending} submitted={buckets.submitted} />
     </AppPage>
   );

@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
-  ArrowLeftIcon,
   BarChart3Icon,
   BellIcon,
   CalendarIcon,
@@ -19,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { EventAdminStats } from "@/components/app/events/event-admin-stats";
 import type { OwnerOptions } from "@/components/app/events/event-wizard/types";
 import type { FormAudienceRow } from "@/components/app/forms/form-audience-editor";
@@ -140,18 +140,11 @@ export function FormEditor(props: FormEditorProps) {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin/forms">
-            <ArrowLeftIcon data-icon="inline-start" />
-            All forms
-          </Link>
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
+      <DetailHeader
+        backHref="/admin/forms"
+        backLabel="All forms"
+        badges={
+          <>
             {form.isTemplate ? (
               <Badge variant="secondary">
                 <LayoutTemplateIcon data-icon="inline-start" />
@@ -165,35 +158,25 @@ export function FormEditor(props: FormEditorProps) {
             )}
             {!form.isTemplate ? <Badge variant="outline">{formTimingLabel[form.timing]}</Badge> : null}
             {form.required ? <Badge variant="outline">Required</Badge> : null}
-          </div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{form.title}</h1>
-          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          </>
+        }
+        title={form.title}
+        meta={
+          <DetailMeta>
             {event ? (
-              <div className="flex items-center gap-1.5">
-                <CalendarIcon className="size-3.5" aria-hidden />
-                <dd>
-                  <Link href={`/admin/events/${event.id}?tab=forms`} className="hover:underline">
-                    {event.title}
-                  </Link>
-                </dd>
-              </div>
+              <DetailMetaItem icon={<CalendarIcon aria-hidden />}>
+                <Link href={`/admin/events/${event.id}?tab=forms`} className="hover:underline">
+                  {event.title}
+                </Link>
+              </DetailMetaItem>
             ) : null}
-            <div className="flex items-center gap-1.5">
-              <UserRoundIcon className="size-3.5" aria-hidden />
-              <dd>{ownerName ?? "Whole organization"}</dd>
-            </div>
-            {closesAt ? (
-              <div className="flex items-center gap-1.5">
-                <LockIcon className="size-3.5" aria-hidden />
-                <dd>Closes {closesAt}</dd>
-              </div>
-            ) : null}
-          </dl>
-        </div>
-
-        {canWrite && !form.isTemplate ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {form.status === "open" ? (
+            <DetailMetaItem icon={<UserRoundIcon aria-hidden />}>{ownerName ?? "Whole organization"}</DetailMetaItem>
+            {closesAt ? <DetailMetaItem icon={<LockIcon aria-hidden />}>Closes {closesAt}</DetailMetaItem> : null}
+          </DetailMeta>
+        }
+        actions={
+          canWrite && !form.isTemplate ? (
+            form.status === "open" ? (
               <Button variant="outline" onClick={() => setConfirmStatus("closed")}>
                 <LockIcon data-icon="inline-start" />
                 Close form
@@ -203,10 +186,10 @@ export function FormEditor(props: FormEditorProps) {
                 <LockOpenIcon data-icon="inline-start" />
                 {form.status === "draft" ? "Open form" : "Reopen form"}
               </Button>
-            )}
-          </div>
-        ) : null}
-      </div>
+            )
+          ) : null
+        }
+      />
 
       {!form.isTemplate ? (
         <EventAdminStats

@@ -31,7 +31,7 @@ function Section({ title, empty, items }: { title: string; empty: string; items:
 export function PortalFormsList({ pending, submitted }: { pending: ViewerFormItem[]; submitted: ViewerFormItem[] }) {
   const t = useDictionary().forms;
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex flex-col gap-8">
       <Section title={t.sections.pending} empty={t.emptyPending} items={pending} />
       <Section title={t.sections.submitted} empty={t.emptySubmitted} items={submitted} />
     </div>

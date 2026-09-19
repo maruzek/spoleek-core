@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAction } from "next-safe-action/hooks";
 import {
-  ArrowLeftIcon,
   BanIcon,
   CircleAlertIcon,
   ClipboardListIcon,
@@ -24,6 +23,7 @@ import {
 import { toast } from "sonner";
 
 import { EventAdminHeader } from "@/components/app/events/event-admin-header";
+import { Notice, type NoticeTone } from "@/components/ui/notice";
 import { EventAdminOverview } from "@/components/app/events/event-admin-overview";
 import { EventAdminStats } from "@/components/app/events/event-admin-stats";
 import type { AudienceDraft } from "@/components/app/events/event-audience-dialog";
@@ -34,7 +34,6 @@ import type { OwnerOptions, PaymentDefaults } from "@/components/app/events/even
 import { EventResponsesPanel } from "@/components/app/events/event-responses-panel";
 import { EventWizardDialog } from "@/components/app/events/event-wizard/event-wizard-dialog";
 import { useFormatters } from "@/components/locale-provider";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,14 +84,10 @@ function TabCount({ value }: { value: number }) {
   return <span className="text-xs font-normal tabular-nums text-muted-foreground">{value}</span>;
 }
 
-const BANNER_TONE: Record<EventNextStep["tone"], { alert: string; title: string; icon: string }> = {
-  info: { alert: "border-primary/30 bg-primary/5", title: "text-foreground", icon: "text-primary" },
-  warning: {
-    alert: "border-amber-500/30 bg-amber-500/5",
-    title: "text-amber-700 dark:text-amber-500",
-    icon: "text-amber-600 dark:text-amber-500",
-  },
-  danger: { alert: "border-destructive/30 bg-destructive/5", title: "text-destructive", icon: "text-destructive" },
+const BANNER_TONE: Record<EventNextStep["tone"], NoticeTone> = {
+  info: "info",
+  warning: "attention",
+  danger: "danger",
 };
 
 export function EventAdminDetail({
@@ -205,16 +200,9 @@ export function EventAdminDetail({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin/events">
-            <ArrowLeftIcon data-icon="inline-start" />
-            All events
-          </Link>
-        </Button>
-      </div>
-
       <EventAdminHeader
+        backHref="/admin/events"
+        backLabel="All events"
         event={event}
         ownerName={ownerName}
         locale={locale}
@@ -278,22 +266,20 @@ export function EventAdminDetail({
       />
 
       {nextStep ? (
-        <Alert className={cn("max-w-4xl px-4 py-3.5", BANNER_TONE[nextStep.tone].alert)}>
-          {nextStep.tone === "info" ? (
-            <InfoIcon className={BANNER_TONE[nextStep.tone].icon} />
-          ) : (
-            <CircleAlertIcon className={BANNER_TONE[nextStep.tone].icon} />
-          )}
-          <AlertTitle className={cn("text-base", BANNER_TONE[nextStep.tone].title)}>{nextStep.title}</AlertTitle>
-          <AlertDescription>{nextStep.description}</AlertDescription>
-          {nextStep.action ? (
-            <AlertAction className="top-3.5 right-3.5">
+        <Notice
+          className="max-w-4xl"
+          tone={BANNER_TONE[nextStep.tone]}
+          icon={nextStep.tone === "info" ? <InfoIcon /> : <CircleAlertIcon />}
+          title={nextStep.title}
+          description={nextStep.description}
+          action={
+            nextStep.action ? (
               <Button variant="outline" size="sm" onClick={() => runBannerAction(nextStep.action!.target)}>
                 {nextStep.action.label}
               </Button>
-            </AlertAction>
-          ) : null}
-        </Alert>
+            ) : null
+          }
+        />
       ) : null}
 
       <EventAdminStats

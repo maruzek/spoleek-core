@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, CalendarIcon, HourglassIcon } from "lucide-react";
+import { CalendarIcon, HourglassIcon } from "lucide-react";
 
+import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { PortalFormFiller } from "@/components/app/forms/portal-form-filler";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
 import { buildMemberIdentity, getFormById, getFormEvent, getFormForFiller } from "@/server/queries/forms";
@@ -36,47 +36,38 @@ export default async function PortalFormPage({ params }: { params: Promise<{ id:
     : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 pb-8">
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href={event ? `/portal/events/${event.slug}` : "/portal/forms"}>
-            <ArrowLeftIcon data-icon="inline-start" />
-            {event ? t.detail.backToEvent : t.detail.back}
-          </Link>
-        </Button>
-      </div>
-
-      <header className="flex flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2">
-          {form.required ? (
-            <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-500">
-              {t.requiredBadge}
-            </Badge>
-          ) : (
-            <Badge variant="outline">{t.optionalBadge}</Badge>
-          )}
-          <Badge variant="outline">{t.timing[form.timing]}</Badge>
-        </div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{form.title}</h1>
-        <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {event ? (
-            <div className="flex items-center gap-1.5">
-              <CalendarIcon className="size-3.5" aria-hidden />
-              <dd>
+    <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 pb-8">
+      <DetailHeader
+        backHref={event ? `/portal/events/${event.slug}` : "/portal/forms"}
+        backLabel={event ? t.detail.backToEvent : t.detail.back}
+        badges={
+          <>
+            {form.required ? (
+              <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-500">
+                {t.requiredBadge}
+              </Badge>
+            ) : (
+              <Badge variant="outline">{t.optionalBadge}</Badge>
+            )}
+            <Badge variant="outline">{t.timing[form.timing]}</Badge>
+          </>
+        }
+        title={form.title}
+        meta={
+          <DetailMeta>
+            {event ? (
+              <DetailMetaItem icon={<CalendarIcon aria-hidden />}>
                 <Link href={`/portal/events/${event.slug}`} className="hover:underline">
                   {t.forEvent(event.title)}
                 </Link>
-              </dd>
-            </div>
-          ) : null}
-          {closesAt ? (
-            <div className="flex items-center gap-1.5">
-              <HourglassIcon className="size-3.5" aria-hidden />
-              <dd>{t.closesAt(closesAt)}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </header>
+              </DetailMetaItem>
+            ) : null}
+            {closesAt ? (
+              <DetailMetaItem icon={<HourglassIcon aria-hidden />}>{t.closesAt(closesAt)}</DetailMetaItem>
+            ) : null}
+          </DetailMeta>
+        }
+      />
 
       <PortalFormFiller
         data={{

@@ -26,28 +26,6 @@ export function reveal(index: number): { className: string; style: CSSProperties
   };
 }
 
-export function SectionHeading({
-  children,
-  count,
-  hint,
-}: {
-  children: ReactNode;
-  count?: number;
-  hint?: ReactNode;
-}) {
-  return (
-    <div className="mb-3 flex items-baseline justify-between gap-3">
-      <h2 className="flex items-baseline gap-2 font-sans text-base font-semibold text-foreground">
-        {children}
-        {count != null && count > 0 ? (
-          <span className="text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
-        ) : null}
-      </h2>
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
-    </div>
-  );
-}
-
 export function EmptyNote({ children }: { children: ReactNode }) {
   return (
     <p className="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">

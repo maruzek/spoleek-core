@@ -1,6 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CalendarIcon, LinkIcon, MailIcon } from "lucide-react";
+
+import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { useFormatters } from "@/components/locale-provider";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -57,49 +60,41 @@ export function MemberDetailHeader({
     "Unnamed member";
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <div className="flex min-w-0 items-start gap-4">
+    <DetailHeader
+      leading={
         <Avatar className="size-14 shrink-0">
-          <AvatarFallback className="text-base font-semibold">
-            {getInitials(member)}
-          </AvatarFallback>
+          <AvatarFallback className="text-base font-semibold">{getInitials(member)}</AvatarFallback>
         </Avatar>
-
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-heading truncate text-2xl font-semibold tracking-tight text-foreground">
-              {displayName}
-            </h1>
-            <Badge variant="secondary">{ROLE_LABELS[member.role]}</Badge>
-            <Status variant={getStatusVariant(member.status)}>
-              <StatusIndicator />
-              <StatusLabel className="capitalize">
-                {member.status}
-              </StatusLabel>
-            </Status>
-            {promotedGroups.map((assignment) => (
-              <Badge key={assignment.id} variant="outline">
-                {assignment.name}
-                {assignment.role === "group_admin" ? " • admin" : ""}
-              </Badge>
-            ))}
-          </div>
-
-          <p className="truncate text-sm text-muted-foreground">
-            {member.email ?? "No email on file"}
-          </p>
-
-          <p className="text-sm text-muted-foreground">
+      }
+      badges={
+        <>
+          <Badge variant="secondary">{ROLE_LABELS[member.role]}</Badge>
+          <Status variant={getStatusVariant(member.status)}>
+            <StatusIndicator />
+            <StatusLabel className="capitalize">{member.status}</StatusLabel>
+          </Status>
+          {promotedGroups.map((assignment) => (
+            <Badge key={assignment.id} variant="outline">
+              {assignment.name}
+              {assignment.role === "group_admin" ? " • admin" : ""}
+            </Badge>
+          ))}
+        </>
+      }
+      title={displayName}
+      titleClassName="truncate"
+      meta={
+        <DetailMeta>
+          <DetailMetaItem icon={<MailIcon aria-hidden />}>{member.email ?? "No email on file"}</DetailMetaItem>
+          <DetailMetaItem icon={<LinkIcon aria-hidden />}>
             {member.userId
               ? `Linked account${linkedUserName ? ` · ${linkedUserName}` : ""}`
               : "Shadow profile · no login yet"}
-            {" · "}
-            Joined {formatDate(member.createdAt)}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
-    </div>
+          </DetailMetaItem>
+          <DetailMetaItem icon={<CalendarIcon aria-hidden />}>Joined {formatDate(member.createdAt)}</DetailMetaItem>
+        </DetailMeta>
+      }
+      actions={actions}
+    />
   );
 }

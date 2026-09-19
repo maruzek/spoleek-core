@@ -139,6 +139,7 @@ export default async function AdminSettingsPage({
     <AppPage
       eyebrow="Administration"
       title="Settings"
+      width="content"
       description="Manage your organization's join experience, membership rules, and integrations."
       actions={
         <Button asChild variant="outline" size="sm">

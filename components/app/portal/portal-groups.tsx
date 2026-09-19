@@ -17,7 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CopyButton } from "@/components/app/copy-button";
-import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
+import { ListRow, reveal, } from "@/components/app/dashboard/dashboard-primitives";
+import { PageSectionHeader } from "@/components/app/page-section";
 import { AvailableActionSlot, LeaveMenuItem } from "@/components/app/portal/portal-group-actions";
 import { cn } from "@/lib/utils";
 import type {
@@ -235,9 +236,7 @@ function CategorySection({
 
   return (
     <section>
-      <SectionHeading count={category.mine.length} hint={category.description ?? undefined}>
-        {category.name}
-      </SectionHeading>
+      <PageSectionHeader count={category.mine.length} hint={category.description ?? undefined} title={category.name} />
       {category.mine.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
           {t.notInAny(category.name, single)} {canPick ? t.pickOneBelow : t.askAdmin}

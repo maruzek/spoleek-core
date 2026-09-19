@@ -29,11 +29,11 @@ import {
   EmptyNote,
   ListRow,
   ScrollList,
-  SectionHeading,
   relativeTime,
   reveal,
   rowLink,
 } from "@/components/app/dashboard/dashboard-primitives";
+import { PageSectionHeader } from "@/components/app/page-section";
 import {
   daysUntil,
   groupByDay,
@@ -80,7 +80,7 @@ function waitingLabel(item: AttentionItem, now: Date) {
 function AttentionSection({ items, now }: { items: AttentionItem[]; now: Date }) {
   return (
     <section>
-      <SectionHeading count={items.length}>Needs you</SectionHeading>
+      <PageSectionHeader count={items.length} title="Needs you" />
       {items.length === 0 ? (
         <AllClear
           title="Nothing is waiting on you."
@@ -153,9 +153,7 @@ function UpcomingSection({
 
   return (
     <section>
-      <SectionHeading count={items.length} hint="next 14 days">
-        Coming up
-      </SectionHeading>
+      <PageSectionHeader count={items.length} hint="next 14 days" title="Coming up" />
       {days.length === 0 ? (
         <EmptyNote>Nothing scheduled in the next two weeks.</EmptyNote>
       ) : (
@@ -212,9 +210,7 @@ function ActivitySection({
 
   return (
     <section>
-      <SectionHeading count={items.length} hint="last 7 days">
-        Just happened
-      </SectionHeading>
+      <PageSectionHeader count={items.length} hint="last 7 days" title="Just happened" />
       {items.length === 0 ? (
         <EmptyNote>A quiet week. Nothing new came in.</EmptyNote>
       ) : (
@@ -292,7 +288,7 @@ function ModuleStat({ tile, index }: { tile: ModuleTile; index: number }) {
 function ModulesSection({ tiles, startIndex }: { tiles: ModuleTile[]; startIndex: number }) {
   return (
     <section>
-      <SectionHeading>Everything else</SectionHeading>
+      <PageSectionHeader title="Everything else" />
       <StatGroup columns={4}>
         {tiles.map((tile, index) => (
           <ModuleStat key={tile.key} tile={tile} index={startIndex + index} />

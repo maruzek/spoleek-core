@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
-  ArrowLeftIcon,
   ArrowRightIcon,
   BanIcon,
   CalendarIcon,
@@ -14,10 +13,11 @@ import {
   UsersIcon,
 } from "lucide-react";
 
+import { DetailHeader, DetailMeta, DetailMetaItem } from "@/components/app/detail-header";
 import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
 import { FactRow, factCardClassName } from "@/components/app/fact-row";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Notice } from "@/components/ui/notice";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { formatEventWhen, isLongDescription } from "@/lib/events/display";
 import { formatMoney } from "@/lib/payments";
@@ -87,20 +87,13 @@ export function PortalEventDetail({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/portal/events">
-            <ArrowLeftIcon data-icon="inline-start" />
-            {d.back}
-          </Link>
-        </Button>
-      </div>
-
-      <header className="flex items-start gap-4">
-        <EventDateLeaf startsAt={event.startsAt} cancelled={cancelled} locale={locale} timeZone={timeZone} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          {cancelled || outcome ? (
-            <div className="flex flex-wrap items-center gap-2">
+      <DetailHeader
+        backHref="/portal/events"
+        backLabel={d.back}
+        leading={<EventDateLeaf startsAt={event.startsAt} cancelled={cancelled} locale={locale} timeZone={timeZone} />}
+        badges={
+          cancelled || outcome ? (
+            <>
               {cancelled ? (
                 <Status variant="error">
                   <StatusIndicator />
@@ -113,55 +106,46 @@ export function PortalEventDetail({
                   <StatusLabel>{d.yourStatus[outcome]}</StatusLabel>
                 </Status>
               ) : null}
-            </div>
-          ) : null}
-          <h1
-            className={cn(
-              "font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl",
-              cancelled && "text-muted-foreground line-through decoration-1",
-            )}
-          >
-            {event.title}
-          </h1>
-          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <CalendarIcon className="size-3.5" aria-hidden />
-              <dd>{when ?? t.dateTba}</dd>
-            </div>
-            {where ? (
-              <div className="flex items-center gap-1.5">
-                <MapPinIcon className="size-3.5" aria-hidden />
-                <dd className="truncate">{where}</dd>
-              </div>
-            ) : null}
-            <div className="flex items-center gap-1.5">
-              <UserRoundIcon className="size-3.5" aria-hidden />
-              <dd>{t.organisedBy(ownerName)}</dd>
-            </div>
-          </dl>
-        </div>
-        {manageHref ? (
-          <Button asChild variant="outline" size="sm" className="shrink-0">
-            <Link href={manageHref}>
-              <span className="hidden sm:inline">{d.manageInAdmin}</span>
-              <ArrowRightIcon data-icon="inline-end" />
-            </Link>
-          </Button>
-        ) : null}
-      </header>
+            </>
+          ) : null
+        }
+        title={event.title}
+        titleClassName={cancelled ? "text-muted-foreground line-through decoration-1" : undefined}
+        meta={
+          <DetailMeta>
+            <DetailMetaItem icon={<CalendarIcon aria-hidden />}>{when ?? t.dateTba}</DetailMetaItem>
+            {where ? <DetailMetaItem icon={<MapPinIcon aria-hidden />}>{where}</DetailMetaItem> : null}
+            <DetailMetaItem icon={<UserRoundIcon aria-hidden />}>{t.organisedBy(ownerName)}</DetailMetaItem>
+          </DetailMeta>
+        }
+        actions={
+          manageHref ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={manageHref}>
+                <span className="hidden sm:inline">{d.manageInAdmin}</span>
+                <ArrowRightIcon data-icon="inline-end" />
+              </Link>
+            </Button>
+          ) : null
+        }
+      />
 
       {cancelled ? (
-        <Alert className="max-w-4xl border-destructive/30 bg-destructive/5 px-4 py-3.5">
-          <BanIcon className="text-destructive" />
-          <AlertTitle className="text-base text-destructive">{d.cancelledTitle}</AlertTitle>
-          <AlertDescription>{d.cancelledBody}</AlertDescription>
-        </Alert>
+        <Notice
+          className="max-w-4xl"
+          tone="danger"
+          icon={<BanIcon />}
+          title={d.cancelledTitle}
+          description={d.cancelledBody}
+        />
       ) : outcome === "reserve" ? (
-        <Alert className="max-w-4xl border-amber-500/30 bg-amber-500/5 px-4 py-3.5">
-          <HourglassIcon className="text-amber-600 dark:text-amber-500" />
-          <AlertTitle className="text-base text-amber-700 dark:text-amber-500">{d.reserveTitle}</AlertTitle>
-          <AlertDescription>{d.reserveBody}</AlertDescription>
-        </Alert>
+        <Notice
+          className="max-w-4xl"
+          tone="attention"
+          icon={<HourglassIcon />}
+          title={d.reserveTitle}
+          description={d.reserveBody}
+        />
       ) : null}
 
       <div className={cn("grid gap-8", twoColumn ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>

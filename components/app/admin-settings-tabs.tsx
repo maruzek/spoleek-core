@@ -161,7 +161,7 @@ export function AdminSettingsTabs({
       </TabsList>
 
       <TabsContent value="join">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <JoinPageSettingsForm organization={organization} policy={policy} />
         </div>
       </TabsContent>
@@ -173,7 +173,7 @@ export function AdminSettingsTabs({
       </TabsContent>
 
       <TabsContent value="membership">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <MembershipSettingsCard
             state={membershipState}
             locale={membershipLocale}
@@ -183,13 +183,13 @@ export function AdminSettingsTabs({
       </TabsContent>
 
       <TabsContent value="notifications">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <EmailNotificationSettingsCard state={emailNotificationState} />
         </div>
       </TabsContent>
 
       <TabsContent value="events">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <EventsSettingsCard state={eventSettingsState} />
         </div>
       </TabsContent>
@@ -204,13 +204,13 @@ export function AdminSettingsTabs({
       </TabsContent>
 
       <TabsContent value="workspace">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <WorkspaceSettingsCard state={workspaceState} />
         </div>
       </TabsContent>
 
       <TabsContent value="localization">
-        <div className="max-w-2xl pt-6">
+        <div className="pt-6">
           <LocalizationSettingsCard state={localizationState} />
         </div>
       </TabsContent>

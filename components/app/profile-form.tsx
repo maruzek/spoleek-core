@@ -20,7 +20,7 @@ import { MemberDataExportButton } from "@/components/app/member-data-export-butt
 import { SwitchChoiceField } from "@/components/app/switch-choice-field";
 import { useAppShell } from "@/components/app/app-shell-provider";
 import { useDictionary, useFormatters } from "@/components/locale-provider";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Notice } from "@/components/ui/notice";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -255,7 +255,7 @@ export function ProfileForm({
         {/* ── Details ── */}
         <TabsContent value="details" className="pt-4">
           <form
-            className="flex max-w-3xl flex-col gap-8"
+            className="flex flex-col gap-8"
             onSubmit={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -263,11 +263,12 @@ export function ProfileForm({
             }}
           >
             {showIncompleteBanner && missingRequired.length > 0 ? (
-              <Alert className="border-orange-500/30 bg-orange-500/5">
-                <AlertTriangleIcon className="text-orange-600 dark:text-orange-400" />
-                <AlertTitle className="font-sans">Finish your profile to continue</AlertTitle>
-                <AlertDescription>
-                  <span>
+              <Notice
+                tone="attention"
+                icon={<AlertTriangleIcon />}
+                title="Finish your profile to continue"
+                description={
+                  <>
                     {organization.name} needs{" "}
                     {missingRequired.map((field, index) => (
                       <span key={field.key}>
@@ -281,9 +282,9 @@ export function ProfileForm({
                       </span>
                     ))}{" "}
                     before you can use the rest of the portal.
-                  </span>
-                </AlertDescription>
-              </Alert>
+                  </>
+                }
+              />
             ) : null}
 
             <FieldSet>
@@ -378,7 +379,7 @@ export function ProfileForm({
 
         {/* ── Contact ── */}
         <TabsContent value="contact" className="pt-4">
-          <div className="flex max-w-3xl flex-col gap-8">
+          <div className="flex flex-col gap-8">
             <FieldSet>
               <FieldLegend className="flex items-center gap-2">
                 Where we write to you
@@ -440,7 +441,7 @@ export function ProfileForm({
 
         {/* ── Your data ── */}
         <TabsContent value="privacy" className="pt-4">
-          <div className="flex max-w-3xl flex-col gap-8">
+          <div className="flex flex-col gap-8">
             {/*
               Self-service is the point: an access request that the member can
               answer with one click never becomes a ticket, and the organization

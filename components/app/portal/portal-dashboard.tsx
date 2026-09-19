@@ -19,10 +19,10 @@ import {
   EmptyNote,
   ListRow,
   ScrollList,
-  SectionHeading,
   reveal,
   rowLink,
 } from "@/components/app/dashboard/dashboard-primitives";
+import { PageSectionHeader } from "@/components/app/page-section";
 import {
   Stat,
   StatDescription,
@@ -65,7 +65,7 @@ function dueLabel(todo: PortalTodo, now: Date) {
 function TodoSection({ items, now }: { items: PortalTodo[]; now: Date }) {
   return (
     <section>
-      <SectionHeading count={items.length}>To do</SectionHeading>
+      <PageSectionHeader count={items.length} title="To do" />
       {items.length === 0 ? (
         <AllClear title="You are all caught up." detail="Nothing to answer, nothing to pay." />
       ) : (
@@ -123,9 +123,7 @@ function UpcomingSection({
 
   return (
     <section>
-      <SectionHeading count={items.length} hint="next 30 days">
-        Coming up
-      </SectionHeading>
+      <PageSectionHeader count={items.length} hint="next 30 days" title="Coming up" />
       {days.length === 0 ? (
         <EmptyNote>Nothing on your calendar for the next month.</EmptyNote>
       ) : (
@@ -222,7 +220,7 @@ function MembershipSection({
 
   return (
     <section className={r.className} style={r.style}>
-      <SectionHeading hint={orgName}>Your membership</SectionHeading>
+      <PageSectionHeader hint={orgName} title="Your membership" />
       <ScrollList>
         <dl className="flex flex-col">
           <Fact label="Status">
@@ -351,7 +349,7 @@ export function PortalDashboard({ data, orgName }: { data: PortalDashboardData; 
       </div>
 
       <section>
-        <SectionHeading>Your portal</SectionHeading>
+        <PageSectionHeader title="Your portal" />
         <StatGroup columns={5}>
           {data.tiles.map((tile, index) => (
             <AreaStat

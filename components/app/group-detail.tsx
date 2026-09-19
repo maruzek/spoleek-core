@@ -401,8 +401,8 @@ export function GroupDetail({
         </TabsList>
 
         <TabsContent value="page" className="flex flex-col gap-4 pt-4">
-          {/* Same centred column as Settings: two editors, read top to bottom. */}
-          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+          {/* Same column width as the settings tab: two editors, read top to bottom. */}
+          <div className="flex w-full max-w-3xl flex-col gap-4">
             <Card>
               <CardHeader>
                 <CardTitle>Notice board</CardTitle>
@@ -516,7 +516,7 @@ export function GroupDetail({
         <TabsContent value="settings" className="flex flex-col gap-6 pt-4">
           {/* The one centred surface in the app: a long form reads better as a
               column than stretched across the full width. */}
-          <Card className="mx-auto w-full max-w-2xl overflow-hidden">
+          <Card className="w-full max-w-3xl overflow-hidden">
             <CardHeader>
               <CardTitle>Group settings</CardTitle>
               <CardDescription>
@@ -551,7 +551,7 @@ export function GroupDetail({
             </CardContent>
           </Card>
 
-          <div className="mx-auto w-full max-w-2xl">
+          <div className="w-full max-w-3xl">
             <GroupWorkspaceLinksCard
               groupId={group.id}
               links={workspaceLinks}

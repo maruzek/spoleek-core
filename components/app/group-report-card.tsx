@@ -33,7 +33,7 @@ import {
   setReportMemberInclusionAction,
   submitGroupReportAction,
 } from "@/server/actions/membership-reports";
-import { ReportNotice } from "@/components/app/report-notice";
+import { Notice } from "@/components/ui/notice";
 import { ReportPeriodPicker } from "@/components/app/report-period-picker";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -305,7 +305,7 @@ function GroupReportRoster({
               </p>
             ) : null}
             {reportGroup.status === "returned" && reportGroup.returnedReason ? (
-              <ReportNotice
+              <Notice
                 className="mt-1 p-3"
                 tone="attention"
                 title="Why it came back"
@@ -372,7 +372,7 @@ function GroupReportRoster({
       </div>
 
       {comparison ? (
-        <ReportNotice
+        <Notice
           icon={<ArrowRightLeftIcon />}
           title={`Compared with ${comparison.previousPeriodLabel} · ${
             comparison.previousMemberCount

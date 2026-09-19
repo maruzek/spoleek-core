@@ -14,6 +14,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,14 +61,6 @@ function getFormFieldErrors(errors: unknown[]): string[] {
     .filter((error): error is string => Boolean(error));
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-      {children}
-    </p>
-  );
-}
-
 export function JoinPageSettingsForm({
   organization,
   policy,
@@ -107,8 +101,8 @@ export function JoinPageSettingsForm({
         void form.handleSubmit();
       }}
     >
-      <div className="flex flex-col gap-4">
-        <SectionHeading>Public page</SectionHeading>
+      <FieldSet>
+        <FieldLegend>Public page</FieldLegend>
         <FieldGroup>
           <form.Field name="joinPageHeadline">
             {(formField) => {
@@ -298,10 +292,10 @@ export function JoinPageSettingsForm({
             }}
           </form.Field>
         </FieldGroup>
-      </div>
+      </FieldSet>
 
-      <div className="flex flex-col gap-4">
-        <SectionHeading>Invite email</SectionHeading>
+      <FieldSet>
+        <FieldLegend>Invite email</FieldLegend>
         <FieldGroup>
           <form.Field name="memberInviteEmailSubject">
             {(formField) => {
@@ -364,7 +358,7 @@ export function JoinPageSettingsForm({
             }}
           </form.Field>
         </FieldGroup>
-      </div>
+      </FieldSet>
 
       {/*
         The legal documents used to be four plain textareas here. They now live

@@ -37,6 +37,7 @@ export default async function PortalProfilePage({
     <AppPage
       eyebrow="Member portal"
       title="Your profile."
+      width="content"
       description={`What ${organization.name} knows about you, and where it reaches you.`}
     >
       <ProfileForm
