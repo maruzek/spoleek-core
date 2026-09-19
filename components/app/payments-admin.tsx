@@ -218,7 +218,9 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
         />
       ),
       cell: ({ row }) =>
-        row.original.status === "paid" || row.original.status === "cancelled" ? null : (
+        row.original.status === "paid" ||
+        row.original.status === "cancelled" ||
+        !row.original.canAct ? null : (
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
@@ -319,12 +321,15 @@ export function PaymentsAdmin({ payments, isFullAdmin }: { payments: PaymentRow[
     columnHelper.display({
       id: "actions",
       header: "",
-      cell: ({ row }) => (
-        <PaymentActions
-          payment={row.original}
-          onSuccess={() => router.refresh()}
-        />
-      ),
+      // A row in view but outside the viewer's acting scope (their member's
+      // payment for an event they do not manage) gets no controls.
+      cell: ({ row }) =>
+        row.original.canAct ? (
+          <PaymentActions
+            payment={row.original}
+            onSuccess={() => router.refresh()}
+          />
+        ) : null,
     }),
   ];
 

@@ -223,42 +223,6 @@ export const removeResponseSchema = z.object({
   responseId: z.string().uuid(),
 });
 
-// ─── Event payments (manager actions on the response list) ───────────────────
-
-export const eventPaymentCancellationReasonSchema = z.enum([
-  "duplicate",
-  "waived",
-  "admin_error",
-  "other",
-  "rsvp_withdrawn",
-]);
-
-export type EventPaymentCancellationReason = z.infer<
-  typeof eventPaymentCancellationReasonSchema
->;
-
-export const markEventPaymentPaidSchema = z.object({
-  paymentId: z.string().uuid(),
-  paidAt: z.string().datetime().optional(),
-  adminNote: z.string().max(500).optional(),
-});
-
-export const bulkMarkEventPaymentsPaidSchema = z.object({
-  eventId: z.string().uuid(),
-  paymentIds: z.array(z.string().uuid()).min(1).max(500),
-  paidAt: z.string().datetime().optional(),
-});
-
-export const cancelEventPaymentSchema = z.object({
-  paymentId: z.string().uuid(),
-  reason: eventPaymentCancellationReasonSchema,
-  adminNote: z.string().max(500).optional(),
-});
-
-export const markEventPaymentRefundedSchema = z.object({
-  paymentId: z.string().uuid(),
-});
-
 export const eventSettingsSchema = z.object({
   orgEventCreators: z.enum(["org_admins", "category_admins", "any_admin"]),
   eventGuestRetentionDays: z.number().int().min(1).max(3650),

@@ -1,34 +1,18 @@
 import { AppPage } from "@/components/app/app-page";
 import { PaymentsAdmin } from "@/components/app/payments-admin";
 import { PaymentsFinancialHealth } from "@/components/app/payments-financial-health";
-import { requireAdminAccess } from "@/server/queries/access";
-import {
-  getPaymentStats,
-  listMemberIdsInGroups,
-  listPaymentsForOrg,
-} from "@/server/queries/payments";
-import { listScopedGroupIds } from "@/server/queries/access";
+import { EMPTY_PAYMENT_SCOPE } from "@/lib/payments/scope";
+import { getPaymentScope, requireAdminAccess } from "@/server/queries/access";
+import { getPaymentStats, listPaymentsForOrg } from "@/server/queries/payments";
 
 export default async function AdminPaymentsPage() {
   const access = await requireAdminAccess({ capability: "canManagePayments" });
 
   const isFullAdmin = access.adminAccessLevel === "full";
 
-  let payments;
-
-  if (isFullAdmin || !access.member) {
-    payments = await listPaymentsForOrg(access.organization.id);
-  } else {
-    const groupIds = await listScopedGroupIds(
-      access.organization.id,
-      access.member.id,
-    );
-    const memberIds = await listMemberIdsInGroups(
-      access.organization.id,
-      groupIds,
-    );
-    payments = await listPaymentsForOrg(access.organization.id, { memberIds });
-  }
+  // Same scope the mutations enforce, so no row is listed that cannot be acted on.
+  const scope = (await getPaymentScope(access)) ?? EMPTY_PAYMENT_SCOPE;
+  const payments = await listPaymentsForOrg(access.organization.id, { scope });
 
   const stats = isFullAdmin
     ? await getPaymentStats(access.organization.id)

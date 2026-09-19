@@ -9,13 +9,9 @@ import { resolveEventPaymentDetails, type EventPaymentView } from "@/lib/events/
 import { canPromote, isTokenValid, seatsTaken } from "@/lib/events/rsvp";
 import {
   addExternalInviteesSchema,
-  bulkMarkEventPaymentsPaidSchema,
-  cancelEventPaymentSchema,
   eventIdSchema,
   eventIdsSchema,
   eventInputSchema,
-  markEventPaymentPaidSchema,
-  markEventPaymentRefundedSchema,
   removeExternalInviteeSchema,
   removeResponseSchema,
   respondAsGuestSchema,
@@ -42,12 +38,6 @@ import { sendEventPaymentEmail } from "@/server/lib/events/payment-emails";
 import { syncEventPayment, syncEventPaymentsForEvent, type SyncResult } from "@/server/lib/events/payments";
 import { EventError, upsertResponse } from "@/server/lib/events/responses";
 import {
-  cancelPayments,
-  markPaymentRefunded,
-  markPaymentsPaid,
-  sendPaymentConfirmedEmail,
-} from "@/server/lib/payment-status";
-import {
   findTokenHolder,
   issueRsvpToken,
   touchRsvpToken,
@@ -58,7 +48,6 @@ import { sendEventInvites } from "@/server/notifications/events";
 import {
   requireCurrentMember,
   requireEventManagementAccess,
-  requireEventPaymentAccess,
   requireGroupAdminModuleAccess,
   requireEventOwnerAccess,
   requireOrganization,
@@ -535,100 +524,6 @@ export const removeResponseAction = authActionClient
         .delete(eventResponses)
         .where(and(eq(eventResponses.eventId, event.id), eq(eventResponses.id, parsedInput.responseId)));
     });
-
-    return { success: true as const };
-  });
-
-// ─── Event payment actions (event managers, no canManagePayments needed) ────
-
-export const markEventPaymentPaidAction = authActionClient
-  .metadata({ actionName: "markEventPaymentPaid" })
-  .inputSchema(markEventPaymentPaidSchema)
-  .action(async ({ parsedInput, ctx }) => {
-    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
-    const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
-
-    const paidIds = await markPaymentsPaid(db, {
-      orgId: payment.orgId,
-      paymentIds: [payment.id],
-      userId: ctx.auth.user.id,
-      paidAt,
-      adminNote: parsedInput.adminNote,
-    });
-    if (paidIds.length === 0) throw new EventError("PAYMENT_NOT_PENDING");
-
-    after(() => sendPaymentConfirmedEmail(payment.id, paidAt));
-
-    return { success: true as const };
-  });
-
-export const bulkMarkEventPaymentsPaidAction = authActionClient
-  .metadata({ actionName: "bulkMarkEventPaymentsPaid" })
-  .inputSchema(bulkMarkEventPaymentsPaidSchema)
-  .action(async ({ parsedInput, ctx }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
-    const paidAt = parsedInput.paidAt ? new Date(parsedInput.paidAt) : new Date();
-
-    // Only this event's rows: an id from another event is dropped, not acted on.
-    const own = await db
-      .select({ id: memberPayments.id })
-      .from(memberPayments)
-      .where(
-        and(
-          eq(memberPayments.orgId, event.orgId),
-          eq(memberPayments.eventId, event.id),
-          eq(memberPayments.type, "event"),
-          inArray(memberPayments.id, parsedInput.paymentIds),
-        ),
-      );
-
-    const paidIds = await markPaymentsPaid(db, {
-      orgId: event.orgId,
-      paymentIds: own.map((row) => row.id),
-      userId: ctx.auth.user.id,
-      paidAt,
-    });
-
-    after(async () => {
-      for (const id of paidIds) await sendPaymentConfirmedEmail(id, paidAt);
-    });
-
-    return {
-      success: true as const,
-      updated: paidIds.length,
-      skipped: parsedInput.paymentIds.length - paidIds.length,
-    };
-  });
-
-export const cancelEventPaymentAction = authActionClient
-  .metadata({ actionName: "cancelEventPayment" })
-  .inputSchema(cancelEventPaymentSchema)
-  .action(async ({ parsedInput }) => {
-    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
-
-    const cancelled = await cancelPayments(db, {
-      orgId: payment.orgId,
-      paymentIds: [payment.id],
-      reason: parsedInput.reason,
-      adminNote: parsedInput.adminNote,
-    });
-    if (cancelled.length === 0) throw new EventError("PAYMENT_NOT_PENDING");
-
-    return { success: true as const };
-  });
-
-export const markEventPaymentRefundedAction = authActionClient
-  .metadata({ actionName: "markEventPaymentRefunded" })
-  .inputSchema(markEventPaymentRefundedSchema)
-  .action(async ({ parsedInput, ctx }) => {
-    const { payment } = await requireEventPaymentAccess(parsedInput.paymentId);
-
-    const updated = await markPaymentRefunded(db, {
-      orgId: payment.orgId,
-      paymentId: payment.id,
-      userId: ctx.auth.user.id,
-    });
-    if (!updated) throw new EventError("PAYMENT_NOT_PAID");
 
     return { success: true as const };
   });

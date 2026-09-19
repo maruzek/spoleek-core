@@ -7,67 +7,41 @@ import { z } from "zod";
 
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
 import { db } from "@/server/db";
-import { memberPayments, users } from "@/server/db/schema";
-import { requireAdminAccess, listScopedGroupIds } from "@/server/queries/access";
-import { listMemberIdsInGroups } from "@/server/queries/payments";
+import { memberPayments } from "@/server/db/schema";
+import { canActOnPayment } from "@/lib/payments/scope";
+import {
+  requireAdminAccess,
+  requireOrganization,
+  resolvePaymentScopeForRows,
+} from "@/server/queries/access";
 import { generateMembershipPayments } from "@/server/lib/payment-lifecycle";
 import {
-  CANCELLATION_REASONS,
+  EVENT_CANCELLATION_REASONS,
   cancelPayments,
   markPaymentRefunded,
   markPaymentsPaid,
   sendPaymentConfirmedEmail,
 } from "@/server/lib/payment-status";
 
-export type { CancellationReason } from "@/server/lib/payment-status";
+export type { CancellationReason, EventCancellationReason } from "@/server/lib/payment-status";
+
+const PAYMENT_NOT_PENDING_MESSAGE = "Only a pending or overdue payment can be changed this way.";
 
 /**
- * Resolves what this admin may touch.
- *
- * `allowedMemberIds` is null for a full org admin (or system admin) and an
- * explicit allowlist for a scoped group admin. Callers acting on many payments
- * must intersect against it — checking one representative id and then trusting
- * an org-wide guard let a scoped admin smuggle out-of-scope ids through in the
- * same array.
- */
-async function resolvePaymentScope(userId: string) {
-  const [user] = await db
-    .select({ systemRole: users.systemRole })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  const access = await requireAdminAccess({ capability: "canManagePayments" });
-  const orgId = access.organization.id;
-
-  if (access.adminAccessLevel === "full" || user?.systemRole === "system_admin") {
-    return { orgId, allowedMemberIds: null as string[] | null };
-  }
-
-  if (!access.member) {
-    forbidden();
-  }
-
-  const groupIds = await listScopedGroupIds(orgId, access.member.id);
-  const allowedMemberIds = await listMemberIdsInGroups(orgId, groupIds);
-
-  return { orgId, allowedMemberIds };
-}
-
-/**
- * Narrows `paymentIds` to those this admin may act on, in one round trip.
- *
- * A scoped group admin sees their members' membership fees only: event
- * payments (including guest rows, which have no member) are managed through
- * the event's response list by whoever manages the event.
+ * Narrows `paymentIds` to those this viewer may act on, in one round trip,
+ * through both doors of the payment scope (CONTEXT.md). Every id is checked —
+ * checking one representative id and then trusting an org-wide guard let a
+ * scoped admin smuggle out-of-scope ids through in the same array.
  */
 async function authorizePaymentIds(userId: string, paymentIds: string[]) {
-  const { orgId, allowedMemberIds } = await resolvePaymentScope(userId);
+  const organization = await requireOrganization();
+  const orgId = organization.id;
 
   const rows = await db
     .select({
       id: memberPayments.id,
       memberId: memberPayments.memberId,
+      eventId: memberPayments.eventId,
       type: memberPayments.type,
     })
     .from(memberPayments)
@@ -75,15 +49,8 @@ async function authorizePaymentIds(userId: string, paymentIds: string[]) {
       and(inArray(memberPayments.id, paymentIds), eq(memberPayments.orgId, orgId)),
     );
 
-  const permitted =
-    allowedMemberIds === null
-      ? rows
-      : rows.filter(
-          (row) =>
-            row.type === "membership_fee" &&
-            row.memberId !== null &&
-            allowedMemberIds.includes(row.memberId),
-        );
+  const scope = await resolvePaymentScopeForRows(userId, rows);
+  const permitted = rows.filter((row) => canActOnPayment(scope, row));
 
   if (permitted.length === 0) {
     forbidden();
@@ -127,6 +94,7 @@ export const markPaymentPaidAction = authActionClient
       paidAt,
       adminNote: parsedInput.adminNote,
     });
+    if (paidIds.length === 0) throw new Error(PAYMENT_NOT_PENDING_MESSAGE);
 
     after(async () => {
       for (const id of paidIds) await sendPaymentConfirmedEmail(id, paidAt);
@@ -140,19 +108,20 @@ export const cancelPaymentAction = authActionClient
   .inputSchema(
     z.object({
       paymentId: z.string(),
-      cancellationReason: z.enum(CANCELLATION_REASONS),
+      cancellationReason: z.enum(EVENT_CANCELLATION_REASONS),
       adminNote: z.string().max(500).optional(),
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
     const { orgId } = await resolvePaymentAccess(ctx.auth.user.id, parsedInput.paymentId);
 
-    await cancelPayments(db, {
+    const cancelled = await cancelPayments(db, {
       orgId,
       paymentIds: [parsedInput.paymentId],
       reason: parsedInput.cancellationReason,
       adminNote: parsedInput.adminNote,
     });
+    if (cancelled.length === 0) throw new Error(PAYMENT_NOT_PENDING_MESSAGE);
 
     return { success: true };
   });
@@ -161,7 +130,7 @@ export const bulkMarkPaymentsPaidAction = authActionClient
   .metadata({ actionName: "bulkMarkPaymentsPaid" })
   .inputSchema(
     z.object({
-      paymentIds: z.array(z.string()).min(1).max(200),
+      paymentIds: z.array(z.string()).min(1).max(500),
       paidAt: z.string().datetime().optional(),
       adminNote: z.string().max(500).optional(),
     }),
@@ -196,10 +165,7 @@ export const bulkMarkPaymentsPaidAction = authActionClient
     };
   });
 
-/**
- * Closes a `refund_due` event payment once the money has gone back. Only full
- * org admins reach event rows through this door (see `authorizePaymentIds`).
- */
+/** Closes a `refund_due` event payment once the money has gone back. */
 export const markPaymentRefundedAction = authActionClient
   .metadata({ actionName: "markPaymentRefunded" })
   .inputSchema(z.object({ paymentId: z.string() }))
@@ -211,6 +177,7 @@ export const markPaymentRefundedAction = authActionClient
       paymentId: parsedInput.paymentId,
       userId: ctx.auth.user.id,
     });
+    if (!updated) throw new Error("Only a payment marked as refund due can be settled.");
 
-    return { success: updated };
+    return { success: true };
   });

@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, inArray, sql, sum } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql, sum } from "drizzle-orm";
 
 import { PAYMENT_STATUS_SORT_ORDER } from "@/lib/payments";
+import { canActOnPayment, type PaymentScope } from "@/lib/payments/scope";
 import { db } from "@/server/db";
 import {
   eventResponses,
@@ -55,6 +56,8 @@ export type PaymentRow = MemberPayment & {
   /** Every group the payer belongs to. Drives the group filter on the
    *  dashboard; a member can sit in several, so this is a list, not a field. */
   memberGroups: PaymentMemberGroup[];
+  /** Whether the viewer whose scope listed this row may also act on it. */
+  canAct: boolean;
 };
 
 /** How a payer with no member row (a guest) is named once the RSVP is shredded. */
@@ -161,13 +164,30 @@ const statusRank = sql.join(
   sql` `,
 );
 
+/**
+ * SQL mirror of `paymentInScope`: a row is in scope through its member or
+ * its event. An empty allowlist is `false`, never "no filter".
+ */
+function paymentScopeCondition(scope: PaymentScope | undefined) {
+  if (!scope || scope === "full") return undefined;
+  return or(
+    scope.memberIds.length
+      ? inArray(memberPayments.memberId, [...scope.memberIds])
+      : sql`false`,
+    scope.eventIds.length
+      ? inArray(memberPayments.eventId, [...scope.eventIds])
+      : sql`false`,
+  );
+}
+
 export async function listPaymentsForOrg(
   orgId: string,
   options?: {
     status?: MemberPaymentStatus[];
     type?: MemberPaymentType;
     periodLabel?: string;
-    memberIds?: string[];
+    /** Payment scope (CONTEXT.md). Omitted means unrestricted. */
+    scope?: PaymentScope;
   },
 ): Promise<PaymentRow[]> {
   const rows = await db
@@ -196,9 +216,7 @@ export async function listPaymentsForOrg(
         options?.periodLabel
           ? eq(memberPayments.periodLabel, options.periodLabel)
           : undefined,
-        options?.memberIds?.length
-          ? inArray(memberPayments.memberId, options.memberIds)
-          : undefined,
+        paymentScopeCondition(options?.scope),
       ),
     )
     // Outstanding first, then the most pressing due date, with createdAt only
@@ -222,6 +240,7 @@ export async function listPaymentsForOrg(
     memberGroups: row.payment.memberId
       ? (groupsByMember.get(row.payment.memberId) ?? [])
       : [],
+    canAct: canActOnPayment(options?.scope ?? "full", row.payment),
   }));
 }
 

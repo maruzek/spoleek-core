@@ -33,34 +33,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { EventPaymentCancellationReason } from "@/lib/events/schemas";
 import { formatFeeAmount, getPaymentTitle } from "@/lib/payments";
-import {
-  cancelEventPaymentAction,
-  markEventPaymentPaidAction,
-  markEventPaymentRefundedAction,
-} from "@/server/actions/events";
 import {
   cancelPaymentAction,
   markPaymentPaidAction,
   markPaymentRefundedAction,
-  type CancellationReason,
+  type EventCancellationReason,
 } from "@/server/actions/payments";
 
-const CANCELLATION_REASON_LABELS: Record<EventPaymentCancellationReason, string> = {
+const CANCELLATION_REASON_LABELS: Record<EventCancellationReason, string> = {
   duplicate: "Duplicate payment",
   waived: "Fee waived",
   admin_error: "Admin error",
   other: "Other",
   rsvp_withdrawn: "RSVP withdrawn",
 };
-
-/**
- * Which door the action goes through. `admin` is the payments dashboard
- * (`canManagePayments`); `event` is the event's response list, open to
- * whoever manages the event. Both end in the same status helpers.
- */
-export type PaymentActionScope = "admin" | "event";
 
 /** The slice of a payment the dialogs need; event rows are not full `MemberPayment`s. */
 export type ActionablePayment = Pick<
@@ -77,20 +64,18 @@ export function MarkPaidDialog({
   open,
   onOpenChange,
   payment,
-  scope = "admin",
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   payment: ActionablePayment;
-  scope?: PaymentActionScope;
   onSuccess: () => void;
 }) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [paidDate, setPaidDate] = useState(todayIso);
   const [adminNote, setAdminNote] = useState("");
 
-  const markPaid = useAction(scope === "event" ? markEventPaymentPaidAction : markPaymentPaidAction, {
+  const markPaid = useAction(markPaymentPaidAction, {
     onSuccess() {
       toast.success("Payment marked as paid.");
       onOpenChange(false);
@@ -158,16 +143,14 @@ export function CancelPaymentDialog({
   open,
   onOpenChange,
   payment,
-  scope = "admin",
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   payment: ActionablePayment;
-  scope?: PaymentActionScope;
   onSuccess: () => void;
 }) {
-  const [reason, setReason] = useState<EventPaymentCancellationReason | "">("");
+  const [reason, setReason] = useState<EventCancellationReason | "">("");
   const [adminNote, setAdminNote] = useState("");
 
   const done = {
@@ -180,9 +163,7 @@ export function CancelPaymentDialog({
       toast.error(error.serverError ?? "Could not cancel payment.");
     },
   };
-  const cancelAdmin = useAction(cancelPaymentAction, done);
-  const cancelEvent = useAction(cancelEventPaymentAction, done);
-  const cancel = scope === "event" ? cancelEvent : cancelAdmin;
+  const cancel = useAction(cancelPaymentAction, done);
   // "RSVP withdrawn" only makes sense for an event payment.
   const reasons = Object.entries(CANCELLATION_REASON_LABELS).filter(
     ([value]) => payment.type === "event" || value !== "rsvp_withdrawn",
@@ -203,7 +184,7 @@ export function CancelPaymentDialog({
             <FieldLabel>Reason</FieldLabel>
             <Select
               value={reason}
-              onValueChange={(value) => setReason(value as EventPaymentCancellationReason)}
+              onValueChange={(value) => setReason(value as EventCancellationReason)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select a reason..." />
@@ -234,15 +215,11 @@ export function CancelPaymentDialog({
             onClick={() => {
               if (!reason) return;
               const adminNoteValue = adminNote.trim() || undefined;
-              if (scope === "event") {
-                cancelEvent.execute({ paymentId: payment.id, reason, adminNote: adminNoteValue });
-              } else if (reason !== "rsvp_withdrawn") {
-                cancelAdmin.execute({
-                  paymentId: payment.id,
-                  cancellationReason: reason as CancellationReason,
-                  adminNote: adminNoteValue,
-                });
-              }
+              cancel.execute({
+                paymentId: payment.id,
+                cancellationReason: reason,
+                adminNote: adminNoteValue,
+              });
             }}
             disabled={!reason || cancel.isPending}
           >
@@ -262,28 +239,23 @@ export function MarkRefundedDialog({
   open,
   onOpenChange,
   payment,
-  scope = "admin",
   onSuccess,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   payment: ActionablePayment;
-  scope?: PaymentActionScope;
   onSuccess: () => void;
 }) {
-  const refund = useAction(
-    scope === "event" ? markEventPaymentRefundedAction : markPaymentRefundedAction,
-    {
-      onSuccess() {
-        toast.success("Refund recorded.");
-        onOpenChange(false);
-        onSuccess();
-      },
-      onError({ error }) {
-        toast.error(error.serverError ?? "Could not record the refund.");
-      },
+  const refund = useAction(markPaymentRefundedAction, {
+    onSuccess() {
+      toast.success("Refund recorded.");
+      onOpenChange(false);
+      onSuccess();
     },
-  );
+    onError({ error }) {
+      toast.error(error.serverError ?? "Could not record the refund.");
+    },
+  });
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -321,12 +293,10 @@ export function MarkRefundedDialog({
 export function PaymentActions({
   payment,
   onSuccess,
-  scope = "admin",
   size = "sm",
 }: {
   payment: ActionablePayment;
   onSuccess: () => void;
-  scope?: PaymentActionScope;
   size?: "sm" | "default";
 }) {
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
@@ -348,7 +318,6 @@ export function PaymentActions({
           open={refundOpen}
           onOpenChange={setRefundOpen}
           payment={payment}
-          scope={scope}
           onSuccess={onSuccess}
         />
       </>
@@ -384,14 +353,12 @@ export function PaymentActions({
         open={markPaidOpen}
         onOpenChange={setMarkPaidOpen}
         payment={payment}
-        scope={scope}
         onSuccess={onSuccess}
       />
       <CancelPaymentDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
         payment={payment}
-        scope={scope}
         onSuccess={onSuccess}
       />
     </>

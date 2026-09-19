@@ -1,5 +1,5 @@
-import { and, eq, isNull, ne, or } from "drizzle-orm";
-import { forbidden, notFound, redirect } from "next/navigation";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { forbidden, redirect } from "next/navigation";
 
 import type {
   AppCapabilities,
@@ -14,7 +14,6 @@ import {
   groupCategories,
   groupMemberships,
   groups,
-  memberPayments,
   tenantMembers,
   users,
   type Event,
@@ -28,6 +27,8 @@ import { listOutstandingPolicies } from "@/server/queries/policies";
 import { requireViewerSession } from "@/server/queries/auth";
 import { listPinnedGroupCategoriesForSidebar } from "@/server/queries/groups";
 import { activeMembership } from "@/server/lib/group-membership";
+import { EMPTY_PAYMENT_SCOPE, type PaymentScope } from "@/lib/payments/scope";
+import { listMemberIdsInGroups } from "@/server/queries/payments";
 
 export async function requireOrganization() {
   const organization = await getAppOrganization();
@@ -846,31 +847,102 @@ export async function requireEventManagementAccess(eventId: string) {
 }
 
 /**
- * Whoever manages the event manages its payments: mark paid, cancel, mark
- * refunded from the response list need no `canManagePayments`. Resolves the
- * payment to its event and dispatches to `requireEventManagementAccess`.
+ * Payment scope (see CONTEXT.md) through the capability door: what the
+ * dashboard shows and what the mutations accept. `null` when the viewer has
+ * no `canManagePayments` at all — the manager door below may still apply.
+ *
+ * Takes the resolved admin access so a page that already called
+ * `requireAdminAccess` does not resolve the viewer twice.
  */
-export async function requireEventPaymentAccess(paymentId: string) {
-  const organization = await requireOrganization();
+export async function getPaymentScope(
+  access: Pick<Awaited<ReturnType<typeof requireAdminAccess>>, "adminAccessLevel" | "capabilities" | "organization" | "member">,
+): Promise<PaymentScope | null> {
+  if (!access.capabilities.canManagePayments) return null;
+  if (access.adminAccessLevel === "full") return "full";
+  if (!access.member) return null;
 
-  const [payment] = await db
-    .select()
-    .from(memberPayments)
+  const orgId = access.organization.id;
+  const [groupIds, categoryIds] = await Promise.all([
+    listScopedGroupIds(orgId, access.member.id),
+    listScopedCategoryIds(orgId, access.member.id),
+  ]);
+  const [memberIds, eventIds] = await Promise.all([
+    listMemberIdsInGroups(orgId, groupIds),
+    listEventIdsOwnedBy(orgId, { groupIds, categoryIds }),
+  ]);
+  return { memberIds, eventIds };
+}
+
+/** Events owned by any of the given groups or categories. */
+async function listEventIdsOwnedBy(
+  orgId: string,
+  owners: { groupIds: string[]; categoryIds: string[] },
+): Promise<string[]> {
+  if (owners.groupIds.length === 0 && owners.categoryIds.length === 0) return [];
+  const rows = await db
+    .select({ id: events.id })
+    .from(events)
     .where(
       and(
-        eq(memberPayments.orgId, organization.id),
-        eq(memberPayments.id, paymentId),
-        eq(memberPayments.type, "event"),
+        eq(events.orgId, orgId),
+        isNull(events.deletedAt),
+        or(
+          owners.groupIds.length ? inArray(events.ownerGroupId, owners.groupIds) : undefined,
+          owners.categoryIds.length ? inArray(events.ownerCategoryId, owners.categoryIds) : undefined,
+        ),
       ),
-    )
-    .limit(1);
+    );
+  return rows.map((row) => row.id);
+}
 
-  if (!payment || !payment.eventId) {
-    notFound();
+/**
+ * Payment scope for a concrete set of payments, through both doors: the
+ * capability scope, widened by every event among `rows` the viewer manages
+ * (whoever manages an event marks its payments paid from the response list,
+ * with no `canManagePayments` needed). Never throws; an empty scope is the
+ * caller's `forbidden()`.
+ */
+export async function resolvePaymentScopeForRows(
+  userId: string,
+  rows: readonly { eventId: string | null }[],
+): Promise<PaymentScope> {
+  const appContext = await getViewerAppContext();
+  const organization = await requireOrganization();
+  const member = await getCurrentMember(userId);
+
+  const capabilityScope = appContext.capabilities.canAccessAdmin
+    ? await getPaymentScope({ ...appContext, organization, member })
+    : null;
+  if (capabilityScope === "full") return "full";
+
+  const base: Exclude<PaymentScope, "full"> = capabilityScope ?? EMPTY_PAYMENT_SCOPE;
+
+  const candidateEventIds = [
+    ...new Set(rows.flatMap((row) => row.eventId ?? []).filter((id) => !base.eventIds.includes(id))),
+  ];
+  if (!member || candidateEventIds.length === 0) return base;
+
+  const candidates = await db
+    .select({
+      id: events.id,
+      ownerType: events.ownerType,
+      ownerGroupId: events.ownerGroupId,
+      ownerCategoryId: events.ownerCategoryId,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.orgId, organization.id),
+        isNull(events.deletedAt),
+        inArray(events.id, candidateEventIds),
+      ),
+    );
+
+  const managed: string[] = [];
+  for (const event of candidates) {
+    if (await canManageEvent({ organization, member, event })) managed.push(event.id);
   }
-
-  const access = await requireEventManagementAccess(payment.eventId);
-  return { ...access, payment };
+  return { memberIds: base.memberIds, eventIds: [...base.eventIds, ...managed] };
 }
 
 // ─── Forms ──────────────────────────────────────────────────────────────────

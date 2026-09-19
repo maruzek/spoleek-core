@@ -20,10 +20,10 @@ import { formatFeeAmount } from "@/lib/payments";
 import { STATUS_DOT_CLASSES } from "@/lib/status-dot";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
-  bulkMarkEventPaymentsPaidAction,
   removeResponseAction,
   setResponseStandingAction,
 } from "@/server/actions/events";
+import { bulkMarkPaymentsPaidAction } from "@/server/actions/payments";
 import type { EventCounts, EventResponseRow } from "@/server/queries/events";
 import type { MemberPaymentStatus } from "@/server/db/schema";
 
@@ -95,7 +95,7 @@ export function EventResponsesPanel({
   // column shows whenever there is something to show.
   const showPayments = priced || responses.some((r) => r.payment);
 
-  const bulkPaid = useAction(bulkMarkEventPaymentsPaidAction, {
+  const bulkPaid = useAction(bulkMarkPaymentsPaidAction, {
     onSuccess({ data }) {
       toast.success(
         data?.skipped
@@ -223,7 +223,6 @@ export function EventResponsesPanel({
           <div className="flex justify-end gap-2">
             {row.original.payment ? (
               <PaymentActions
-                scope="event"
                 payment={{
                   ...row.original.payment,
                   type: "event",
@@ -318,7 +317,7 @@ export function EventResponsesPanel({
                 <Button
                   variant="outline"
                   disabled={bulkPaid.isPending}
-                  onClick={() => bulkPaid.execute({ eventId, paymentIds: selected })}
+                  onClick={() => bulkPaid.execute({ paymentIds: selected })}
                 >
                   <CheckIcon data-icon="inline-start" />
                   {bulkPaid.isPending ? "Marking…" : `Mark ${selected.length} as paid`}
