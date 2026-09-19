@@ -240,7 +240,7 @@ export function MemberDetailView({
         return;
       }
 
-      if ("workspace" in result && result.workspace) {
+      if (result.workspace) {
         setWorkspaceApproveOpen(false);
         setWorkspaceApproveError(null);
         toast.success(
@@ -250,17 +250,17 @@ export function MemberDetailView({
         return;
       }
 
-      if (result.inviteReason === "cooldown") {
+      if (result.invite?.reason === "cooldown") {
         toast.error(
           "The invite was not resent because the resend cooldown is still active.",
         );
-      } else if (result.inviteReason === "already-completed") {
+      } else if (result.invite?.reason === "already-completed") {
         toast.success("Member approved. This account was already activated.");
-      } else if (result.inviteReason === "suppressed") {
+      } else if (result.invite?.reason === "suppressed") {
         toast.error(
           "Member approved, but the invite email is blocked due to a bounce, complaint, or suppression.",
         );
-      } else if (result.inviteSent) {
+      } else if (result.invite?.sent) {
         toast.success("Member approved and activation email sent.");
       } else {
         toast.success("Member approved.");

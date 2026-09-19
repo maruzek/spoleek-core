@@ -155,30 +155,27 @@ which `getEventDetail` folds together; `isEligible` stays keyed on
 
 ---
 
-## 7 · "Approve member" as a lifecycle transition — **Worth exploring**
+## ✅ 7 · "Approve member" as a lifecycle transition — DONE (2026-09-19)
 
-**Files**
-- `server/actions/member-admin.ts` :355-570 `approveMemberAction` (file is 1549
-  lines, 0 tests)
-- `server/lib/member-lifecycle.ts` (tested: delete, restore — not approve)
-- collaborators: `server/lib/payment-lifecycle.ts` :384,
-  `server/lib/workspace/provision.ts`, `server/lib/member-invites.ts`,
-  `server/lib/member-age.ts`
-
-**Problem.** One action body decides `pending → active | invited` from three org
-settings × three acknowledgement flags, writes the member row twice, generates
-a payment, provisions Google, logs an auth event and sends an invite —
-sequentially, outside a transaction, ordering documented only in comments
-("must run before provisioning"). Reachable only via `headers()`.
-
-**Deepening.** `approveMember(viewer, member, flags)` in
-`server/lib/member-lifecycle.ts`, one tx, returns the transition; the action
-becomes guard → call → revalidate.
-
-**Done when**
-- `approveMemberAction` is ≤ 30 lines.
-- A DB test drives the transition through each settings/flags combination
-  with the erasure tests' harness.
+`lib/members/approval.ts` (`resolveApprovalRoute`, pure: settings × flags ×
+age signal → `workspace | invite | direct` or a refusal; also home of
+`isWorkspaceModuleReady` / `usesEmailPasswordActivation`) and `approveMember`
+in `server/lib/member-lifecycle.ts`, which takes the Viewer and the member row
+and returns the transition. Refusals happen before any write; the payment row
+and the Google account sit outside the transaction (neither rolls back) in a
+documented order; role, status and the `member_approved` event commit together
+under a `FOR UPDATE` re-check of `pending`; the invite runs after the commit.
+`approveMemberAction` is 20 lines: scope → `assertMemberInScopeOrThrow` →
+`approveMember`. `tests/member-approval-route.test.ts` pins the matrix;
+`tests/member-approval-db.test.ts` drives every route, the failed-provisioning
+retry (one payment row, not two) and each refusal on its own org with the
+erasure tests' harness, faking only the network edges (directory, Resend,
+Better Auth). **Approval route** added to `CONTEXT.md`. Found on the way:
+`sendMemberActivationInvite` located the member via `getAppOrganization()`
+(the oldest org), not the caller's — it now takes `orgId`; the other three
+`getMemberByIdForInvite` callers (webhook / activation paths, no viewer) still
+fall back. `logMemberAuthEvent` accepts a `tx`. Two client toasts read
+`result.invite?.sent` / `.reason` instead of the flat `inviteSent` fields.
 
 ---
 

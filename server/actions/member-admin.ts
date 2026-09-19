@@ -8,6 +8,7 @@ import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
 import {
+  approveMemberSchema,
   batchLookupWorkspaceUsersSchema,
   batchSuggestWorkspaceEmailsSchema,
   bulkDeleteMembersSchema,
@@ -26,6 +27,10 @@ import {
   describeApprovalRequirement,
   requiresApprovalFlow,
 } from "@/lib/member-status-transitions";
+import {
+  isWorkspaceModuleReady,
+  usesEmailPasswordActivation,
+} from "@/lib/members/approval";
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
 import { generateRandomPassword } from "@/lib/crypto";
 import { authActionClient } from "@/lib/safe-action-auth";
@@ -41,15 +46,14 @@ import {
   sendMemberActivationInvite,
 } from "@/server/lib/member-invites";
 import {
+  approveMember,
   hardDeleteMembers,
   restoreMembers,
   softDeleteMembers,
 } from "@/server/lib/member-lifecycle";
 import { notifyMembershipDeleted } from "@/server/notifications/membership";
-import { getMemberAgeSignal } from "@/server/lib/member-age";
 import { partitionFieldsByVisibility } from "@/server/lib/member-field-visibility";
 import { notifyRegistrationRejected } from "@/server/notifications/registration";
-import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import {
   upsertMemberCustomFieldAnswers,
   validateMemberCustomFieldAnswers,
@@ -82,28 +86,9 @@ import {
   syncManageableGroupMemberships,
 } from "@/server/lib/group-membership";
 
-function isWorkspaceModuleReady(organization: {
-  workspaceModuleEnabled: boolean;
-  workspaceConnectedAt: Date | null;
-  workspaceDomain: string | null;
-}) {
-  return (
-    organization.workspaceModuleEnabled &&
-    organization.workspaceConnectedAt !== null &&
-    Boolean(organization.workspaceDomain)
-  );
-}
-
 function normalizeEmail(email: string) {
   const normalized = email.trim().toLowerCase();
   return normalized.length > 0 ? normalized : null;
-}
-
-function usesEmailPasswordActivation(authStrategy: string | null) {
-  return (
-    authStrategy === "email-password" ||
-    authStrategy === "email-password-google"
-  );
 }
 
 function resolveAllowedRole(
@@ -318,219 +303,23 @@ export const createShadowMemberAction = authActionClient
 
 export const approveMemberAction = authActionClient
   .metadata({ actionName: "approveMember" })
-  .inputSchema(
-    z.object({
-      memberId: z.uuid(),
-      role: z.enum(["member", "leader", "org_admin"]).default("member"),
-      /**
-       * The admin was told the Workspace module is enabled but not connected,
-       * and chose to approve without a Google account anyway. Without this the
-       * approval is refused rather than silently skipping provisioning.
-       */
-      acknowledgeWorkspaceUnavailable: z.boolean().default(false),
-      /**
-       * The admin deliberately approved without provisioning a Google account.
-       * Distinct from `acknowledgeWorkspaceUnavailable`, which is about a
-       * broken connection — this one is a choice, and it stands even when
-       * Workspace is perfectly healthy.
-       */
-      skipWorkspaceAccount: z.boolean().default(false),
-      /**
-       * The admin has seen that this applicant is below the organization's
-       * minimum age and is approving anyway — with a guardian countersignature
-       * on file, or because the age on record is wrong. Approval is refused
-       * without it, so a minor can never be waved through unnoticed.
-       */
-      acknowledgeUnderAge: z.boolean().default(false),
-      workspace: z
-        .object({
-          primaryEmail: z.email(),
-          extraFields: z
-            .record(z.string(), z.union([z.string(), z.boolean()]))
-            .optional(),
-        })
-        .optional(),
-    }),
-  )
+  .inputSchema(approveMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const [organization, scope] = await Promise.all([
-      requireOrganization(),
-      resolveMemberManagementScope(ctx.viewer),
-    ]);
+    const scope = await resolveMemberManagementScope(ctx.viewer);
     const member = await assertMemberInScopeOrThrow({
-      orgId: organization.id,
+      orgId: ctx.viewer.organization.id,
       memberId: parsedInput.memberId,
       scope,
     });
-    const nextRole = resolveAllowedRole(
-      parsedInput.role,
-      scope.canAssignElevatedRoles,
-    );
 
-    // Checked before any provisioning work: an under-age approval is a decision
-    // somebody has to make on purpose, not something discovered afterwards.
-    if (!parsedInput.acknowledgeUnderAge) {
-      const ageSignal = await getMemberAgeSignal({
-        orgId: organization.id,
-        memberId: member.id,
-      });
-
-      if (ageSignal?.isUnderAge) {
-        throw new Error(
-          ageSignal.age == null
-            ? "This applicant has no date of birth on record, so their age cannot be checked against the minimum. Confirm it before approving."
-            : `This applicant is ${ageSignal.age}, below the minimum age of ${ageSignal.minimumAge}. Confirm a guardian has countersigned before approving.`,
-        );
-      }
-    }
-    const workspaceReady =
-      isWorkspaceModuleReady(organization) && !parsedInput.skipWorkspaceAccount;
-
-    if (workspaceReady) {
-      if (!parsedInput.workspace?.primaryEmail) {
-        throw new Error(
-          "A Workspace email is required to approve this member.",
-        );
-      }
-
-      await db
-        .update(tenantMembers)
-        .set({ role: nextRole, updatedAt: new Date() })
-        .where(
-          and(
-            eq(tenantMembers.id, parsedInput.memberId),
-            eq(tenantMembers.orgId, organization.id),
-          ),
-        );
-
-      // Must run before provisioning: provisionWorkspaceAccountForMember sends
-      // the welcome email, and that email carries the payment details. If
-      // provisioning then fails, the pending row is reused on the next attempt
-      // (generatePaymentForMember conflicts on periodKey), so no duplicate.
-      await generatePaymentForMember(parsedInput.memberId, organization.id);
-
-      const provision = await provisionWorkspaceAccountForMember({
-        orgId: organization.id,
-        memberId: parsedInput.memberId,
-        firstName: member.firstName ?? "",
-        lastName: member.lastName ?? "",
-        primaryEmail: parsedInput.workspace.primaryEmail.trim().toLowerCase(),
-        toEmail: (member.email ?? "").trim().toLowerCase(),
-        actorUserId: ctx.auth.user.id,
-        extraFields: parsedInput.workspace.extraFields,
-      });
-
-      if (!provision.success) {
-        return {
-          success: false as const,
-          workspace: {
-            error: provision.error,
-            reason: provision.reason ?? null,
-          },
-        };
-      }
-
-      await db
-        .update(tenantMembers)
-        .set({
-          status: "active",
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(tenantMembers.id, parsedInput.memberId),
-            eq(tenantMembers.orgId, organization.id),
-          ),
-        );
-
-      await logMemberAuthEvent({
-        orgId: organization.id,
-        memberId: parsedInput.memberId,
-        actorUserId: ctx.auth.user.id,
-        eventType: "member_approved",
-        metadata: {
-          role: nextRole,
-          status: "active",
-          via: "workspace",
-          workspaceUserEmail: provision.primaryEmail,
-        },
-      });
-
-      return {
-        success: true as const,
-        workspace: {
-          primaryEmail: provision.primaryEmail,
-        },
-      };
-    }
-
-    // The module is switched on but the OAuth connection was never completed
-    // (no workspaceConnectedAt / workspaceDomain). Approving here still works,
-    // it just creates no Google account — so require the admin to have seen
-    // the warning rather than letting provisioning be skipped silently.
-    if (
-      organization.workspaceModuleEnabled &&
-      !parsedInput.acknowledgeWorkspaceUnavailable &&
-      !parsedInput.skipWorkspaceAccount
-    ) {
-      throw new Error(
-        "Google Workspace is enabled but not connected, so no account can be created. Connect it in Settings → Google Workspace, or approve without a Workspace account.",
-      );
-    }
-
-    const nextStatus = usesEmailPasswordActivation(
-      organization.setupAuthStrategy,
-    )
-      ? "invited"
-      : "active";
-
-    await db
-      .update(tenantMembers)
-      .set({
-        role: nextRole,
-        status: nextStatus,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(tenantMembers.id, parsedInput.memberId),
-          eq(tenantMembers.orgId, organization.id),
-        ),
-      );
-
-    // Also for members left in "invited": the approval email carries the
-    // payment details, so the row (and its variable symbol) must exist before
-    // the invite is sent. generatePaymentForMember no-ops when the org isn't on
-    // periodic renewal or has fees switched off.
-    await generatePaymentForMember(parsedInput.memberId, organization.id);
-
-    await logMemberAuthEvent({
-      orgId: organization.id,
-      memberId: parsedInput.memberId,
-      actorUserId: ctx.auth.user.id,
-      eventType: "member_approved",
-      metadata: {
-        role: nextRole,
-        status: nextStatus,
-      },
+    return approveMember(ctx.viewer, member, {
+      role: resolveAllowedRole(parsedInput.role, scope.canAssignElevatedRoles),
+      acknowledgeWorkspaceUnavailable: parsedInput.acknowledgeWorkspaceUnavailable,
+      skipWorkspaceAccount: parsedInput.skipWorkspaceAccount,
+      acknowledgeUnderAge: parsedInput.acknowledgeUnderAge,
+      workspaceEmail: parsedInput.workspace?.primaryEmail ?? null,
+      workspaceExtraFields: parsedInput.workspace?.extraFields,
     });
-
-    let inviteResult: Awaited<
-      ReturnType<typeof sendMemberActivationInvite>
-    > | null = null;
-
-    if (usesEmailPasswordActivation(organization.setupAuthStrategy)) {
-      inviteResult = await sendMemberActivationInvite({
-        memberId: parsedInput.memberId,
-        actorUserId: ctx.auth.user.id,
-      });
-    }
-
-    return {
-      success: true as const,
-      inviteSent: inviteResult?.sent ?? false,
-      inviteReason: inviteResult?.reason ?? null,
-    };
   });
 
 export const checkWorkspaceEmailAvailabilityAction = authActionClient
@@ -732,6 +521,7 @@ export const resendMemberInviteAction = authActionClient
     }
 
     const result = await sendMemberActivationInvite({
+      orgId: organization.id,
       memberId: parsedInput.memberId,
       force: true,
       actorUserId: ctx.auth.user.id,

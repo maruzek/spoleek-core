@@ -136,9 +136,10 @@ export async function logMemberAuthEvent(params: {
   inviteId?: string | null;
   message?: string | null;
   metadata?: Record<string, unknown> | null;
+  /** Pass the transaction when the event must commit with the rows it describes. */
+  tx?: Pick<typeof db, "insert">;
 }) {
-  await db.insert(memberAuthEvents).values({
-
+  await (params.tx ?? db).insert(memberAuthEvents).values({
     orgId: params.orgId,
     memberId: params.memberId,
     actorUserId: params.actorUserId ?? null,
@@ -450,11 +451,12 @@ export async function updateMemberInviteDeliveryStatus(params: {
 }
 
 export async function sendMemberActivationInvite(params: {
+  orgId: string;
   memberId: string;
   force?: boolean;
   actorUserId?: string | null;
 }) {
-  const member = await getMemberByIdForInvite(params.memberId);
+  const member = await getMemberByIdForInvite(params.memberId, params.orgId);
 
   if (!member) {
     throw new Error("The selected member could not be found.");
@@ -726,8 +728,13 @@ async function upsertProvisionedUser(member: InviteMemberRecord, provisionedUser
   return createdInvite?.id ?? null;
 }
 
-async function getMemberByIdForInvite(memberId: string) {
-  const organization = await getAppOrganization();
+/**
+ * `orgId` is the caller's organization when it has one. The webhook and
+ * activation paths have no viewer and fall back to the app organization, which
+ * is the single-tenant assumption the rest of this file still makes.
+ */
+async function getMemberByIdForInvite(memberId: string, orgId?: string) {
+  const organization = orgId ? { id: orgId } : await getAppOrganization();
 
   if (!organization) {
     return null;

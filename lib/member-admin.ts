@@ -58,6 +58,26 @@ export const restoreMemberSchema = z.object({
   memberId: z.uuid(),
 });
 
+/**
+ * The three acknowledgement flags are documented on `ApprovalFlags` in
+ * `lib/members/approval.ts`, where they are read.
+ */
+export const approveMemberSchema = z.object({
+  memberId: z.uuid(),
+  role: z.enum(["member", "leader", "org_admin"]).default("member"),
+  acknowledgeWorkspaceUnavailable: z.boolean().default(false),
+  skipWorkspaceAccount: z.boolean().default(false),
+  acknowledgeUnderAge: z.boolean().default(false),
+  workspace: z
+    .object({
+      primaryEmail: z.email(),
+      extraFields: z
+        .record(z.string(), z.union([z.string(), z.boolean()]))
+        .optional(),
+    })
+    .optional(),
+});
+
 export const rejectMemberSchema = z.object({
   memberId: z.uuid(),
   /**
@@ -87,6 +107,7 @@ export type ProvisionMemberWorkspaceAccountValues = z.infer<
 >;
 export type UpdateMemberValues = z.infer<typeof updateMemberSchema>;
 export type DeleteMemberValues = z.infer<typeof deleteMemberSchema>;
+export type ApproveMemberValues = z.infer<typeof approveMemberSchema>;
 export type RejectMemberValues = z.infer<typeof rejectMemberSchema>;
 export type BulkDeleteMembersValues = z.infer<typeof bulkDeleteMembersSchema>;
 export type ResendMemberInviteValues = z.infer<typeof resendMemberInviteSchema>;

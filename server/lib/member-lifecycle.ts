@@ -1,16 +1,32 @@
 import { and, eq, inArray, lt, ne, sql } from "drizzle-orm";
 
+import type { Viewer } from "@/lib/access/viewer";
+import {
+  resolveApprovalRoute,
+  type ApprovalFlags,
+  type ApprovalRefusal,
+  type ApprovalRoute,
+} from "@/lib/members/approval";
 import { db } from "@/server/db";
+import { getMemberAgeSignal } from "@/server/lib/member-age";
+import {
+  logMemberAuthEvent,
+  sendMemberActivationInvite,
+} from "@/server/lib/member-invites";
+import { generatePaymentForMember } from "@/server/lib/payment-lifecycle";
 import {
   WorkspaceNotConnectedError,
   deleteWorkspaceUser,
 } from "@/server/lib/workspace/client";
+import type { WorkspaceFieldValues } from "@/server/lib/workspace/field-catalog";
+import { provisionWorkspaceAccountForMember } from "@/server/lib/workspace/provision";
 import {
   sessions,
   tenantMembers,
   users,
   type MemberDeletionReason,
   type MembershipStatus,
+  type TenantMember,
 } from "@/server/db/schema";
 
 export const MEMBER_SOFT_DELETE_RETENTION_DAYS = 30;
@@ -330,6 +346,177 @@ export async function restoreMembers({
         .filter((email): email is string => email != null),
     };
   });
+}
+
+export class MemberApprovalError extends Error {
+  constructor(
+    public readonly reason: ApprovalRefusal["reason"] | "not_pending",
+    message: string,
+  ) {
+    super(message);
+    this.name = "MemberApprovalError";
+  }
+}
+
+export type ApprovableMember = Pick<
+  TenantMember,
+  "id" | "orgId" | "status" | "firstName" | "lastName" | "email"
+>;
+
+export type MemberApprovalInput = ApprovalFlags & {
+  role: "member" | "leader" | "org_admin";
+  workspaceExtraFields?: WorkspaceFieldValues;
+};
+
+type InviteOutcome = Awaited<ReturnType<typeof sendMemberActivationInvite>>;
+
+export type MemberApprovalResult =
+  | {
+      success: true;
+      transition: {
+        from: "pending";
+        to: ApprovalRoute["status"];
+        via: ApprovalRoute["via"];
+        role: MemberApprovalInput["role"];
+      };
+      /** Set on the workspace route: the Google account that was created. */
+      workspace: { primaryEmail: string } | null;
+      /** Set on the invite route: whether the activation email went out. */
+      invite: InviteOutcome | null;
+    }
+  | {
+      /**
+       * Google refused the account. The member is still `pending` so the admin
+       * can fix the email and approve again; the payment row created on the
+       * way is reused by that retry.
+       */
+      success: false;
+      workspace: { error: string; reason: string | null };
+    };
+
+/**
+ * The `pending → active | invited` transition — see **Approval route** in
+ * CONTEXT.md. The caller has already checked the viewer may manage this member.
+ *
+ * Only the row writes are one transaction: the Google account and the emails
+ * cannot be rolled back, so they sit outside it in a fixed order.
+ *
+ * 1. Decide the route from settings and flags, or refuse. Refusing happens
+ *    before anything is written, so a refused approval leaves no trace.
+ * 2. Generate the membership payment. The welcome email and the activation
+ *    invite both carry its details, so the row (and its variable symbol) must
+ *    exist before either is sent. Idempotent on `periodKey`, a no-op when the
+ *    organization charges no fee.
+ * 3. Workspace route only: create the Google account, which sends the welcome
+ *    email. A failure returns `success: false` and the member stays pending.
+ * 4. In one transaction, under a row lock: re-check the member is still
+ *    pending, write role and status, record `member_approved`.
+ * 5. Invite route only: send the activation invite. It reads the committed
+ *    status, which is why it runs after the transaction.
+ */
+export async function approveMember(
+  viewer: Viewer,
+  member: ApprovableMember,
+  input: MemberApprovalInput,
+): Promise<MemberApprovalResult> {
+  const orgId = viewer.organization.id;
+
+  if (member.orgId !== orgId || member.status !== "pending") {
+    throw new MemberApprovalError(
+      "not_pending",
+      "Only a pending member can be approved.",
+    );
+  }
+
+  const ageSignal = input.acknowledgeUnderAge
+    ? null
+    : await getMemberAgeSignal({ orgId, memberId: member.id });
+  const decision = resolveApprovalRoute(viewer.organization, input, ageSignal);
+
+  if (!decision.ok) {
+    throw new MemberApprovalError(
+      decision.refusal.reason,
+      decision.refusal.message,
+    );
+  }
+
+  const { route } = decision;
+
+  await generatePaymentForMember(member.id, orgId);
+
+  let workspace: { primaryEmail: string } | null = null;
+
+  if (route.via === "workspace") {
+    const provision = await provisionWorkspaceAccountForMember({
+      orgId,
+      memberId: member.id,
+      firstName: member.firstName ?? "",
+      lastName: member.lastName ?? "",
+      primaryEmail: input.workspaceEmail!.trim().toLowerCase(),
+      toEmail: (member.email ?? "").trim().toLowerCase(),
+      actorUserId: viewer.user.id,
+      extraFields: input.workspaceExtraFields,
+    });
+
+    if (!provision.success) {
+      return {
+        success: false,
+        workspace: { error: provision.error, reason: provision.reason ?? null },
+      };
+    }
+
+    workspace = { primaryEmail: provision.primaryEmail };
+  }
+
+  await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select({ status: tenantMembers.status })
+      .from(tenantMembers)
+      .where(and(eq(tenantMembers.orgId, orgId), eq(tenantMembers.id, member.id)))
+      .for("update");
+
+    if (locked?.status !== "pending") {
+      throw new MemberApprovalError(
+        "not_pending",
+        "This member was approved by somebody else in the meantime.",
+      );
+    }
+
+    await tx
+      .update(tenantMembers)
+      .set({ role: input.role, status: route.status, updatedAt: new Date() })
+      .where(and(eq(tenantMembers.orgId, orgId), eq(tenantMembers.id, member.id)));
+
+    await logMemberAuthEvent({
+      tx,
+      orgId,
+      memberId: member.id,
+      actorUserId: viewer.user.id,
+      eventType: "member_approved",
+      metadata: {
+        role: input.role,
+        status: route.status,
+        via: route.via,
+        ...(workspace ? { workspaceUserEmail: workspace.primaryEmail } : {}),
+      },
+    });
+  });
+
+  const invite =
+    route.via === "invite"
+      ? await sendMemberActivationInvite({
+          orgId,
+          memberId: member.id,
+          actorUserId: viewer.user.id,
+        })
+      : null;
+
+  return {
+    success: true,
+    transition: { from: "pending", to: route.status, via: route.via, role: input.role },
+    workspace,
+    invite,
+  };
 }
 
 /**

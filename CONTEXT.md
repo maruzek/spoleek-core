@@ -18,6 +18,26 @@ concept lives here.
   `requireViewer()`, tests build one by hand. A Viewer is never re-resolved
   inside a guard — it is passed in.
 
+## Members
+
+- **Approval route** — the door a `pending` member leaves through, decided by
+  three organization settings (Workspace module enabled, Workspace connected,
+  sign-in strategy) and three acknowledgement flags the admin ticks
+  (`acknowledgeUnderAge`, `acknowledgeWorkspaceUnavailable`,
+  `skipWorkspaceAccount`): `workspace` (a Google account is created, the
+  welcome email carries the password, status `active`), `invite` (password
+  sign-in, an activation invite is sent, status `invited`) or `direct`
+  (nothing to send, status `active`). The decision is one pure function
+  (`lib/members/approval.ts` `resolveApprovalRoute`) that either names the
+  route or *refuses* — under age, Workspace email missing, Workspace enabled
+  but not connected — before anything is written. `approveMember`
+  (`server/lib/member-lifecycle.ts`) performs the route: payment row first
+  (both emails carry its details; idempotent so a retry reuses it), then the
+  Google account, then one transaction under a row lock that re-checks
+  `pending`, writes role and status and records `member_approved`, then the
+  invite. A refused Google account leaves the member `pending` for a retry.
+  Only a pending member is ever approved; the action is guard → call.
+
 ## Payments
 
 - **Payment scope** — what a viewer may see *and* act on in the payments
