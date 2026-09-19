@@ -15,13 +15,7 @@ import {
 } from "@/components/app/emails/email-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { DetailDialog } from "@/components/app/detail-dialog";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import {
   Timeline,
@@ -54,7 +48,7 @@ function DeliveryRow({ label, value }: { label: string; value: string }) {
  * and the provider event timeline. Shared by the org email dashboard and a
  * member's Emails tab, so troubleshooting looks the same from either entry.
  */
-export function EmailDetailSheet({
+export function EmailDetailDialog({
   activity,
   open,
   onOpenChange,
@@ -99,26 +93,22 @@ export function EmailDetailSheet({
   });
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+    <DetailDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Email details"
+      titleAddon={
+        activity ? (
+          <Status variant={getEmailStatusVariant(activity.currentStatus)}>
+            <StatusIndicator />
+            <StatusLabel className="capitalize">{activity.currentStatus.replaceAll("_", " ")}</StatusLabel>
+          </Status>
+        ) : null
+      }
+      description={activity ? `Overview and lifecycle of ${activity.toEmail}` : undefined}
+    >
         {activity ? (
-          <div className="flex h-full flex-col gap-8 pb-10">
-            <SheetHeader>
-              <div className="flex items-center gap-3">
-                <SheetTitle>Email details</SheetTitle>
-                <Status variant={getEmailStatusVariant(activity.currentStatus)}>
-                  <StatusIndicator />
-                  <StatusLabel className="capitalize">
-                    {activity.currentStatus.replaceAll("_", " ")}
-                  </StatusLabel>
-                </Status>
-              </div>
-              <SheetDescription>
-                Overview and lifecycle of {activity.toEmail}
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="flex flex-col gap-8 px-4 pb-4 text-sm">
+            <div className="flex flex-col gap-8 text-sm">
               <div className="flex flex-col gap-3">
                 <h3 className="font-semibold text-base tracking-tight text-foreground">
                   Message
@@ -320,9 +310,7 @@ export function EmailDetailSheet({
                 </Timeline>
               </div>
             </div>
-          </div>
         ) : null}
-      </SheetContent>
-    </Sheet>
+    </DetailDialog>
   );
 }

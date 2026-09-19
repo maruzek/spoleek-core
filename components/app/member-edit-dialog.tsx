@@ -63,14 +63,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { FormDialog } from "@/components/app/form-dialog";
 import {
   Timeline,
   TimelineConnector,
@@ -124,7 +117,7 @@ type MemberEditValidationErrors = Partial<
   Record<keyof UpdateMemberValues, Exclude<ValidationFieldError, undefined>>
 >;
 
-type MemberEditSheetProps = {
+type MemberEditDialogProps = {
   accessLevel: "full" | "scoped";
   canDelete: boolean;
   customFields: MemberCustomField[];
@@ -202,7 +195,7 @@ function DefinitionRow({
   );
 }
 
-export function MemberEditSheet({
+export function MemberEditDialog({
   accessLevel,
   canDelete,
   customFields,
@@ -224,7 +217,7 @@ export function MemberEditSheet({
   onDelete,
   onOpenChange,
   onSubmit,
-}: MemberEditSheetProps) {
+}: MemberEditDialogProps) {
   const { formatDateTime } = useFormatters();
 
   const syncAction = useAction(syncWorkspaceMemberAction, {
@@ -319,25 +312,67 @@ export function MemberEditSheet({
   ];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>Edit member</SheetTitle>
-          <SheetDescription>
-            Update the core member record and any organization-defined custom
-            fields.
-          </SheetDescription>
-        </SheetHeader>
-
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit member"
+      description={<>Update the core member record and any organization-defined custom
+            fields.</>}
+      formId="member-edit-form"
+      isPending={isPending || isDeletePending}
+      submitLabel="Save member"
+      footerStart={
+        canDelete ? (
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+              disabled={isPending || isDeletePending}
+            >
+              <Trash2Icon data-icon="inline-start" />
+              Delete member
+            </Button>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogMedia>
+                  <AlertTriangleIcon />
+                </AlertDialogMedia>
+                <AlertDialogTitle>
+                  Delete {member.firstName} {member.lastName}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This soft-deletes the member immediately, hides them from
+                  the table, and schedules permanent removal after 30 days.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={isDeletePending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  disabled={isDeletePending}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void onDelete();
+                  }}
+                >
+                  {isDeletePending ? "Deleting..." : "Delete member"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null
+      }
+    >
         <form
-          className="flex flex-1 flex-col overflow-hidden"
+          id="member-edit-form"
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
             void form.handleSubmit();
           }}
         >
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div>
             {member.status === "pending" ? (
               <Card className="mb-4 mt-1 border-amber-500/30 bg-amber-500/5">
                 <CardHeader className="flex flex-col items-start gap-3">
@@ -955,60 +990,7 @@ export function MemberEditSheet({
             </FieldGroup>
           </div>
 
-          <SheetFooter className="flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-            {canDelete ? (
-              <AlertDialog
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
-              >
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={() => setDeleteDialogOpen(true)}
-                  disabled={isPending || isDeletePending}
-                >
-                  <Trash2Icon data-icon="inline-start" />
-                  Delete member
-                </Button>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogMedia>
-                      <AlertTriangleIcon />
-                    </AlertDialogMedia>
-                    <AlertDialogTitle>
-                      Delete {member.firstName} {member.lastName}?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This soft-deletes the member immediately, hides them from
-                      the table, and schedules permanent removal after 30 days.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isDeletePending}>
-                      Cancel
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      variant="destructive"
-                      disabled={isDeletePending}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        void onDelete();
-                      }}
-                    >
-                      {isDeletePending ? "Deleting..." : "Delete member"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : (
-              <div />
-            )}
-            <Button type="submit" disabled={isPending || isDeletePending}>
-              {isPending ? "Saving..." : "Save member"}
-            </Button>
-          </SheetFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+    </FormDialog>
   );
 }

@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { EmailActivityTable } from "@/components/app/emails/email-activity-table";
-import { EmailDetailSheet } from "@/components/app/emails/email-detail-sheet";
+import { EmailDetailDialog } from "@/components/app/emails/email-detail-dialog";
 import type {
   EmailActivityDetail,
   EmailActivityRow,
@@ -51,7 +51,7 @@ export function EmailAdmin({
         onOpenDetail={setSelectedEmail}
       />
 
-      <EmailDetailSheet
+      <EmailDetailDialog
         activity={selectedActivity}
         open={selectedActivity != null}
         onOpenChange={(open) => {

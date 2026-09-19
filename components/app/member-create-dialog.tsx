@@ -10,7 +10,6 @@ import {
   createMemberSchema,
   type CreateMemberValues,
 } from "@/lib/member-admin";
-import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
@@ -31,14 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { FormDialog } from "@/components/app/form-dialog";
 import type { TenantRole } from "@/server/db/schema";
 import type { MemberManagementGroupCategory } from "@/server/lib/member-management-scope";
 
@@ -52,7 +44,7 @@ type MemberSheetValidationErrors = Partial<
   Record<keyof ShadowMemberFormValues, Exclude<ValidationFieldError, undefined>>
 >;
 
-export function MemberSheet({
+export function MemberCreateDialog({
   open,
   isPending,
   accessLevel,
@@ -166,26 +158,28 @@ export function MemberSheet({
       : [];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>Create member or shadow profile</SheetTitle>
-          <SheetDescription>
-            {accessLevel === "full"
-              ? "Add a member record directly and optionally link it to an existing account when the email already belongs to a signed-in user."
-              : "Add a member directly into the groups you administer so the record stays inside your scope."}
-          </SheetDescription>
-        </SheetHeader>
-
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Create member or shadow profile"
+      description={
+        accessLevel === "full"
+          ? "Add a member record directly and optionally link it to an existing account when the email already belongs to a signed-in user."
+          : "Add a member directly into the groups you administer so the record stays inside your scope."
+      }
+      formId="member-create-form"
+      isPending={isPending}
+      submitLabel={createAccount && workspaceReady ? "Create profile & continue" : "Create profile"}
+    >
         <form
-          className="flex flex-1 flex-col overflow-hidden"
+          id="member-create-form"
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
             void form.handleSubmit();
           }}
         >
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div>
             <FieldGroup>
               <div className="grid gap-5 md:grid-cols-2">
                 <form.Field name="firstName">
@@ -472,17 +466,7 @@ export function MemberSheet({
             </FieldGroup>
           </div>
 
-          <SheetFooter>
-            <Button type="submit" disabled={isPending}>
-              {isPending
-                ? "Creating..."
-                : createAccount && workspaceReady
-                  ? "Create profile & continue"
-                  : "Create profile"}
-            </Button>
-          </SheetFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+    </FormDialog>
   );
 }

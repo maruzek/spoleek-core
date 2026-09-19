@@ -3,7 +3,7 @@
 import { MailIcon } from "lucide-react";
 
 import { EmailActivityTable } from "@/components/app/emails/email-activity-table";
-import { EmailDetailSheet } from "@/components/app/emails/email-detail-sheet";
+import { EmailDetailDialog } from "@/components/app/emails/email-detail-dialog";
 import {
   Empty,
   EmptyDescription,
@@ -50,7 +50,7 @@ export function MemberEmailsTab({
         onOpenDetail={onOpenDetail}
       />
 
-      <EmailDetailSheet
+      <EmailDetailDialog
         activity={selectedEmail}
         open={selectedEmail != null}
         onOpenChange={(open) => {

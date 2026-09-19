@@ -32,7 +32,7 @@ import {
 import { DataTable, SortableHeader } from "@/components/ui/data-table";
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { DetailDialog } from "@/components/app/detail-dialog";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatMemberCustomFieldValue, getMemberDisplayName } from "@/lib/member-custom-fields";
 import { matchesSearch } from "@/lib/search";
@@ -231,10 +231,18 @@ export function FormSubmissionsTable({
         )}
       />
 
-      <Sheet open={sheet != null} onOpenChange={(open) => !open && setSheet(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl">
+      <DetailDialog
+        open={sheet != null}
+        onOpenChange={(open) => !open && setSheet(null)}
+        title={sheet?.mode === "edit" ? "Edit submission" : "Add submission"}
+        description={
+          sheet?.mode === "edit"
+            ? "Recorded as edited by you."
+            : "Recorded as entered by you on their behalf. The form's deadline does not apply."
+        }
+      >
           {sheet ? (
-            <ProxySheetBody
+            <ProxyDialogBody
               formId={formId}
               mode={sheet}
               questions={fillerQuestions}
@@ -246,8 +254,7 @@ export function FormSubmissionsTable({
               }}
             />
           ) : null}
-        </SheetContent>
-      </Sheet>
+      </DetailDialog>
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
@@ -274,7 +281,7 @@ export function FormSubmissionsTable({
   );
 }
 
-function ProxySheetBody({
+function ProxyDialogBody({
   formId,
   mode,
   questions,
@@ -337,14 +344,7 @@ function ProxySheetBody({
 
   return (
     <>
-      <SheetHeader>
-        <SheetTitle>{editing ? "Edit submission" : "Add submission"}</SheetTitle>
-        <SheetDescription>
-          {editing ? "Recorded as edited by you." : "Recorded as entered by you on their behalf. The form's deadline does not apply."}
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-col gap-6 px-4 pb-6">
+      <div className="flex flex-col gap-6">
         {!editing ? (
           <div className="flex flex-col gap-3 rounded-xl border bg-muted/30 p-4">
             {hasEvent ? (

@@ -79,7 +79,7 @@ function formatStageLabel(stage: MemberCustomField["stage"]) {
   return memberCustomFieldStageOptions.find((option) => option.value === stage)?.label ?? stage;
 }
 
-import { MemberCustomFieldSheet } from "./member-custom-field-sheet";
+import { MemberCustomFieldDialog } from "./member-custom-field-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable } from "@/components/ui/data-table";
 import { useFormatters } from "@/components/locale-provider";
@@ -261,7 +261,7 @@ export function MemberCustomFieldsAdmin({
         )}
       />
 
-      <MemberCustomFieldSheet
+      <MemberCustomFieldDialog
         key={sheetState.field?.id ?? "new"}
         open={sheetState.open}
         field={sheetState.field}

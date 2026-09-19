@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { GroupCategoryForm } from "@/components/app/group-category-form";
 import { GroupDialog } from "@/components/app/group-dialog";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
-import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
+import { MemberAssignmentDialog } from "@/components/app/member-assignment-dialog";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { getMemberStatusVariant } from "@/lib/member-status-display";
 import {
@@ -455,7 +455,7 @@ export function GroupCategoryDetail({
         }}
       />
 
-      <MemberAssignmentSheet
+      <MemberAssignmentDialog
         open={adminSheetOpen}
         title="Assign category admin"
         description="Category admins can manage all groups inside this category."

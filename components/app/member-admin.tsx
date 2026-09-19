@@ -79,7 +79,7 @@ import {
   type EnabledProvisionField,
   type WorkspaceApprovalMember,
 } from "./member-approve-workspace-dialog";
-import { MemberSheet } from "./member-sheet";
+import { MemberCreateDialog } from "./member-create-dialog";
 import { usePaletteIntent } from "@/hooks/use-palette-intent";
 
 /**
@@ -1131,7 +1131,7 @@ export function MemberAdmin({
         onRowClick={(member) => openMember(member.id)}
       />
 
-      <MemberSheet
+      <MemberCreateDialog
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         isPending={createAction.isPending}

@@ -32,7 +32,7 @@ import { GroupAnnouncementEditor } from "@/components/app/portal/group-announcem
 import { GroupResourcesEditor } from "@/components/app/portal/group-resources-editor";
 import { MailingListAction } from "@/components/app/mailing-list-action";
 import { MemberAdmin } from "@/components/app/member-admin";
-import { MemberAssignmentSheet } from "@/components/app/member-assignment-sheet";
+import { MemberAssignmentDialog } from "@/components/app/member-assignment-dialog";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { getMemberStatusVariant } from "@/lib/member-status-display";
 import type { GroupFormValues } from "@/lib/groups";
@@ -204,8 +204,8 @@ export function GroupDetail({
   const pendingRequestCount = requests.filter((row) => row.status === "pending").length;
   const showRequestsTab = group.joinPolicy === "request_to_join" || requests.length > 0;
   const router = useRouter();
-  const [memberSheetOpen, setMemberSheetOpen] = useState(false);
-  const [adminSheetOpen, setAdminSheetOpen] = useState(false);
+  const [memberDialogOpen, setMemberDialogOpen] = useState(false);
+  const [adminDialogOpen, setAdminDialogOpen] = useState(false);
   const [removalState, setRemovalState] = useState<RemovalState>(null);
 
   const saveGroup = useAction(saveGroupAction, {
@@ -221,7 +221,7 @@ export function GroupDetail({
       if (data?.success) {
         const count = data.requestedCount;
         toast.success(`${count} member${count === 1 ? "" : "s"} assigned.`);
-        setMemberSheetOpen(false);
+        setMemberDialogOpen(false);
         router.refresh();
       }
     },
@@ -239,7 +239,7 @@ export function GroupDetail({
     onSuccess({ data }) {
       if (data?.success) {
         toast.success("Group admin assigned.");
-        setAdminSheetOpen(false);
+        setAdminDialogOpen(false);
         router.refresh();
       }
     },
@@ -464,7 +464,7 @@ export function GroupDetail({
             {...membersTable}
             groupContext={{
               groupId: group.id,
-              onAddMembers: () => setMemberSheetOpen(true),
+              onAddMembers: () => setMemberDialogOpen(true),
               onRemoveMember: ({ id, name }) =>
                 setRemovalState({ kind: "member", memberId: id, label: name }),
             }}
@@ -494,7 +494,7 @@ export function GroupDetail({
                   table={table}
                   getMemberId={(member) => member.memberId}
                 />
-                <Button onClick={() => setAdminSheetOpen(true)}>
+                <Button onClick={() => setAdminDialogOpen(true)}>
                   <PlusIcon data-icon="inline-start" />
                   Add group admin
                 </Button>
@@ -562,13 +562,13 @@ export function GroupDetail({
         </TabsContent>
       </Tabs>
 
-      <MemberAssignmentSheet
-        open={memberSheetOpen}
+      <MemberAssignmentDialog
+        open={memberDialogOpen}
         title="Assign member"
         description="Add a member to this group."
         members={availableMembers}
         isPending={assignGroupMembers.isPending}
-        onOpenChange={setMemberSheetOpen}
+        onOpenChange={setMemberDialogOpen}
         selectionMode="multiple"
         onSubmit={async (memberIds) => {
           const result = await assignGroupMembers.executeAsync({
@@ -582,13 +582,13 @@ export function GroupDetail({
         }}
       />
 
-      <MemberAssignmentSheet
-        open={adminSheetOpen}
+      <MemberAssignmentDialog
+        open={adminDialogOpen}
         title="Assign group admin"
         description="Promoting someone to group admin also ensures they belong to the group."
         members={availableAdmins}
         isPending={assignGroupAdmin.isPending}
-        onOpenChange={setAdminSheetOpen}
+        onOpenChange={setAdminDialogOpen}
         selectionMode="single"
         onSubmit={async ([memberId]) => {
           if (!memberId) {

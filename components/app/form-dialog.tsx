@@ -31,6 +31,7 @@ export function FormDialog({
   isPending,
   submitLabel,
   cancelLabel = "Cancel",
+  footerStart,
   className,
   children,
 }: {
@@ -43,6 +44,8 @@ export function FormDialog({
   isPending: boolean;
   submitLabel: string;
   cancelLabel?: string;
+  /** Rendered at the footer's left edge, away from submit — a delete button, a hint. */
+  footerStart?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -63,14 +66,17 @@ export function FormDialog({
           <div className="px-6 py-5">{children}</div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
-            {cancelLabel}
-          </Button>
-          <Button type="submit" form={formId} disabled={isPending}>
-            {isPending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
-            {isPending ? "Saving…" : submitLabel}
-          </Button>
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t px-6 py-4">
+          <div className="flex items-center gap-2">{footerStart}</div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
+              {cancelLabel}
+            </Button>
+            <Button type="submit" form={formId} disabled={isPending}>
+              {isPending ? <Loader2Icon className="animate-spin" data-icon="inline-start" /> : null}
+              {isPending ? "Saving…" : submitLabel}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

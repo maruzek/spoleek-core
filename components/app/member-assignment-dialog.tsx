@@ -48,7 +48,7 @@ function getInitials(member: MemberOption) {
     .join("");
 }
 
-export function MemberAssignmentSheet({
+export function MemberAssignmentDialog({
   open,
   title,
   description,

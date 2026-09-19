@@ -15,7 +15,6 @@ import {
   stringifyFieldOptions,
   type MemberCustomFieldFormValues,
 } from "@/lib/member-custom-fields";
-import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
@@ -36,14 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { FormDialog } from "@/components/app/form-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import type { MemberCustomField } from "@/server/db/schema";
 
@@ -110,7 +102,7 @@ export function getValidationFieldMessages(
   );
 }
 
-export function MemberCustomFieldSheet({
+export function MemberCustomFieldDialog({
   open,
   field,
   isPending,
@@ -126,37 +118,31 @@ export function MemberCustomFieldSheet({
   onSubmit: (value: MemberCustomFieldFormValues) => Promise<void>;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle>
-            {field ? "Edit custom field" : "Create custom field"}
-          </SheetTitle>
-          <SheetDescription>
-            Control where this question appears and how members are expected to
-            answer it.
-          </SheetDescription>
-        </SheetHeader>
-
-        <InnerForm
-          field={field}
-          isPending={isPending}
-          validationErrors={validationErrors}
-          onSubmit={onSubmit}
-        />
-      </SheetContent>
-    </Sheet>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={field ? "Edit custom field" : "Create custom field"}
+      description="Control where this question appears and how members are expected to answer it."
+      formId="member-custom-field-form"
+      isPending={isPending}
+      submitLabel={field ? "Save changes" : "Create field"}
+    >
+      <InnerForm
+        key={field?.id ?? "new"}
+        field={field}
+        validationErrors={validationErrors}
+        onSubmit={onSubmit}
+      />
+    </FormDialog>
   );
 }
 
 function InnerForm({
   field,
-  isPending,
   validationErrors,
   onSubmit,
 }: {
   field: MemberCustomField | null;
-  isPending: boolean;
   validationErrors: unknown;
   onSubmit: (value: MemberCustomFieldFormValues) => Promise<void>;
 }) {
@@ -180,14 +166,14 @@ function InnerForm({
 
   return (
     <form
-      className="flex flex-1 flex-col overflow-hidden"
+      id="member-custom-field-form"
       onSubmit={(event) => {
         event.preventDefault();
         event.stopPropagation();
         void form.handleSubmit();
       }}
     >
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
+      <div>
             <FieldGroup>
               <form.Field name="label">
                 {(formField) => (
@@ -758,15 +744,6 @@ function InnerForm({
             </FieldGroup>
       </div>
 
-      <SheetFooter>
-        <Button type="submit" disabled={isPending}>
-          {isPending
-            ? "Saving..."
-            : field
-              ? "Save changes"
-              : "Create field"}
-        </Button>
-      </SheetFooter>
     </form>
   );
 }
