@@ -57,6 +57,7 @@ import type {
   MemberCustomField,
   MemberPreferredEmail,
   MembershipStatus,
+  PolicyAcknowledgementMethod,
 } from "@/server/db/schema";
 
 type ProfileFormProps = {
@@ -75,6 +76,29 @@ type ProfileFormProps = {
   memberSince: Date | null;
   /** Only when the organization shows group rosters; the switch is pointless otherwise. */
   rosterOptOut: { hidden: boolean } | null;
+  /** Every version the member responded to, newest first. */
+  acknowledgements: AcceptedDocument[];
+};
+
+type AcceptedDocument = {
+  versionId: string;
+  documentTitle: string;
+  version: string | null;
+  acknowledgedAt: Date;
+  method: PolicyAcknowledgementMethod;
+  /** Null only for a version with no label, which a member should never hold. */
+  href: string | null;
+};
+
+/**
+ * Shown to the member, so it says how *they* answered — not the audit
+ * wording the admin overview uses for the same rows.
+ */
+const METHOD_LABEL: Record<PolicyAcknowledgementMethod, string> = {
+  registration: "when you registered",
+  portal_prompt: "in the portal",
+  admin_recorded: "recorded by an administrator",
+  import_notice: "when your account was imported",
 };
 
 const STATUS_LABEL: Record<MembershipStatus, string> = {
@@ -102,10 +126,11 @@ export function ProfileForm({
   membershipStatus,
   memberSince,
   rosterOptOut,
+  acknowledgements,
 }: ProfileFormProps) {
   const router = useRouter();
   const { organization } = useAppShell();
-  const { formatDate } = useFormatters();
+  const { formatDate, formatDateTime } = useFormatters();
 
   const profileAction = useAction(updateProfileAction, {
     onSuccess() {
@@ -471,26 +496,63 @@ export function ProfileForm({
 
             {rosterOptOut ? <RosterOptOutField hidden={rosterOptOut.hidden} /> : null}
 
+            {/*
+              Each row opens the exact version the member answered, not
+              today's replacement for it. A member who was imported or created
+              by an admin has never been shown anything; the portal asks them
+              on their next visit, so an empty list is a fact, not a gap.
+            */}
             <FieldSet>
-              <FieldLegend className="flex items-center gap-2">Documents you accepted</FieldLegend>
-              <Link
-                href="/portal/legal"
-                className="group -mx-2 flex max-w-2xl items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-muted/60"
-              >
-                <ScaleIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium text-foreground">
-                    Terms and privacy policy
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Read the current versions and when you accepted them.
-                  </span>
-                </span>
-                <ArrowRightIcon
-                  aria-hidden
-                  className="size-3.5 shrink-0 text-muted-foreground/0 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground"
-                />
-              </Link>
+              <FieldLegend className="flex items-center gap-2">
+                Documents you accepted
+                <FieldHint>The wording you responded to, kept as it was on that day.</FieldHint>
+              </FieldLegend>
+              {acknowledgements.length === 0 ? (
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  You have not been asked to respond to any document yet.
+                </p>
+              ) : (
+                <ul className="flex max-w-2xl flex-col">
+                  {acknowledgements.map((doc) => {
+                    const body = (
+                      <>
+                        <ScaleIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium text-foreground">
+                            {doc.documentTitle}
+                            {doc.version ? (
+                              <span className="ml-2 font-mono text-xs font-normal text-muted-foreground">
+                                {doc.version}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {formatDateTime(doc.acknowledgedAt)} · {METHOD_LABEL[doc.method]}
+                          </span>
+                        </span>
+                      </>
+                    );
+                    return (
+                      <li key={doc.versionId}>
+                        {doc.href ? (
+                          <Link
+                            href={doc.href}
+                            className="group -mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-muted/60"
+                          >
+                            {body}
+                            <ArrowRightIcon
+                              aria-hidden
+                              className="size-3.5 shrink-0 text-muted-foreground/0 transition-all group-hover:translate-x-0.5 group-hover:text-muted-foreground"
+                            />
+                          </Link>
+                        ) : (
+                          <div className="-mx-2 flex items-center gap-3 px-2 py-2">{body}</div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </FieldSet>
           </div>
         </TabsContent>

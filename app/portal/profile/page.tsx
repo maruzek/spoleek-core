@@ -7,6 +7,7 @@ import {
   getMemberCustomFieldAnswerMap,
   listActiveMemberCustomFields,
 } from "@/server/queries/member-custom-fields";
+import { listMemberAcknowledgements } from "@/server/queries/policies";
 
 export default async function PortalProfilePage({
   searchParams,
@@ -24,13 +25,14 @@ export default async function PortalProfilePage({
     organization.workspaceModuleEnabled &&
     organization.workspaceConnectedAt !== null &&
     Boolean(organization.workspaceDomain);
-  const [customFields, answerMap] = await Promise.all([
+  const [customFields, answerMap, acknowledgements] = await Promise.all([
     listActiveMemberCustomFields(organization.id, [
       "registration",
       "post_approval",
       "optional",
     ]),
     getMemberCustomFieldAnswerMap(organization.id, member.id),
+    listMemberAcknowledgements(organization.id, member.id),
   ]);
   const showIncompleteBanner =
     params.incomplete === "1" || params.incomplete === "true";
@@ -58,6 +60,16 @@ export default async function PortalProfilePage({
         rosterOptOut={
           organization.showGroupRosters ? { hidden: member.hideFromGroupRosters } : null
         }
+        acknowledgements={acknowledgements.map((row) => ({
+          versionId: row.versionId,
+          documentTitle: row.documentTitle,
+          version: row.version,
+          acknowledgedAt: row.acknowledgedAt,
+          method: row.method,
+          href: row.version
+            ? `/portal/legal/${row.documentSlug}/v/${encodeURIComponent(row.version)}`
+            : null,
+        }))}
       />
     </AppPage>
   );
