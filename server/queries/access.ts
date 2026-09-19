@@ -17,7 +17,9 @@ import {
   memberPayments,
   tenantMembers,
   users,
+  type Event,
   type EventOwnerType,
+  type Organization,
   type TenantMember,
 } from "@/server/db/schema";
 import { getAppOrganization } from "@/server/queries/app";
@@ -764,6 +766,55 @@ export async function requireEventOwnerAccess(
   }
 
   forbidden();
+}
+
+/**
+ * Non-throwing twin of `requireEventOwnerAccess`, for the portal event page
+ * that shows a "manage" link to whoever could open the admin record. Same
+ * rules: group and category events follow their owner's management access;
+ * org-wide events go to full admins and leaders, then to category admins,
+ * then — when the org allows any admin — to group admins.
+ */
+export async function canManageEvent(params: {
+  organization: Pick<Organization, "id" | "orgEventCreators">;
+  member: Pick<TenantMember, "id" | "role" | "status" | "userId">;
+  event: Pick<Event, "ownerType" | "ownerGroupId" | "ownerCategoryId">;
+}): Promise<boolean> {
+  const { organization, member, event } = params;
+  if (member.status !== "active") return false;
+
+  if (event.ownerType === "group") {
+    if (!event.ownerGroupId) return false;
+    const [group] = await db
+      .select({ id: groups.id, categoryId: groups.categoryId })
+      .from(groups)
+      .where(and(eq(groups.orgId, organization.id), eq(groups.id, event.ownerGroupId)))
+      .limit(1);
+    return group ? canManageGroup({ orgId: organization.id, member, group }) : false;
+  }
+
+  if (member.role === "org_admin" || member.role === "leader") return true;
+  if (member.userId) {
+    const [user] = await db
+      .select({ systemRole: users.systemRole })
+      .from(users)
+      .where(eq(users.id, member.userId))
+      .limit(1);
+    if (user?.systemRole === "system_admin") return true;
+  }
+
+  if (event.ownerType === "category") {
+    if (!event.ownerCategoryId) return false;
+    const scopedCategoryIds = await listScopedCategoryIds(organization.id, member.id);
+    return scopedCategoryIds.includes(event.ownerCategoryId);
+  }
+
+  if (organization.orgEventCreators === "org_admins") return false;
+  const scopedCategoryIds = await listScopedCategoryIds(organization.id, member.id);
+  if (scopedCategoryIds.length > 0) return true;
+  if (organization.orgEventCreators !== "any_admin") return false;
+  const scopedGroupIds = await listScopedGroupIds(organization.id, member.id);
+  return scopedGroupIds.length > 0;
 }
 
 /** Loads a live event in the current org and checks management access to its owner. */

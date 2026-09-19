@@ -5,7 +5,7 @@ import { PortalEventRsvp } from "@/components/app/events/portal-event-rsvp";
 import { PortalEventForms } from "@/components/app/forms/portal-event-forms";
 import { isRsvpOpen } from "@/lib/events/rsvp";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
-import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { canManageEvent, requireCurrentMemberAccess } from "@/server/queries/access";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
   getEventCounts,
@@ -26,9 +26,10 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
   const row = await getEventDetail(organization.id, { slug }, { memberId: member.id });
   if (!row) notFound();
 
-  const [response, counts] = await Promise.all([
+  const [response, counts, canManage] = await Promise.all([
     getMemberResponse(organization.id, row.event.id, member.id),
     getEventCounts(organization.id, row.event.id),
+    canManageEvent({ organization, member, event: row.event }),
   ]);
   const payment = response ? await getLivePaymentForResponse(organization.id, response.id) : null;
 
@@ -65,6 +66,7 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
         response={response ? { answer: response.answer, standing: response.standing } : null}
         t={t}
         forms={<PortalEventForms items={forms} />}
+        manageHref={canManage ? `/admin/events/${row.event.id}` : null}
         rsvp={
           <PortalEventRsvp
             eventId={row.event.id}

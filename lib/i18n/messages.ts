@@ -387,6 +387,7 @@ const en = {
     },
     detail: {
       back: "All events",
+      manageInAdmin: "Manage in admin",
       when: "When",
       allDay: "all day",
       answerBy: "Answer by",
@@ -554,6 +555,9 @@ const en = {
   portalGroupPage: {
     allGroups: "All groups",
     youLead: "You lead this group",
+    youAreMember: "You are a member",
+    ledBy: (names: string) => `Led by ${names}`,
+    noLeaderYet: "No leader yet",
     member: "Member",
     notMember: "You are not in this group.",
     // Notice board
@@ -622,6 +626,9 @@ const en = {
     leaderBadge: "Leader",
     // Leader panel
     leaderTools: "Leader tools",
+    requestsLabel: "Requests",
+    membersLabel: "Members",
+    noPendingRequests: "Nothing waiting",
     pendingRequests: (count: number) =>
       count === 1 ? "1 request waiting" : `${count} requests waiting`,
     memberCount: (count: number) => (count === 1 ? "1 member" : `${count} members`),
@@ -1271,6 +1278,7 @@ const cs: Dictionary = {
     },
     detail: {
       back: "Všechny akce",
+      manageInAdmin: "Spravovat v administraci",
       when: "Kdy",
       allDay: "celý den",
       answerBy: "Odpovězte do",
@@ -1431,6 +1439,9 @@ const cs: Dictionary = {
   portalGroupPage: {
     allGroups: "Všechny skupiny",
     youLead: "Vedete tuto skupinu",
+    youAreMember: "Jste členem",
+    ledBy: (names: string) => `Vede ${names}`,
+    noLeaderYet: "Zatím bez vedoucího",
     member: "Člen",
     notMember: "V této skupině nejste.",
     announcement: "Nástěnka",
@@ -1491,6 +1502,9 @@ const cs: Dictionary = {
     you: "(vy)",
     leaderBadge: "Vedoucí",
     leaderTools: "Nástroje vedoucího",
+    requestsLabel: "Žádosti",
+    membersLabel: "Členové",
+    noPendingRequests: "Nic nečeká",
     pendingRequests: (count: number) =>
       `${count} ${csPlural(count, "žádost čeká", "žádosti čekají", "žádostí čeká")}`,
     memberCount: (count: number) => `${count} ${csPlural(count, "člen", "členové", "členů")}`,

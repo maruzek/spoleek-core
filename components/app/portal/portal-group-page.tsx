@@ -9,20 +9,26 @@ import {
   ArrowUpNarrowWideIcon,
   CalendarIcon,
   ClipboardListIcon,
+  CoinsIcon,
   ExternalLinkIcon,
+  FolderIcon,
+  InboxIcon,
   LayoutDashboardIcon,
   LinkIcon,
   MailIcon,
+  MegaphoneIcon,
   MoreHorizontalIcon,
   SearchIcon,
   ShieldIcon,
+  UserRoundIcon,
   UsersIcon,
 } from "lucide-react";
 
 import { EventAgendaRow, type EventOutcome, eventOutcomeOf } from "@/components/app/events/event-agenda-row";
 import { StatusFilter, type StatusFilterOption } from "@/components/app/status-filter";
 import { PortalFormCard } from "@/components/app/forms/portal-form-card";
-import { ListRow, reveal, SectionHeading } from "@/components/app/dashboard/dashboard-primitives";
+import { ListRow, reveal } from "@/components/app/dashboard/dashboard-primitives";
+import { FactRow, factCardClassName } from "@/components/app/fact-row";
 import { CopyButton } from "@/components/app/copy-button";
 import { GroupAnnouncementEditor } from "@/components/app/portal/group-announcement-editor";
 import { GroupResourcesEditor } from "@/components/app/portal/group-resources-editor";
@@ -30,6 +36,7 @@ import { AvailableActionSlot, LeaveMenuItem } from "@/components/app/portal/port
 import { useDictionary, useFormatters } from "@/components/locale-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -160,7 +167,7 @@ function OverviewTab({
   ].filter(Boolean);
 
   return (
-    <div className={cn("grid gap-8", cards.length > 0 ? "max-w-6xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
+    <div className={cn("grid gap-8", cards.length > 0 ? "max-w-5xl lg:grid-cols-[minmax(0,1fr)_20rem]" : "max-w-4xl")}>
       <AnnouncementSection detail={detail} canManage={canManage} />
       {cards.length > 0 ? (
         <aside className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1 lg:sticky lg:top-6 lg:self-start">
@@ -177,6 +184,8 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
   const t = useDictionary().portalGroupPage;
   const tg = useDictionary().portalGroups;
   const { group, standing, leaders } = detail;
+  const leaderNames = leaders.map((leader) => leader.name).join(", ");
+  console.log(standing);
 
   return (
     <div className="flex flex-col gap-6 pb-6 md:pb-8">
@@ -189,22 +198,38 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
         </Button>
       </div>
 
-      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
-            {group.categoryName}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">{group.name}</h1>
-            {standing?.role === "group_admin" ? (
-              <Badge variant="secondary">
-                <ShieldIcon data-icon="inline-start" />
-                {t.youLead}
-              </Badge>
+      {/* Same shape as the event header: pill, serif title, one icon meta line, actions on the right. */}
+      <header className="flex items-start gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {standing.role === "group_admin" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Status variant="success">
+                <StatusIndicator />
+                <StatusLabel>{t.youLead}</StatusLabel>
+              </Status>
+            </div>
+          ) : null}
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+            {group.name}
+          </h1>
+          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <FolderIcon className="size-3.5" aria-hidden />
+              <dd>{group.categoryName}</dd>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <UserRoundIcon className="size-3.5" aria-hidden />
+              <dd className="truncate">{leaders.length > 0 ? t.ledBy(leaderNames) : t.noLeaderYet}</dd>
+            </div>
+            {detail.roster ? (
+              <div className="flex items-center gap-1.5">
+                <UsersIcon className="size-3.5" aria-hidden />
+                <dd>{t.memberCount(detail.roster.length)}</dd>
+              </div>
             ) : null}
-          </div>
+          </dl>
           {group.description ? (
-            <p className="max-w-2xl text-sm text-muted-foreground md:text-base">{group.description}</p>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground md:text-base">{group.description}</p>
           ) : null}
         </div>
 
@@ -236,9 +261,9 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
             />
           ) : null}
           {canManage && detail.leaderPanel ? (
-            <Button asChild variant="outline" size="sm" className="hidden md:inline-flex">
+            <Button asChild variant="outline" size="sm">
               <Link href={detail.leaderPanel.adminHref}>
-                {t.manageInAdmin}
+                <span className="hidden sm:inline">{t.manageInAdmin}</span>
                 <ArrowRightIcon data-icon="inline-end" />
               </Link>
             </Button>
@@ -255,11 +280,10 @@ function AnnouncementSection({ detail, canManage }: { detail: PortalGroupDetail;
   const t = useDictionary().portalGroupPage;
   const { formatDate } = useFormatters();
   const { announcement } = detail;
-  const r = reveal(0);
 
   return (
-    <section>
-      <SectionHeading
+    <section className="flex flex-col gap-3">
+      <PageSectionHeading
         hint={
           canManage ? (
             <GroupAnnouncementEditor groupId={detail.group.id} initialHtml={announcement?.html ?? ""} />
@@ -267,28 +291,20 @@ function AnnouncementSection({ detail, canManage }: { detail: PortalGroupDetail;
         }
       >
         {t.announcement}
-      </SectionHeading>
+      </PageSectionHeading>
       {announcement ? (
-        <article
-          className={cn(
-            "rounded-xl bg-card px-5 py-4 text-card-foreground ring-1 ring-foreground/10",
-            r.className,
-          )}
-          style={r.style}
-        >
+        <article>
           <div
             className="policy-prose"
             // Sanitized on write by server/lib/policy-html.ts; rendered verbatim.
             dangerouslySetInnerHTML={{ __html: announcement.html }}
           />
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-4 text-xs text-muted-foreground">
             {t.announcementBy(formatDate(announcement.updatedAt), announcement.updatedBy)}
           </p>
         </article>
       ) : (
-        <p className="rounded-lg border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
-          {t.announcementEmpty}
-        </p>
+        <EmptyRow icon={<MegaphoneIcon className="size-4" aria-hidden />}>{t.announcementEmpty}</EmptyRow>
       )}
     </section>
   );
@@ -519,8 +535,8 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
 
   return (
     <section className="flex max-w-4xl flex-col gap-6">
-      <div>
-        <SectionHeading count={open.length}>{t.forms}</SectionHeading>
+      <div className="flex flex-col gap-3">
+        <PageSectionHeading count={open.length}>{t.forms}</PageSectionHeading>
         {open.length === 0 ? (
           <EmptyRow icon={<ClipboardListIcon className="size-4" aria-hidden />}>{t.noForms}</EmptyRow>
         ) : (
@@ -532,8 +548,8 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
         )}
       </div>
       {past.length > 0 ? (
-        <div>
-          <SectionHeading count={past.length}>{t.answeredForms}</SectionHeading>
+        <div className="flex flex-col gap-3">
+          <PageSectionHeading count={past.length}>{t.answeredForms}</PageSectionHeading>
           <ul className="flex flex-col gap-2 opacity-80">
             {past.map((item) => (
               <PortalFormCard key={item.form.id} item={item} hideEvent />
@@ -547,32 +563,45 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
 
 // ─── Aside cards ────────────────────────────────────────────────────────────
 
+/**
+ * A heading in the event page's voice: serif, with a muted count and an
+ * optional action or hint on the right.
+ */
+function PageSectionHeading({ children, count, hint }: { children: ReactNode; count?: number; hint?: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <h2 className="flex items-baseline gap-2 font-heading text-lg font-semibold tracking-tight text-foreground">
+        {children}
+        {count != null && count > 0 ? (
+          <span className="font-sans text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
+        ) : null}
+      </h2>
+      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+    </div>
+  );
+}
+
+/** Same shell as the event page's RSVP and facts cards. */
 function AsideCard({
   title,
   count,
   action,
-  index,
   className,
   children,
 }: {
   title: string;
   count?: number;
   action?: ReactNode;
-  index: number;
   className?: string;
   children: ReactNode;
 }) {
-  const r = reveal(index);
   return (
-    <section
-      className={cn("rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10", r.className, className)}
-      style={r.style}
-    >
+    <section className={cn(factCardClassName, className)}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="flex items-baseline gap-2 font-sans text-sm font-semibold text-foreground">
+        <h2 className="flex items-baseline gap-2 font-heading text-lg text-foreground">
           {title}
           {count != null && count > 0 ? (
-            <span className="text-xs font-normal tabular-nums text-muted-foreground">{count}</span>
+            <span className="font-sans text-xs font-normal tabular-nums text-muted-foreground">{count}</span>
           ) : null}
         </h2>
         {action}
@@ -582,29 +611,22 @@ function AsideCard({
   );
 }
 
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 text-right text-sm">{children}</dd>
-    </div>
-  );
-}
-
 function StandingCard({ detail, locale }: { detail: PortalGroupDetail; locale: string }) {
   const t = useDictionary().portalGroupPage;
   const { formatDate } = useFormatters();
   const standing = detail.standing!;
 
   return (
-    <AsideCard title={t.standing} index={1}>
-      <dl className="flex flex-col gap-1.5">
-        <Fact label={t.role}>{standing.role === "group_admin" ? t.leaderRole : t.memberRole}</Fact>
-        <Fact label={t.since}>
+    <AsideCard title={t.standing}>
+      <dl className="divide-y">
+        <FactRow icon={<ShieldIcon />} label={t.role}>
+          {standing.role === "group_admin" ? t.leaderRole : t.memberRole}
+        </FactRow>
+        <FactRow icon={<CalendarIcon />} label={t.since}>
           <span className="tabular-nums">{formatDate(standing.memberSince)}</span>
-        </Fact>
+        </FactRow>
         {standing.fee ? (
-          <Fact label={t.fee}>
+          <FactRow icon={<CoinsIcon />} label={t.fee}>
             <span className="tabular-nums">{formatMoney(standing.fee.amount, standing.fee.currency, locale)}</span>
             <span className="block text-xs text-muted-foreground">
               {standing.fee.payment ? (
@@ -622,7 +644,7 @@ function StandingCard({ detail, locale }: { detail: PortalGroupDetail; locale: s
                 t.feeRenews(formatDate(standing.fee.nextRenewal))
               ) : null}
             </span>
-          </Fact>
+          </FactRow>
         ) : null}
       </dl>
 
@@ -647,26 +669,33 @@ function StandingCard({ detail, locale }: { detail: PortalGroupDetail; locale: s
   );
 }
 
+/**
+ * The manager's numbers, in fact rows. The "manage" button lives in the
+ * header, so the card only links the requests row to the admin record.
+ */
 function LeaderPanel({ panel }: { panel: NonNullable<PortalGroupDetail["leaderPanel"]> }) {
   const t = useDictionary().portalGroupPage;
+  const waiting = panel.pendingRequests > 0;
 
   return (
-    <AsideCard title={t.leaderTools} index={2}>
-      <ul className="flex flex-col">
-        <ListRow
-          index={0}
-          href={panel.adminHref}
-          title={t.pendingRequests(panel.pendingRequests)}
-          meta={<span>{t.memberCount(panel.memberCount)}</span>}
-          urgent={panel.pendingRequests > 0 ? "warning" : null}
-        />
-      </ul>
-      <Button asChild variant="outline" size="sm" className="mt-3 w-full">
-        <Link href={panel.adminHref}>
-          {t.manageInAdmin}
-          <ArrowRightIcon data-icon="inline-end" />
-        </Link>
-      </Button>
+    <AsideCard title={t.leaderTools}>
+      <dl className="divide-y">
+        <FactRow icon={<InboxIcon />} label={t.requestsLabel} muted={!waiting}>
+          <Link
+            href={panel.adminHref}
+            className={cn(
+              "inline-flex items-center gap-1 underline-offset-4 hover:underline",
+              waiting && "font-medium text-amber-700 dark:text-amber-500",
+            )}
+          >
+            {waiting ? t.pendingRequests(panel.pendingRequests) : t.noPendingRequests}
+            <ArrowRightIcon className="size-3" aria-hidden />
+          </Link>
+        </FactRow>
+        <FactRow icon={<UsersIcon />} label={t.membersLabel}>
+          {t.memberCount(panel.memberCount)}
+        </FactRow>
+      </dl>
     </AsideCard>
   );
 }
@@ -678,18 +707,16 @@ function ResourcesCard({ detail, canManage }: { detail: PortalGroupDetail; canMa
     <AsideCard
       title={t.resources}
       count={detail.resources.length}
-      index={3}
       action={canManage ? <GroupResourcesEditor groupId={detail.group.id} resources={detail.resources} /> : null}
     >
       {detail.resources.length === 0 ? (
         <p className="text-sm text-muted-foreground">{canManage ? t.noResourcesManager : t.noResources}</p>
       ) : (
         <ul className="-mx-2 flex flex-col">
-          {detail.resources.map((resource, index) => {
-            const r = reveal(index);
+          {detail.resources.map((resource) => {
             const external = !resource.url.startsWith("mailto:");
             return (
-              <li key={resource.id} className={r.className} style={r.style}>
+              <li key={resource.id}>
                 <a
                   href={resource.url}
                   target={external ? "_blank" : undefined}
@@ -741,8 +768,8 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       {leaders.length > 0 ? (
-        <section>
-          <SectionHeading
+        <section className="flex flex-col gap-3">
+          <PageSectionHeading
             count={leaders.length}
             hint={
               leaderEmails.length > 1 ? (
@@ -751,7 +778,7 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
             }
           >
             {t.leadersHeading}
-          </SectionHeading>
+          </PageSectionHeading>
           <ul className="grid gap-2 sm:grid-cols-2">
             {leaders.map((leader, index) => (
               <PersonRow
@@ -779,10 +806,10 @@ function MembersTab({ detail }: { detail: PortalGroupDetail }) {
       ) : null}
 
       {members ? (
-        <section>
-          <SectionHeading count={members.length} hint={t.rosterHint}>
+        <section className="flex flex-col gap-3">
+          <PageSectionHeading count={members.length} hint={t.rosterHint}>
             {t.membersHeading}
-          </SectionHeading>
+          </PageSectionHeading>
           {members.length === 0 ? (
             <EmptyRow icon={<UsersIcon className="size-4" aria-hidden />}>{tg.notAssignedYet}</EmptyRow>
           ) : (
@@ -828,7 +855,7 @@ function PersonRow({
   return (
     <li
       className={cn(
-        "flex items-center gap-3 rounded-xl bg-card px-3 py-2.5 text-card-foreground ring-1 ring-foreground/10",
+        "flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-card-foreground",
         r.className,
       )}
       style={r.style}

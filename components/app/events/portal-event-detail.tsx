@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
+  ArrowRightIcon,
   BanIcon,
   CalendarIcon,
   CoinsIcon,
@@ -14,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { EventDateLeaf } from "@/components/app/events/event-date-leaf";
+import { FactRow, factCardClassName } from "@/components/app/fact-row";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Status, StatusIndicator, StatusLabel } from "@/components/ui/status";
@@ -38,18 +40,6 @@ function outcomeOf(response: { answer: EventRsvpAnswer; standing: EventRsvpStand
   return response.answer;
 }
 
-function Row({ icon, label, children, muted }: { icon: ReactNode; label: string; children: ReactNode; muted?: boolean }) {
-  return (
-    <div className="flex gap-3 py-3 first:pt-0 last:pb-0">
-      <span className="mt-0.5 text-muted-foreground [&_svg]:size-4">{icon}</span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</dt>
-        <dd className={cn("text-sm", muted ? "text-muted-foreground" : "text-foreground")}>{children}</dd>
-      </div>
-    </div>
-  );
-}
-
 /**
  * The attendee's view: same header language as the admin record (date leaf,
  * serif title, one meta line), but the page is built around one question —
@@ -65,6 +55,7 @@ export function PortalEventDetail({
   response,
   rsvp,
   forms,
+  manageHref,
   t,
 }: {
   event: Event;
@@ -76,6 +67,8 @@ export function PortalEventDetail({
   rsvp: ReactNode;
   /** The event's forms block, rendered above the description so it is not missed. */
   forms?: ReactNode;
+  /** Admin record of this event, for viewers who may manage it. */
+  manageHref?: string | null;
   t: Dictionary["events"];
 }) {
   const d = t.detail;
@@ -105,7 +98,7 @@ export function PortalEventDetail({
 
       <header className="flex items-start gap-4">
         <EventDateLeaf startsAt={event.startsAt} cancelled={cancelled} locale={locale} timeZone={timeZone} />
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           {cancelled || outcome ? (
             <div className="flex flex-wrap items-center gap-2">
               {cancelled ? (
@@ -147,6 +140,14 @@ export function PortalEventDetail({
             </div>
           </dl>
         </div>
+        {manageHref ? (
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href={manageHref}>
+              <span className="hidden sm:inline">{d.manageInAdmin}</span>
+              <ArrowRightIcon data-icon="inline-end" />
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       {cancelled ? (
@@ -185,20 +186,20 @@ export function PortalEventDetail({
           {/* The RSVP control and, when the event charges, the payment card below it. */}
           <div className="grid gap-4">{rsvp}</div>
 
-          <dl className="divide-y rounded-xl border bg-card p-4">
-            <Row icon={<CalendarIcon />} label={d.when}>
+          <dl className={cn("divide-y", factCardClassName)}>
+            <FactRow icon={<CalendarIcon />} label={d.when}>
               {when ?? <span className="text-muted-foreground">{t.dateTba}</span>}
               {event.allDay ? <span className="ml-1.5 text-xs text-muted-foreground">{d.allDay}</span> : null}
-            </Row>
+            </FactRow>
             {deadline ? (
-              <Row icon={<HourglassIcon />} label={d.answerBy}>
+              <FactRow icon={<HourglassIcon />} label={d.answerBy}>
                 {deadline}
                 {deadlinePassed ? (
                   <span className="ml-1.5 text-xs text-amber-700 dark:text-amber-500">{d.deadlinePassed}</span>
                 ) : null}
-              </Row>
+              </FactRow>
             ) : null}
-            <Row icon={<MapPinIcon />} label={d.where} muted={!where}>
+            <FactRow icon={<MapPinIcon />} label={d.where} muted={!where}>
               {where ? (
                 <>
                   {event.locationName ? <span className="block">{event.locationName}</span> : null}
@@ -209,8 +210,8 @@ export function PortalEventDetail({
               ) : (
                 d.locationTba
               )}
-            </Row>
-            <Row icon={<UsersIcon />} label={d.places}>
+            </FactRow>
+            <FactRow icon={<UsersIcon />} label={d.places}>
               {placesLeft == null ? (
                 d.unlimited
               ) : placesLeft === 0 ? (
@@ -222,17 +223,17 @@ export function PortalEventDetail({
                 {d.goingCount(counts.confirmedSeats)}
                 {event.maxGuestsPerResponse > 0 ? ` · ${d.guestsAllowed(event.maxGuestsPerResponse)}` : ""}
               </span>
-            </Row>
+            </FactRow>
             {event.priceAmount !== null && event.priceCurrency ? (
-              <Row icon={<CoinsIcon />} label={d.price}>
+              <FactRow icon={<CoinsIcon />} label={d.price}>
                 {d.pricePerPerson(formatMoney(event.priceAmount, event.priceCurrency, locale))}
                 {event.maxGuestsPerResponse > 0 ? (
                   <span className="block text-xs text-muted-foreground">{d.priceGuestsToo}</span>
                 ) : null}
-              </Row>
+              </FactRow>
             ) : null}
             {event.communicationLink ? (
-              <Row icon={<MessageSquareIcon />} label={d.chat}>
+              <FactRow icon={<MessageSquareIcon />} label={d.chat}>
                 <a
                   href={event.communicationLink}
                   target="_blank"
@@ -242,7 +243,7 @@ export function PortalEventDetail({
                   {d.openChat}
                   <ExternalLinkIcon className="size-3" aria-hidden />
                 </a>
-              </Row>
+              </FactRow>
             ) : null}
           </dl>
         </aside>
