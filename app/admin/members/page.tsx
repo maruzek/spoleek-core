@@ -8,6 +8,7 @@ import type { ImportGroupInfo } from "@/components/app/member-import/types";
 import { db } from "@/server/db";
 import { groups } from "@/server/db/schema";
 import { getMembersAdminPageData } from "@/server/queries/members";
+import { requireViewer } from "@/server/queries/viewer";
 import { parseMemberStatusFilter } from "@/lib/member-status-display";
 import { getAppOrganization } from "@/server/queries/app";
 import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
@@ -30,9 +31,10 @@ export default async function AdminMembersPage({
   const statusFilter = parseMemberStatusFilter(params.status);
   const includeDeleted = statusFilter.includes("deleted");
 
+  const viewer = await requireViewer();
   const organization = await getAppOrganization();
   const [data, orgGroups] = await Promise.all([
-    getMembersAdminPageData(null, { includeDeleted }),
+    getMembersAdminPageData(viewer, null, { includeDeleted }),
     organization
       ? db
           .select({

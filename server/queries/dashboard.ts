@@ -38,7 +38,6 @@ import {
 } from "@/server/db/schema";
 import {
   listManageableOwners,
-  listScopedGroupIds,
   requireAdminAccess,
 } from "@/server/queries/access";
 import { listMemberIdsInGroups } from "@/server/queries/payments";
@@ -932,13 +931,13 @@ export async function getAdminDashboardData(context: AdminContext): Promise<Admi
   const isFull = context.adminAccessLevel === "full";
 
   const owners: Owners = capabilities.canManageGroups
-    ? await listManageableOwners(context)
+    ? await listManageableOwners(context.viewer)
     : { organization: false, categoryIds: [], groupIds: [] };
 
   // Scoped payment admins only see fees for members of their groups.
   const paymentMemberIds =
     capabilities.canManagePayments && !isFull && context.member
-      ? await listMemberIdsInGroups(orgId, await listScopedGroupIds(orgId, context.member.id))
+      ? await listMemberIdsInGroups(orgId, context.viewer.scope.groups.map((group) => group.id))
       : null;
 
   const sections = await Promise.all([

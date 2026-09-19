@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { forbidden } from "next/navigation";
 
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   groupCategories,
@@ -132,8 +134,8 @@ async function listScopedManageableGroups(orgId: string, memberId: string) {
     );
 }
 
-export async function resolveMemberManagementScope(): Promise<MemberManagementScope> {
-  const access = await requireAdminAccess();
+export async function resolveMemberManagementScope(viewer: Viewer): Promise<MemberManagementScope> {
+  const access = await requireAdminAccess(viewer);
 
   if (access.adminAccessLevel === "full") {
     const manageableGroupRows = await listAllManageableGroups(access.organization.id);

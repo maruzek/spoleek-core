@@ -1,10 +1,12 @@
 import { AppPage } from "@/components/app/app-page";
 import { EventsAdmin } from "@/components/app/events/events-admin";
 import { listEventsForManager, listEventsForOwnerPicker } from "@/server/queries/events";
+import { requireViewer } from "@/server/queries/viewer";
 
 export default async function AdminEventsPage() {
   const now = new Date().getTime();
-  const { context, owners, items } = await listEventsForManager();
+  const viewer = await requireViewer();
+  const { context, owners, items } = await listEventsForManager(viewer);
   const picker = await listEventsForOwnerPicker(context.organization.id);
 
   const ownerOptions = {

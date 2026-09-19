@@ -1,4 +1,5 @@
-import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { cache } from "react";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { forbidden, redirect } from "next/navigation";
 
 import type {
@@ -6,16 +7,25 @@ import type {
   AppShellAdminGroupPin,
   AppShellContext,
 } from "@/lib/app-shell";
+import {
+  canManageGroup,
+  canManageOwner,
+  canManageCategory,
+  canOverseeCategory,
+  getAdminAccessLevel,
+  getCapabilities,
+  isSystemAdmin,
+  managesEveryGroup,
+  overseenCategoryIds,
+  type EventOwner,
+  type Viewer,
+} from "@/lib/access/viewer";
 import { db } from "@/server/db";
 import {
-  categoryAdminAssignments,
   events,
   forms,
   groupCategories,
-  groupMemberships,
   groups,
-  tenantMembers,
-  users,
   type Event,
   type EventOwnerType,
   type Organization,
@@ -24,14 +34,24 @@ import {
 import { getAppOrganization } from "@/server/queries/app";
 import { getPostApprovalCompleteness } from "@/server/queries/member-custom-fields";
 import { listOutstandingPolicies } from "@/server/queries/policies";
-import { requireViewerSession } from "@/server/queries/auth";
 import { listPinnedGroupCategoriesForSidebar } from "@/server/queries/groups";
-import { activeMembership } from "@/server/lib/group-membership";
+import { requireViewer } from "@/server/queries/viewer";
 import { EMPTY_PAYMENT_SCOPE, type PaymentScope } from "@/lib/payments/scope";
 import { listMemberIdsInGroups } from "@/server/queries/payments";
 
+export type { Viewer } from "@/lib/access/viewer";
+
+/**
+ * Every guard here takes the resolved Viewer (CONTEXT.md) and is a thin
+ * throwing wrapper over one predicate in `lib/access/viewer.ts`. Pages get
+ * their Viewer from `requireViewer()`, actions from `ctx.viewer`; tests build
+ * one by hand. Nothing in this file reads `headers()`.
+ */
+
+const getOrganization = cache(getAppOrganization);
+
 export async function requireOrganization() {
-  const organization = await getAppOrganization();
+  const organization = await getOrganization();
 
   if (!organization) {
     redirect("/setup");
@@ -40,175 +60,43 @@ export async function requireOrganization() {
   return organization;
 }
 
-export async function getCurrentMember(userId: string) {
-  const organization = await requireOrganization();
-  const [member] = await db
-    .select()
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.orgId, organization.id),
-        eq(tenantMembers.userId, userId),
-        ne(tenantMembers.status, "deleted"),
-      ),
-    )
-    .limit(1);
+/** What every admin guard returns: the Viewer plus its derived access. */
+export type AdminAccess = {
+  viewer: Viewer;
+  organization: Organization;
+  member: TenantMember | null;
+  /** Platform operator, not just an org admin. Gates provider-wide data. */
+  isSystemAdmin: boolean;
+  adminAccessLevel: AppShellContext["adminAccessLevel"];
+  capabilities: AppCapabilities;
+};
 
-  return member ?? null;
-}
-
-function getCapabilities({
-  hasActiveMember,
-  hasScopedGroupManagement,
-  hasScopedMemberManagement,
-  memberRole,
-  systemRole,
-}: {
-  hasActiveMember: boolean;
-  hasScopedGroupManagement: boolean;
-  hasScopedMemberManagement: boolean;
-  memberRole: "member" | "leader" | "org_admin" | null;
-  systemRole: "member" | "system_admin";
-}): { adminAccessLevel: AppShellContext["adminAccessLevel"]; capabilities: AppCapabilities } {
-  if (systemRole === "system_admin") {
-    return {
-      adminAccessLevel: "full",
-      capabilities: {
-        canAccessPortal: hasActiveMember,
-        canAccessAdmin: true,
-        canManageGroups: true,
-        canManageOrganization: true,
-        canManageMembers: true,
-        canManageScopedMembers: true,
-        canManageEvents: true,
-        canManagePayments: true,
-      },
-    };
-  }
-
-  if (hasActiveMember && memberRole === "org_admin") {
-    return {
-      adminAccessLevel: "full",
-      capabilities: {
-        canAccessPortal: true,
-        canAccessAdmin: true,
-        canManageGroups: true,
-        canManageOrganization: true,
-        canManageMembers: true,
-        canManageScopedMembers: true,
-        canManageEvents: true,
-        canManagePayments: true,
-      },
-    };
-  }
-
-  if (hasActiveMember && memberRole === "leader") {
-    return {
-      adminAccessLevel: "scoped",
-      capabilities: {
-        canAccessPortal: true,
-        canAccessAdmin: true,
-        canManageGroups: true,
-        canManageOrganization: false,
-        canManageMembers: false,
-        canManageScopedMembers: hasScopedMemberManagement,
-        canManageEvents: true,
-        canManagePayments: false,
-      },
-    };
-  }
-
-  if (hasActiveMember && hasScopedGroupManagement) {
-    return {
-      adminAccessLevel: "scoped",
-      capabilities: {
-        canAccessPortal: true,
-        canAccessAdmin: true,
-        canManageGroups: true,
-        canManageOrganization: false,
-        canManageMembers: false,
-        canManageScopedMembers: hasScopedMemberManagement,
-        canManageEvents: false,
-        canManagePayments: true,
-      },
-    };
-  }
-
+function toAdminAccess(viewer: Viewer): AdminAccess {
   return {
-    adminAccessLevel: "none",
-    capabilities: {
-      canAccessPortal: hasActiveMember,
-      canAccessAdmin: false,
-      canManageGroups: false,
-      canManageOrganization: false,
-      canManageMembers: false,
-      canManageScopedMembers: false,
-      canManageEvents: false,
-      canManagePayments: false,
-    },
+    viewer,
+    organization: viewer.organization,
+    member: viewer.member,
+    isSystemAdmin: isSystemAdmin(viewer),
+    adminAccessLevel: getAdminAccessLevel(viewer),
+    capabilities: getCapabilities(viewer),
   };
 }
 
-export async function getViewerAppContext(): Promise<
-  AppShellContext & {
-    memberRecordId: string | null;
-    organizationId: string;
-    /** Platform operator, not just an org admin. Gates provider-wide data. */
-    isSystemAdmin: boolean;
-    session: Awaited<ReturnType<typeof requireViewerSession>>;
-  }
-> {
-  const session = await requireViewerSession();
-  const organization = await requireOrganization();
-
-  const [user] = await db
-    .select({ systemRole: users.systemRole })
-    .from(users)
-    .where(eq(users.id, session.user.id))
-    .limit(1);
-
-  const [member] = await db
-    .select()
-    .from(tenantMembers)
-    .where(
-      and(
-        eq(tenantMembers.orgId, organization.id),
-        eq(tenantMembers.userId, session.user.id),
-        ne(tenantMembers.status, "deleted"),
-      ),
-    )
-    .limit(1);
-
-  const hasActiveMember = member?.status === "active";
-  const hasScopedGroupManagement =
-    hasActiveMember && member
-      ? await hasScopedGroupManagementAccess(organization.id, member.id)
-      : false;
-  const hasScopedMemberManagement =
-    hasActiveMember && member
-      ? await hasScopedMemberManagementAccess(organization.id, member.id)
-      : false;
-  const { adminAccessLevel, capabilities } = getCapabilities({
-    hasActiveMember,
-    hasScopedGroupManagement,
-    hasScopedMemberManagement,
-    memberRole: member?.role ?? null,
-    systemRole: user?.systemRole ?? "member",
-  });
+/** The app-shell context for a Viewer; one per request thanks to `cache`. */
+export const buildAppShellContext = cache(async (viewer: Viewer): Promise<AppShellContext> => {
+  const { organization, member } = viewer;
+  const adminAccessLevel = getAdminAccessLevel(viewer);
+  const capabilities = getCapabilities(viewer);
   const navigation = capabilities.canManageGroups
-    ? await getAdminGroupPins({
-        adminAccessLevel,
-        memberId: member?.id ?? null,
-        memberRole: member?.role ?? null,
-        orgId: organization.id,
-      })
+    ? await getAdminGroupPins(viewer)
     : { adminGroupPins: [] };
 
   return {
-    session,
-    organizationId: organization.id,
-    memberRecordId: member?.id ?? null,
-    isSystemAdmin: user?.systemRole === "system_admin",
+    account: {
+      name: viewer.user.name,
+      email: viewer.user.email,
+      avatar: viewer.user.image,
+    },
     organization: {
       name: organization.name,
       slug: organization.slug,
@@ -224,11 +112,6 @@ export async function getViewerAppContext(): Promise<
         paymentWindowDays: organization.membershipFeePaymentWindowDays,
       },
       membershipReportEnabled: organization.membershipReportEnabled,
-    },
-    viewer: {
-      name: session.user.name,
-      email: session.user.email,
-      avatar: session.user.image ?? null,
     },
     member: member
       ? {
@@ -248,34 +131,23 @@ export async function getViewerAppContext(): Promise<
     ],
     navigation,
   };
+});
+
+/** Shell context for the signed-in viewer (layout, landing and login redirects). */
+export async function getViewerAppContext() {
+  return buildAppShellContext(await requireViewer());
 }
 
-async function getAdminGroupPins({
-  adminAccessLevel,
-  memberId,
-  memberRole,
-  orgId,
-}: {
-  adminAccessLevel: AppShellContext["adminAccessLevel"];
-  memberId: string | null;
-  memberRole: "member" | "leader" | "org_admin" | null;
-  orgId: string;
-}): Promise<AppShellContext["navigation"]> {
-  const hasFullVisibility =
-    adminAccessLevel === "full" || memberRole === "leader" || memberId == null;
-
-  const [rows, scopedCategoryIds, scopedGroupIds] = await Promise.all([
-    listPinnedGroupCategoriesForSidebar(orgId),
-    hasFullVisibility || memberId == null ? null : listAccessibleCategoryIds(orgId, memberId),
-    hasFullVisibility || memberId == null ? null : listScopedGroupIds(orgId, memberId),
-  ]);
-
-  const visibleCategoryIds = scopedCategoryIds == null ? null : new Set(scopedCategoryIds);
-  const visibleGroupIds = scopedGroupIds == null ? null : new Set(scopedGroupIds);
+async function getAdminGroupPins(viewer: Viewer): Promise<AppShellContext["navigation"]> {
+  const rows = await listPinnedGroupCategoriesForSidebar(viewer.organization.id);
+  const visibleCategoryIds = overseenCategoryIds(viewer);
+  const visibleGroupIds = managesEveryGroup(viewer)
+    ? null
+    : new Set(viewer.scope.groups.map((group) => group.id));
   const pins = new Map<string, AppShellAdminGroupPin>();
 
   for (const row of rows) {
-    const canSeeCategory = visibleCategoryIds == null || visibleCategoryIds.has(row.categoryId);
+    const canSeeCategory = visibleCategoryIds == null || visibleCategoryIds.includes(row.categoryId);
     const canSeeGroup =
       row.groupId == null ||
       canSeeCategory ||
@@ -319,251 +191,7 @@ async function getAdminGroupPins({
   };
 }
 
-async function hasScopedGroupManagementAccess(orgId: string, memberId: string) {
-  const [assignment] = await db
-    .select({ memberId: tenantMembers.id })
-    .from(tenantMembers)
-    .leftJoin(
-      categoryAdminAssignments,
-      and(
-        eq(categoryAdminAssignments.orgId, orgId),
-        eq(categoryAdminAssignments.memberId, tenantMembers.id),
-      ),
-    )
-    .leftJoin(
-      groupMemberships,
-      and(
-        eq(groupMemberships.orgId, orgId),
-        activeMembership(),
-        eq(groupMemberships.memberId, tenantMembers.id),
-        eq(groupMemberships.role, "group_admin"),
-      ),
-    )
-    .where(
-      and(
-        eq(tenantMembers.orgId, orgId),
-        eq(tenantMembers.id, memberId),
-        or(
-          eq(groupMemberships.role, "group_admin"),
-          eq(categoryAdminAssignments.memberId, memberId),
-        ),
-      ),
-    )
-    .limit(1);
-
-  return assignment != null;
-}
-
-async function hasScopedMemberManagementAccess(orgId: string, memberId: string) {
-  const [assignment] = await db
-    .select({ memberId: tenantMembers.id })
-    .from(tenantMembers)
-    .innerJoin(
-      groupMemberships,
-      and(
-        eq(groupMemberships.orgId, orgId),
-        activeMembership(),
-        eq(groupMemberships.memberId, tenantMembers.id),
-        eq(groupMemberships.role, "group_admin"),
-      ),
-    )
-    .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
-    .innerJoin(groupCategories, eq(groupCategories.id, groups.categoryId))
-    .where(
-      and(
-        eq(tenantMembers.orgId, orgId),
-        eq(tenantMembers.id, memberId),
-        eq(groupCategories.groupAdminsManageMembers, true),
-        eq(groupCategories.isActive, true),
-        eq(groups.isActive, true),
-      ),
-    )
-    .limit(1);
-
-  return assignment != null;
-}
-
-export async function listScopedCategoryIds(orgId: string, memberId: string) {
-  const rows = await db
-    .select({ categoryId: categoryAdminAssignments.categoryId })
-    .from(categoryAdminAssignments)
-    .where(
-      and(
-        eq(categoryAdminAssignments.orgId, orgId),
-        eq(categoryAdminAssignments.memberId, memberId),
-      ),
-    );
-
-  return rows.map((row) => row.categoryId);
-}
-
-export async function listScopedGroupIds(orgId: string, memberId: string) {
-  const rows = await db
-    .select({ groupId: groupMemberships.groupId })
-    .from(groupMemberships)
-    .where(
-      and(
-        eq(groupMemberships.orgId, orgId),
-        activeMembership(),
-        eq(groupMemberships.memberId, memberId),
-        eq(groupMemberships.role, "group_admin"),
-      ),
-    );
-
-  return rows.map((row) => row.groupId);
-}
-
-export async function listAccessibleCategoryIds(orgId: string, memberId: string) {
-  const [categoryIds, groupRows] = await Promise.all([
-    listScopedCategoryIds(orgId, memberId),
-    db
-      .select({ categoryId: groups.categoryId })
-      .from(groupMemberships)
-      .innerJoin(groups, eq(groups.id, groupMemberships.groupId))
-      .where(
-        and(
-          eq(groupMemberships.orgId, orgId),
-          activeMembership(),
-          eq(groupMemberships.memberId, memberId),
-          eq(groupMemberships.role, "group_admin"),
-        ),
-      ),
-  ]);
-
-  return [...new Set([...categoryIds, ...groupRows.map((row) => row.categoryId)])];
-}
-
-export async function requireGroupAdminModuleAccess() {
-  const context = await requireAdminAccess({ capability: "canManageGroups" });
-
-  return context;
-}
-
-export async function requireCategoryOverviewAccess(categoryId: string) {
-  const context = await requireGroupAdminModuleAccess();
-
-  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
-    return context;
-  }
-
-  if (!context.member) {
-    forbidden();
-  }
-
-  const scopedCategoryIds = await listAccessibleCategoryIds(
-    context.organization.id,
-    context.member.id,
-  );
-
-  if (!scopedCategoryIds.includes(categoryId)) {
-    forbidden();
-  }
-
-  return context;
-}
-
-export async function requireCategoryManagementAccess(categoryId: string) {
-  const context = await requireGroupAdminModuleAccess();
-
-  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
-    return context;
-  }
-
-  if (!context.member) {
-    forbidden();
-  }
-
-  const scopedCategoryIds = await listScopedCategoryIds(context.organization.id, context.member.id);
-
-  if (!scopedCategoryIds.includes(categoryId)) {
-    forbidden();
-  }
-
-  return context;
-}
-
-export async function requireGroupManagementAccess(groupId: string) {
-  const context = await requireGroupAdminModuleAccess();
-
-  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
-    return context;
-  }
-
-  if (!context.member) {
-    forbidden();
-  }
-
-  const [group] = await db
-    .select({ id: groups.id, categoryId: groups.categoryId })
-    .from(groups)
-    .where(and(eq(groups.orgId, context.organization.id), eq(groups.id, groupId)))
-    .limit(1);
-
-  if (!group) {
-    forbidden();
-  }
-
-  const [scopedCategoryIds, scopedGroupIds] = await Promise.all([
-    listScopedCategoryIds(context.organization.id, context.member.id),
-    listScopedGroupIds(context.organization.id, context.member.id),
-  ]);
-
-  if (!scopedCategoryIds.includes(group.categoryId) && !scopedGroupIds.includes(group.id)) {
-    forbidden();
-  }
-
-  return context;
-}
-
-/**
- * Non-throwing twin of `requireGroupManagementAccess` for pages that show a
- * manager-only panel to some viewers and nothing to the rest. Same rule: org
- * admins, leaders and system admins manage every group; otherwise the member
- * must be a category admin over its category or a group admin of the group.
- */
-export async function canManageGroup(params: {
-  orgId: string;
-  member: Pick<TenantMember, "id" | "role" | "status" | "userId">;
-  group: { id: string; categoryId: string };
-}): Promise<boolean> {
-  const { orgId, member, group } = params;
-  if (member.status !== "active") return false;
-  if (member.role === "org_admin" || member.role === "leader") return true;
-
-  const [scopedCategoryIds, scopedGroupIds] = await Promise.all([
-    listScopedCategoryIds(orgId, member.id),
-    listScopedGroupIds(orgId, member.id),
-  ]);
-  if (scopedCategoryIds.includes(group.categoryId) || scopedGroupIds.includes(group.id)) {
-    return true;
-  }
-
-  if (!member.userId) return false;
-  const [user] = await db
-    .select({ systemRole: users.systemRole })
-    .from(users)
-    .where(eq(users.id, member.userId))
-    .limit(1);
-  return user?.systemRole === "system_admin";
-}
-
-/**
- * A Workspace link writes to Google, so it stays behind the org-admin gate even
- * in categories where `groupAdminsManageMembers` lets group admins manage the
- * roster. Same gate for the drift inbox: adopting or removing a drift row moves
- * membership on one side or the other.
- */
-export async function requireWorkspaceLinkAccess(groupId: string) {
-  const context = await requireGroupManagementAccess(groupId);
-
-  if (context.adminAccessLevel !== "full" && context.member?.role !== "leader") {
-    throw new Error(
-      "Only organization admins can change the Workspace link for a group.",
-    );
-  }
-
-  return context;
-}
+// ─── Member (portal) ────────────────────────────────────────────────────────
 
 /**
  * Sends a member to `/portal/legal` while any published document is unanswered.
@@ -573,8 +201,8 @@ export async function requireWorkspaceLinkAccess(groupId: string) {
  * — and anyone suspended or archived who could still reach a signed-in page —
  * never saw a policy prompt and never produced an acknowledgement row. The
  * people handling everyone else's data were the only ones with no record of
- * having been informed. `getCurrentMember` already excludes deleted members, so
- * every status arriving here is one that reaches a real surface.
+ * having been informed. The Viewer never carries a deleted member, so every
+ * status arriving here is one that reaches a real surface.
  *
  * `/portal/legal` calls the member guard with no options, so the page that
  * clears the block cannot redirect to itself.
@@ -587,24 +215,19 @@ async function redirectIfPoliciesOutstanding(orgId: string, memberId: string) {
   }
 }
 
-export async function requireCurrentMemberAccess(options?: {
-  requireProfileComplete?: boolean;
-  requirePolicyAcknowledgement?: boolean;
-}) {
-  const session = await requireViewerSession();
-  const organization = await requireOrganization();
-  const member = await getCurrentMember(session.user.id);
+export async function requireCurrentMemberAccess(
+  viewer: Viewer,
+  options?: {
+    requireProfileComplete?: boolean;
+    requirePolicyAcknowledgement?: boolean;
+  },
+) {
+  const { organization, member } = viewer;
 
   if (!member) {
     // A system admin can legitimately have no membership (the first-run wizard
     // can create one without it), so send them to admin rather than to signup.
-    const [user] = await db
-      .select({ systemRole: users.systemRole })
-      .from(users)
-      .where(eq(users.id, session.user.id))
-      .limit(1);
-
-    redirect(user?.systemRole === "system_admin" ? "/admin" : "/join");
+    redirect(isSystemAdmin(viewer) ? "/admin" : "/join");
   }
 
   // Deliberately ahead of the profile check: nobody should be asked to fill in
@@ -623,211 +246,164 @@ export async function requireCurrentMemberAccess(options?: {
   }
 
   return {
-    session,
+    viewer,
     organization,
     member,
   };
 }
 
-export async function requireCurrentMember() {
-  const { member } = await requireCurrentMemberAccess();
+export async function requireCurrentMember(viewer: Viewer) {
+  const { member } = await requireCurrentMemberAccess(viewer);
   return member;
 }
 
-export async function requireAdminAccess(options?: {
-  capability?: keyof AppCapabilities;
-  requireFullAccess?: boolean;
-}) {
-  const appContext = await getViewerAppContext();
-  const organization = await requireOrganization();
-  const member = await getCurrentMember(appContext.session.user.id);
+// ─── Admin ──────────────────────────────────────────────────────────────────
 
-  if (!appContext.capabilities.canAccessAdmin) {
+export async function requireAdminAccess(
+  viewer: Viewer,
+  options?: {
+    capability?: keyof AppCapabilities;
+    requireFullAccess?: boolean;
+  },
+): Promise<AdminAccess> {
+  const capabilities = getCapabilities(viewer);
+
+  if (!capabilities.canAccessAdmin) {
     forbidden();
   }
 
-  if (options?.requireFullAccess && appContext.adminAccessLevel !== "full") {
+  if (options?.requireFullAccess && getAdminAccessLevel(viewer) !== "full") {
     forbidden();
   }
 
-  if (options?.capability && !appContext.capabilities[options.capability]) {
+  if (options?.capability && !capabilities[options.capability]) {
     forbidden();
   }
 
   // Admins are data subjects too, and they are the ones handling everybody
   // else's record. A system admin with no membership has nothing to answer for
   // and is left alone.
-  if (member) {
-    await redirectIfPoliciesOutstanding(organization.id, member.id);
+  if (viewer.member) {
+    await redirectIfPoliciesOutstanding(viewer.organization.id, viewer.member.id);
   }
 
-  return {
-    ...appContext,
-    organization,
-    member,
-  };
+  return toAdminAccess(viewer);
 }
 
-export async function requireOrgAdminAccess(userId?: string) {
-  if (userId) {
-    const organization = await requireOrganization();
-
-    const [user] = await db
-      .select({ systemRole: users.systemRole })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (user?.systemRole === "system_admin") {
-      return { organization, member: null };
-    }
-
-    const [member] = await db
-      .select()
-      .from(tenantMembers)
-      .where(
-        and(
-          eq(tenantMembers.orgId, organization.id),
-          eq(tenantMembers.userId, userId),
-          ne(tenantMembers.status, "deleted"),
-        ),
-      )
-      .limit(1);
-
-    if (!member || member.status !== "active" || member.role !== "org_admin") {
-      forbidden();
-    }
-
-    return { organization, member };
-  }
-
-  const { organization, member } = await requireAdminAccess({
+export async function requireOrgAdminAccess(viewer: Viewer) {
+  const { organization, member } = await requireAdminAccess(viewer, {
     requireFullAccess: true,
     capability: "canManageOrganization",
   });
 
-  return { organization, member };
+  return { viewer, organization, member };
+}
+
+export async function requireGroupAdminModuleAccess(viewer: Viewer) {
+  return requireAdminAccess(viewer, { capability: "canManageGroups" });
+}
+
+export async function requireCategoryOverviewAccess(viewer: Viewer, categoryId: string) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  if (!canOverseeCategory(viewer, categoryId)) forbidden();
+  return context;
+}
+
+export async function requireCategoryManagementAccess(viewer: Viewer, categoryId: string) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  if (!canManageCategory(viewer, categoryId)) forbidden();
+  return context;
+}
+
+async function loadGroupRef(orgId: string, groupId: string) {
+  const [group] = await db
+    .select({ id: groups.id, categoryId: groups.categoryId })
+    .from(groups)
+    .where(and(eq(groups.orgId, orgId), eq(groups.id, groupId)))
+    .limit(1);
+  return group ?? null;
+}
+
+export async function requireGroupManagementAccess(viewer: Viewer, groupId: string) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  const group = await loadGroupRef(viewer.organization.id, groupId);
+  if (!group || !canManageGroup(viewer, group)) forbidden();
+  return context;
+}
+
+/**
+ * A Workspace link writes to Google, so it stays behind the org-admin gate even
+ * in categories where `groupAdminsManageMembers` lets group admins manage the
+ * roster. Same gate for the drift inbox: adopting or removing a drift row moves
+ * membership on one side or the other.
+ */
+export async function requireWorkspaceLinkAccess(viewer: Viewer, groupId: string) {
+  const context = await requireGroupManagementAccess(viewer, groupId);
+
+  if (!managesEveryGroup(viewer)) {
+    throw new Error(
+      "Only organization admins can change the Workspace link for a group.",
+    );
+  }
+
+  return context;
 }
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
 /**
- * Who may manage an event, decided by its owner.
- *
- * `group` and `category` owners reuse the existing group/category guards. An
- * `organization` owner is gated by `organizations.orgEventCreators`, so a
- * federation can let every troop leader post org-wide without making them org
- * admins. Used both before a row exists (create) and after (everything else,
- * through `requireEventManagementAccess`).
+ * Turns an owner reference into the ids `canManageOwner` needs. A group owner
+ * is looked up so its category is known; a missing owner is `null`.
  */
-export async function requireEventOwnerAccess(
+async function resolveOwner(
+  orgId: string,
   ownerType: EventOwnerType,
-  ownerId?: string | null,
-) {
-  if (ownerType === "group") {
-    if (!ownerId) forbidden();
-    return requireGroupManagementAccess(ownerId);
-  }
-
-  if (ownerType === "category") {
-    if (!ownerId) forbidden();
-    return requireCategoryManagementAccess(ownerId);
-  }
-
-  const context = await requireGroupAdminModuleAccess();
-
-  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
-    return context;
-  }
-
-  const setting = context.organization.orgEventCreators;
-
-  if (setting === "org_admins" || !context.member) {
-    forbidden();
-  }
-
-  const scopedCategoryIds = await listScopedCategoryIds(
-    context.organization.id,
-    context.member.id,
-  );
-
-  if (scopedCategoryIds.length > 0) {
-    return context;
-  }
-
-  if (setting === "any_admin") {
-    const scopedGroupIds = await listScopedGroupIds(
-      context.organization.id,
-      context.member.id,
-    );
-
-    if (scopedGroupIds.length > 0) {
-      return context;
-    }
-  }
-
-  forbidden();
+  ownerId: string | null | undefined,
+): Promise<EventOwner | null> {
+  if (ownerType === "organization") return { type: "organization" };
+  if (!ownerId) return null;
+  if (ownerType === "category") return { type: "category", categoryId: ownerId };
+  const group = await loadGroupRef(orgId, ownerId);
+  return group ? { type: "group", group } : null;
 }
 
 /**
- * Non-throwing twin of `requireEventOwnerAccess`, for the portal event page
- * that shows a "manage" link to whoever could open the admin record. Same
- * rules: group and category events follow their owner's management access;
- * org-wide events go to full admins and leaders, then to category admins,
- * then — when the org allows any admin — to group admins.
+ * Who may manage an event, decided by its owner (`canManageOwner`). Used both
+ * before a row exists (create) and after (everything else, through
+ * `requireEventManagementAccess`).
  */
-export async function canManageEvent(params: {
-  organization: Pick<Organization, "id" | "orgEventCreators">;
-  member: Pick<TenantMember, "id" | "role" | "status" | "userId">;
-  event: Pick<Event, "ownerType" | "ownerGroupId" | "ownerCategoryId">;
-}): Promise<boolean> {
-  const { organization, member, event } = params;
-  if (member.status !== "active") return false;
+export async function requireEventOwnerAccess(
+  viewer: Viewer,
+  ownerType: EventOwnerType,
+  ownerId?: string | null,
+) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  const owner = await resolveOwner(viewer.organization.id, ownerType, ownerId);
+  if (!owner || !canManageOwner(viewer, owner)) forbidden();
+  return context;
+}
 
-  if (event.ownerType === "group") {
-    if (!event.ownerGroupId) return false;
-    const [group] = await db
-      .select({ id: groups.id, categoryId: groups.categoryId })
-      .from(groups)
-      .where(and(eq(groups.orgId, organization.id), eq(groups.id, event.ownerGroupId)))
-      .limit(1);
-    return group ? canManageGroup({ orgId: organization.id, member, group }) : false;
-  }
-
-  if (member.role === "org_admin" || member.role === "leader") return true;
-  if (member.userId) {
-    const [user] = await db
-      .select({ systemRole: users.systemRole })
-      .from(users)
-      .where(eq(users.id, member.userId))
-      .limit(1);
-    if (user?.systemRole === "system_admin") return true;
-  }
-
-  if (event.ownerType === "category") {
-    if (!event.ownerCategoryId) return false;
-    const scopedCategoryIds = await listScopedCategoryIds(organization.id, member.id);
-    return scopedCategoryIds.includes(event.ownerCategoryId);
-  }
-
-  if (organization.orgEventCreators === "org_admins") return false;
-  const scopedCategoryIds = await listScopedCategoryIds(organization.id, member.id);
-  if (scopedCategoryIds.length > 0) return true;
-  if (organization.orgEventCreators !== "any_admin") return false;
-  const scopedGroupIds = await listScopedGroupIds(organization.id, member.id);
-  return scopedGroupIds.length > 0;
+/** Non-throwing: may the viewer open the admin record of this event? */
+export async function canManageEvent(
+  viewer: Viewer,
+  event: Pick<Event, "ownerType" | "ownerGroupId" | "ownerCategoryId">,
+): Promise<boolean> {
+  const owner = await resolveOwner(
+    viewer.organization.id,
+    event.ownerType,
+    event.ownerType === "group" ? event.ownerGroupId : event.ownerCategoryId,
+  );
+  return owner != null && canManageOwner(viewer, owner);
 }
 
 /** Loads a live event in the current org and checks management access to its owner. */
-export async function requireEventManagementAccess(eventId: string) {
-  const organization = await requireOrganization();
-
+export async function requireEventManagementAccess(viewer: Viewer, eventId: string) {
   const [event] = await db
     .select()
     .from(events)
     .where(
       and(
-        eq(events.orgId, organization.id),
+        eq(events.orgId, viewer.organization.id),
         eq(events.id, eventId),
         isNull(events.deletedAt),
       ),
@@ -839,6 +415,7 @@ export async function requireEventManagementAccess(eventId: string) {
   }
 
   const context = await requireEventOwnerAccess(
+    viewer,
     event.ownerType,
     event.ownerType === "group" ? event.ownerGroupId : event.ownerCategoryId,
   );
@@ -846,26 +423,21 @@ export async function requireEventManagementAccess(eventId: string) {
   return { context, event };
 }
 
+// ─── Payments ───────────────────────────────────────────────────────────────
+
 /**
  * Payment scope (see CONTEXT.md) through the capability door: what the
  * dashboard shows and what the mutations accept. `null` when the viewer has
  * no `canManagePayments` at all — the manager door below may still apply.
- *
- * Takes the resolved admin access so a page that already called
- * `requireAdminAccess` does not resolve the viewer twice.
  */
-export async function getPaymentScope(
-  access: Pick<Awaited<ReturnType<typeof requireAdminAccess>>, "adminAccessLevel" | "capabilities" | "organization" | "member">,
-): Promise<PaymentScope | null> {
-  if (!access.capabilities.canManagePayments) return null;
-  if (access.adminAccessLevel === "full") return "full";
-  if (!access.member) return null;
+export async function getPaymentScope(viewer: Viewer): Promise<PaymentScope | null> {
+  if (!getCapabilities(viewer).canManagePayments) return null;
+  if (getAdminAccessLevel(viewer) === "full") return "full";
+  if (!viewer.member) return null;
 
-  const orgId = access.organization.id;
-  const [groupIds, categoryIds] = await Promise.all([
-    listScopedGroupIds(orgId, access.member.id),
-    listScopedCategoryIds(orgId, access.member.id),
-  ]);
+  const orgId = viewer.organization.id;
+  const groupIds = viewer.scope.groups.map((group) => group.id);
+  const categoryIds = viewer.scope.categoryIds;
   const [memberIds, eventIds] = await Promise.all([
     listMemberIdsInGroups(orgId, groupIds),
     listEventIdsOwnedBy(orgId, { groupIds, categoryIds }),
@@ -903,16 +475,10 @@ async function listEventIdsOwnedBy(
  * caller's `forbidden()`.
  */
 export async function resolvePaymentScopeForRows(
-  userId: string,
+  viewer: Viewer,
   rows: readonly { eventId: string | null }[],
 ): Promise<PaymentScope> {
-  const appContext = await getViewerAppContext();
-  const organization = await requireOrganization();
-  const member = await getCurrentMember(userId);
-
-  const capabilityScope = appContext.capabilities.canAccessAdmin
-    ? await getPaymentScope({ ...appContext, organization, member })
-    : null;
+  const capabilityScope = await getPaymentScope(viewer);
   if (capabilityScope === "full") return "full";
 
   const base: Exclude<PaymentScope, "full"> = capabilityScope ?? EMPTY_PAYMENT_SCOPE;
@@ -920,7 +486,7 @@ export async function resolvePaymentScopeForRows(
   const candidateEventIds = [
     ...new Set(rows.flatMap((row) => row.eventId ?? []).filter((id) => !base.eventIds.includes(id))),
   ];
-  if (!member || candidateEventIds.length === 0) return base;
+  if (!viewer.member || candidateEventIds.length === 0) return base;
 
   const candidates = await db
     .select({
@@ -932,7 +498,7 @@ export async function resolvePaymentScopeForRows(
     .from(events)
     .where(
       and(
-        eq(events.orgId, organization.id),
+        eq(events.orgId, viewer.organization.id),
         isNull(events.deletedAt),
         inArray(events.id, candidateEventIds),
       ),
@@ -940,7 +506,7 @@ export async function resolvePaymentScopeForRows(
 
   const managed: string[] = [];
   for (const event of candidates) {
-    if (await canManageEvent({ organization, member, event })) managed.push(event.id);
+    if (await canManageEvent(viewer, event)) managed.push(event.id);
   }
   return { memberIds: base.memberIds, eventIds: [...base.eventIds, ...managed] };
 }
@@ -952,10 +518,11 @@ export async function resolvePaymentScopeForRows(
  * owner. Thin alias so the two cannot drift.
  */
 export async function requireFormOwnerAccess(
+  viewer: Viewer,
   ownerType: EventOwnerType,
   ownerId?: string | null,
 ) {
-  return requireEventOwnerAccess(ownerType, ownerId);
+  return requireEventOwnerAccess(viewer, ownerType, ownerId);
 }
 
 /**
@@ -965,16 +532,15 @@ export async function requireFormOwnerAccess(
  * admins may change or delete it. Everything else dispatches on the owner.
  */
 export async function requireFormManagementAccess(
+  viewer: Viewer,
   formId: string,
   options: { write?: boolean } = {},
 ) {
-  const organization = await requireOrganization();
-
   const [form] = await db
     .select()
     .from(forms)
     .where(
-      and(eq(forms.orgId, organization.id), eq(forms.id, formId), isNull(forms.deletedAt)),
+      and(eq(forms.orgId, viewer.organization.id), eq(forms.id, formId), isNull(forms.deletedAt)),
     )
     .limit(1);
 
@@ -983,7 +549,7 @@ export async function requireFormManagementAccess(
   }
 
   if (form.isTemplate) {
-    const context = await requireGroupAdminModuleAccess();
+    const context = await requireGroupAdminModuleAccess(viewer);
     if (options.write && !context.capabilities.canManageOrganization) {
       forbidden();
     }
@@ -991,6 +557,7 @@ export async function requireFormManagementAccess(
   }
 
   const context = await requireFormOwnerAccess(
+    viewer,
     form.ownerType,
     form.ownerType === "group" ? form.ownerGroupId : form.ownerCategoryId,
   );
@@ -999,10 +566,10 @@ export async function requireFormManagementAccess(
 }
 
 /** Attaching or detaching needs management access to both sides. */
-export async function requireFormAttachAccess(formId: string, eventId: string) {
+export async function requireFormAttachAccess(viewer: Viewer, formId: string, eventId: string) {
   const [{ context, form }, { event }] = await Promise.all([
-    requireFormManagementAccess(formId, { write: true }),
-    requireEventManagementAccess(eventId),
+    requireFormManagementAccess(viewer, formId, { write: true }),
+    requireEventManagementAccess(viewer, eventId),
   ]);
   return { context, form, event };
 }
@@ -1012,18 +579,14 @@ export async function requireFormAttachAccess(formId: string, eventId: string) {
  * the admin event list. Org-wide access is a boolean; scoped access lists ids.
  */
 export async function listManageableOwners(
-  context: Awaited<ReturnType<typeof requireGroupAdminModuleAccess>>,
+  viewer: Viewer,
 ): Promise<{ organization: boolean; categoryIds: string[]; groupIds: string[] }> {
-  if (context.adminAccessLevel === "full" || context.member?.role === "leader") {
+  const orgId = viewer.organization.id;
+
+  if (managesEveryGroup(viewer)) {
     const [categoryRows, groupRows] = await Promise.all([
-      db
-        .select({ id: groupCategories.id })
-        .from(groupCategories)
-        .where(eq(groupCategories.orgId, context.organization.id)),
-      db
-        .select({ id: groups.id })
-        .from(groups)
-        .where(eq(groups.orgId, context.organization.id)),
+      db.select({ id: groupCategories.id }).from(groupCategories).where(eq(groupCategories.orgId, orgId)),
+      db.select({ id: groups.id }).from(groups).where(eq(groups.orgId, orgId)),
     ]);
 
     return {
@@ -1033,14 +596,12 @@ export async function listManageableOwners(
     };
   }
 
-  if (!context.member) {
+  if (!viewer.member) {
     return { organization: false, categoryIds: [], groupIds: [] };
   }
 
-  const [scopedCategoryIds, scopedGroupIds] = await Promise.all([
-    listScopedCategoryIds(context.organization.id, context.member.id),
-    listScopedGroupIds(context.organization.id, context.member.id),
-  ]);
+  const scopedCategoryIds = viewer.scope.categoryIds;
+  const scopedGroupIds = viewer.scope.groups.map((group) => group.id);
 
   // A category admin manages every group in the category, so those groups are
   // manageable owners too.
@@ -1049,22 +610,11 @@ export async function listManageableOwners(
       ? await db
           .select({ id: groups.id })
           .from(groups)
-          .where(
-            and(
-              eq(groups.orgId, context.organization.id),
-              or(...scopedCategoryIds.map((id) => eq(groups.categoryId, id))),
-            ),
-          )
+          .where(and(eq(groups.orgId, orgId), inArray(groups.categoryId, scopedCategoryIds)))
       : [];
 
-  const setting = context.organization.orgEventCreators;
-  const organization =
-    (setting === "category_admins" && scopedCategoryIds.length > 0) ||
-    (setting === "any_admin" &&
-      (scopedCategoryIds.length > 0 || scopedGroupIds.length > 0));
-
   return {
-    organization,
+    organization: canManageOwner(viewer, { type: "organization" }),
     categoryIds: scopedCategoryIds,
     groupIds: [...new Set([...scopedGroupIds, ...categoryGroupRows.map((row) => row.id)])],
   };

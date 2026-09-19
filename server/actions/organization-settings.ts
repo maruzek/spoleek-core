@@ -29,8 +29,8 @@ import {
 export const saveJoinPageSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveJoinPageSettings" })
   .inputSchema(joinPageSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db.transaction(async (tx) => {
       await tx
@@ -98,8 +98,8 @@ export const saveWorkspaceSettingsAction = orgAdminActionClient
       defaultEmailPreference: z.enum(["personal", "workspace"]),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     if (parsedInput.moduleEnabled && !parsedInput.workspaceDomain) {
       throw new Error(
@@ -127,8 +127,8 @@ export const saveWorkspaceSettingsAction = orgAdminActionClient
 export const saveMembershipSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveMembershipSettings" })
   .inputSchema(membershipSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const isPeriodicRenewal =
       parsedInput.membershipManagementMode === "periodic_renewal";
@@ -194,8 +194,8 @@ const emailNotificationSettingsSchema = z.object({
 export const saveEventSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveEventSettings" })
   .inputSchema(eventSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db
       .update(organizations)
@@ -212,8 +212,8 @@ export const saveEventSettingsAction = orgAdminActionClient
 export const saveEmailNotificationSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveEmailNotificationSettings" })
   .inputSchema(emailNotificationSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db
       .update(organizations)
@@ -238,8 +238,8 @@ export const saveEmailNotificationSettingsAction = orgAdminActionClient
 export const disconnectWorkspaceAction = orgAdminActionClient
   .metadata({ actionName: "disconnectWorkspace" })
   .inputSchema(z.object({}).optional())
-  .action(async () => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const [connection] = await db
       .select()
@@ -281,8 +281,8 @@ export const disconnectWorkspaceAction = orgAdminActionClient
 export const setWorkspaceOrgUnitCategoryAction = orgAdminActionClient
   .metadata({ actionName: "setWorkspaceOrgUnitCategory" })
   .inputSchema(z.object({ categoryId: z.string().uuid().nullable() }))
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db.transaction(async (tx) => {
       await tx
@@ -350,8 +350,8 @@ export const saveWorkspaceProvisionFieldsAction = orgAdminActionClient
       ),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const validated = parsedInput.fields.filter((f) =>
       WORKSPACE_FIELD_MAP.has(f.fieldKey),
@@ -371,8 +371,8 @@ export const saveWorkspaceProvisionFieldsAction = orgAdminActionClient
 export const saveLocalizationSettingsAction = orgAdminActionClient
   .metadata({ actionName: "saveLocalizationSettings" })
   .inputSchema(organizationLocalizationSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db
       .update(organizations)

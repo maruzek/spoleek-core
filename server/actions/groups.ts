@@ -131,8 +131,8 @@ async function requireOrgMemberInOrganization(orgId: string, memberId: string) {
 export const saveGroupCategoryAction = orgAdminActionClient
   .metadata({ actionName: "saveGroupCategory" })
   .inputSchema(groupCategorySchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const hasMembersTableColumn = await hasGroupCategoryMembersTableColumn();
     const isUnique = await ensureUniqueCategorySlug(
       organization.id,
@@ -269,7 +269,7 @@ export const saveGroupCategoryAction = orgAdminActionClient
 export const saveGroupAction = authActionClient
   .metadata({ actionName: "saveGroup" })
   .inputSchema(groupSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
     const isUnique = await ensureUniqueGroupSlug(organization.id, parsedInput.slug, parsedInput.id);
 
@@ -308,7 +308,7 @@ export const saveGroupAction = authActionClient
         throw new Error("The selected group could not be found.");
       }
 
-      await requireGroupManagementAccess(parsedInput.id);
+      await requireGroupManagementAccess(ctx.viewer, parsedInput.id);
 
       await db
         .update(groups)
@@ -328,7 +328,7 @@ export const saveGroupAction = authActionClient
         })
         .where(and(eq(groups.id, parsedInput.id), eq(groups.orgId, organization.id)));
     } else {
-      const context = await requireCategoryManagementAccess(parsedInput.categoryId);
+      const context = await requireCategoryManagementAccess(ctx.viewer, parsedInput.categoryId);
 
       if (!category) {
         throw new Error("The selected category could not be found.");
@@ -388,8 +388,8 @@ export const saveGroupAction = authActionClient
 export const assignCategoryAdminAction = orgAdminActionClient
   .metadata({ actionName: "assignCategoryAdmin" })
   .inputSchema(assignCategoryAdminSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const category = await getGroupCategoryById(organization.id, parsedInput.categoryId);
 
     if (!category) {
@@ -414,8 +414,8 @@ export const assignCategoryAdminAction = orgAdminActionClient
 export const removeCategoryAdminAction = orgAdminActionClient
   .metadata({ actionName: "removeCategoryAdmin" })
   .inputSchema(removeCategoryAdminSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     await db
       .delete(categoryAdminAssignments)
@@ -433,7 +433,7 @@ export const removeCategoryAdminAction = orgAdminActionClient
 export const assignGroupMemberAction = authActionClient
   .metadata({ actionName: "assignGroupMember" })
   .inputSchema(assignGroupMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
     const group = await getGroupById(organization.id, parsedInput.groupId);
 
@@ -441,7 +441,7 @@ export const assignGroupMemberAction = authActionClient
       throw new Error("The selected group could not be found.");
     }
 
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
     const member = await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
     await upsertActiveMembership(db, {
@@ -472,7 +472,7 @@ export const assignGroupMemberAction = authActionClient
 export const assignGroupMembersAction = authActionClient
   .metadata({ actionName: "assignGroupMembers" })
   .inputSchema(assignGroupMembersSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
     const group = await getGroupById(organization.id, parsedInput.groupId);
 
@@ -480,7 +480,7 @@ export const assignGroupMembersAction = authActionClient
       throw new Error("The selected group could not be found.");
     }
 
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
 
     const uniqueMemberIds = [...new Set(parsedInput.memberIds)];
 
@@ -522,7 +522,7 @@ export const assignGroupMembersAction = authActionClient
 export const removeGroupMemberAction = authActionClient
   .metadata({ actionName: "removeGroupMember" })
   .inputSchema(removeGroupMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
     const group = await getGroupById(organization.id, parsedInput.groupId);
 
@@ -530,7 +530,7 @@ export const removeGroupMemberAction = authActionClient
       throw new Error("The selected group could not be found.");
     }
 
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
     const member = await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
     await db
@@ -551,10 +551,10 @@ export const removeGroupMemberAction = authActionClient
 export const assignGroupAdminAction = authActionClient
   .metadata({ actionName: "assignGroupAdmin" })
   .inputSchema(assignGroupAdminSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
 
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
     await requireOrgMemberInOrganization(organization.id, parsedInput.memberId);
 
     // Promotes an existing member, approves a pending requester, or adds a
@@ -576,10 +576,10 @@ export const assignGroupAdminAction = authActionClient
 export const removeGroupAdminAction = authActionClient
   .metadata({ actionName: "removeGroupAdmin" })
   .inputSchema(removeGroupAdminSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
 
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
 
     await db
       .update(groupMemberships)

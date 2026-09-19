@@ -9,6 +9,7 @@ import { db } from "@/server/db";
 import { memberPolicyAcknowledgements, policyVersions } from "@/server/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listOutstandingPolicies } from "@/server/queries/policies";
 
 /**
@@ -18,7 +19,8 @@ import { listOutstandingPolicies } from "@/server/queries/policies";
  * no options here, or the page that clears the block would redirect to itself.
  */
 export default async function PortalLegalPage() {
-  const { member, organization } = await requireCurrentMemberAccess();
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer);
 
   const outstanding = await listOutstandingPolicies(organization.id, member.id);
 

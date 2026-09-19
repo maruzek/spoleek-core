@@ -8,7 +8,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { db } from "@/server/db";
 import { organizations, workspaceConnections } from "@/server/db/schema";
 import { requireOrgAdminAccess } from "@/server/queries/access";
-import { getViewerSession } from "@/server/queries/auth";
+import { getViewer } from "@/server/queries/viewer";
 import {
   exchangeAuthorizationCode,
   fetchGoogleUserInfo,
@@ -33,12 +33,12 @@ function redirectWithStatus(
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getViewerSession();
-  if (!session) {
+  const viewer = await getViewer();
+  if (!viewer) {
     return NextResponse.redirect(buildAbsoluteAppUrl("/"));
   }
 
-  const { organization } = await requireOrgAdminAccess(session.user.id);
+  const { organization } = await requireOrgAdminAccess(viewer);
 
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
         fromSetup,
         orgId: organization.id,
         orgDomain: organization.workspaceDomain,
-        userId: session.user.id,
+        userId: viewer.user.id,
       });
 
   response.cookies.set(STATE_COOKIE, "", {

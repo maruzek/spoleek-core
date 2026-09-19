@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 
 import type { MailingListScope } from "@/lib/mailing-list";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import { resolveMemberManagementScope } from "@/server/lib/member-management-scope";
 import { groupMemberships, groups, tenantMembers } from "@/server/db/schema";
@@ -88,11 +90,11 @@ async function listScopedMembersAdminDataset(orgId: string, scopedGroupIds: stri
   return Array.from(dedupedRows.values());
 }
 
-async function resolveMembersAdminDataset() {
-  await requireAdminAccess({
+async function resolveMembersAdminDataset(viewer: Viewer) {
+  await requireAdminAccess(viewer, {
     capability: "canManageScopedMembers",
   });
-  const scope = await resolveMemberManagementScope();
+  const scope = await resolveMemberManagementScope(viewer);
 
   if (scope.accessLevel === "full") {
     const members = await listTenantMembers(scope.organizationId);
@@ -102,27 +104,27 @@ async function resolveMembersAdminDataset() {
   return listScopedMembersAdminDataset(scope.organizationId, scope.managedGroupIds ?? []);
 }
 
-async function resolveGroupMembersDataset(groupId: string) {
-  const access = await requireGroupManagementAccess(groupId);
+async function resolveGroupMembersDataset(viewer: Viewer, groupId: string) {
+  const access = await requireGroupManagementAccess(viewer, groupId);
   const members = await listGroupMembers(access.organization.id, groupId);
 
   return members.map((member) => toResolvedDatasetRow(member));
 }
 
-async function resolveGroupAdminsDataset(groupId: string) {
-  const access = await requireGroupManagementAccess(groupId);
+async function resolveGroupAdminsDataset(viewer: Viewer, groupId: string) {
+  const access = await requireGroupManagementAccess(viewer, groupId);
   const members = await listGroupAdmins(access.organization.id, groupId);
 
   return members.map((member) => toResolvedDatasetRow(member));
 }
 
-export async function resolveMemberDataset(scope: MailingListScope) {
+export async function resolveMemberDataset(viewer: Viewer, scope: MailingListScope) {
   switch (scope.kind) {
     case "members-admin":
-      return resolveMembersAdminDataset();
+      return resolveMembersAdminDataset(viewer);
     case "group-members":
-      return resolveGroupMembersDataset(scope.contextId);
+      return resolveGroupMembersDataset(viewer, scope.contextId);
     case "group-admins":
-      return resolveGroupAdminsDataset(scope.contextId);
+      return resolveGroupAdminsDataset(viewer, scope.contextId);
   }
 }

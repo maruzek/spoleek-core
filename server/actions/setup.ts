@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { actionClient } from "@/lib/safe-action";
 import { splitMemberName } from "@/lib/member-custom-fields";
-import { authActionClient } from "@/lib/safe-action-auth";
+import { sessionActionClient } from "@/lib/safe-action-auth";
 import { slugify } from "@/lib/slugify";
 import { db } from "@/server/db";
 import { seedOrganizationPolicies } from "@/server/lib/policy-seed";
@@ -33,7 +33,7 @@ const setupSchema = z.object({
   privacyText: z.string().min(20, "Add the initial privacy policy text."),
 });
 
-export const createOrganizationSetupAction = authActionClient
+export const createOrganizationSetupAction = sessionActionClient
   .metadata({ actionName: "createOrganizationSetup" })
   .inputSchema(setupSchema)
   .action(async ({ parsedInput, ctx }) => {

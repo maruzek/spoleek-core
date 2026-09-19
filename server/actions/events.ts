@@ -185,7 +185,7 @@ export const createEventAction = authActionClient
   .metadata({ actionName: "createEvent" })
   .inputSchema(eventInputSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const context = await requireEventOwnerAccess(parsedInput.ownerType, ownerIdOf(parsedInput));
+    const context = await requireEventOwnerAccess(ctx.viewer, parsedInput.ownerType, ownerIdOf(parsedInput));
     const orgId = context.organization.id;
 
     const slug = await ensureUniqueEventSlug(orgId, parsedInput.slug);
@@ -206,10 +206,10 @@ export const createEventAction = authActionClient
 export const updateEventAction = authActionClient
   .metadata({ actionName: "updateEvent" })
   .inputSchema(eventInputSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     if (!parsedInput.id) throw new EventError("NOT_FOUND");
 
-    const { context, event } = await requireEventManagementAccess(parsedInput.id);
+    const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.id);
 
     // Changing the owner needs access to both sides.
     const ownerChanged =
@@ -217,7 +217,7 @@ export const updateEventAction = authActionClient
       (event.ownerType === "group" ? event.ownerGroupId : event.ownerCategoryId) !==
         ownerIdOf(parsedInput);
     if (ownerChanged) {
-      await requireEventOwnerAccess(parsedInput.ownerType, ownerIdOf(parsedInput));
+      await requireEventOwnerAccess(ctx.viewer, parsedInput.ownerType, ownerIdOf(parsedInput));
     }
 
     const slug = slugify(parsedInput.slug);
@@ -282,8 +282,8 @@ export const updateEventAction = authActionClient
 export const publishEventAction = authActionClient
   .metadata({ actionName: "publishEvent" })
   .inputSchema(eventIdSchema)
-  .action(async ({ parsedInput }) => {
-    const { context, event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     assertBankAccountForPricedEvent(context.organization, event);
     await db.update(events).set({ status: "published" }).where(eq(events.id, event.id));
     return { success: true as const };
@@ -292,8 +292,8 @@ export const publishEventAction = authActionClient
 export const cancelEventAction = authActionClient
   .metadata({ actionName: "cancelEvent" })
   .inputSchema(eventIdSchema)
-  .action(async ({ parsedInput }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     await db.update(events).set({ status: "cancelled" }).where(eq(events.id, event.id));
     return { success: true as const };
   });
@@ -301,8 +301,8 @@ export const cancelEventAction = authActionClient
 export const deleteEventAction = authActionClient
   .metadata({ actionName: "deleteEvent" })
   .inputSchema(eventIdSchema)
-  .action(async ({ parsedInput }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     await db.update(events).set({ deletedAt: new Date() }).where(eq(events.id, event.id));
     return { success: true as const };
   });
@@ -315,10 +315,10 @@ export const deleteEventAction = authActionClient
 export const deleteEventsAction = authActionClient
   .metadata({ actionName: "deleteEvents" })
   .inputSchema(eventIdsSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const ids: string[] = [];
     for (const eventId of parsedInput.eventIds) {
-      const { event } = await requireEventManagementAccess(eventId);
+      const { event } = await requireEventManagementAccess(ctx.viewer, eventId);
       ids.push(event.id);
     }
     await db.update(events).set({ deletedAt: new Date() }).where(inArray(events.id, ids));
@@ -333,11 +333,11 @@ export const deleteEventsAction = authActionClient
 export const loadEventAudienceOptionsAction = authActionClient
   .metadata({ actionName: "loadEventAudienceOptions" })
   .inputSchema(z.object({ eventId: z.string().uuid().optional() }))
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     // No event yet while the create wizard is open: any event manager may look.
     const context = parsedInput.eventId
-      ? (await requireEventManagementAccess(parsedInput.eventId)).context
-      : await requireGroupAdminModuleAccess();
+      ? (await requireEventManagementAccess(ctx.viewer, parsedInput.eventId)).context
+      : await requireGroupAdminModuleAccess(ctx.viewer);
     const orgId = context.organization.id;
     const [picker, members] = await Promise.all([
       listEventsForOwnerPicker(orgId),
@@ -356,8 +356,8 @@ export const loadEventAudienceOptionsAction = authActionClient
 export const setEventAudienceAction = authActionClient
   .metadata({ actionName: "setEventAudience" })
   .inputSchema(setEventAudienceSchema)
-  .action(async ({ parsedInput }) => {
-    const { context, event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     const orgId = context.organization.id;
 
     await db.transaction(async (tx) => {
@@ -387,8 +387,8 @@ export const setEventAudienceAction = authActionClient
 export const addExternalInviteesAction = authActionClient
   .metadata({ actionName: "addExternalInvitees" })
   .inputSchema(addExternalInviteesSchema)
-  .action(async ({ parsedInput }) => {
-    const { context, event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     const orgId = context.organization.id;
     const parsed = parseEmailLines(parsedInput.emails);
 
@@ -420,8 +420,8 @@ export const addExternalInviteesAction = authActionClient
 export const removeExternalInviteeAction = authActionClient
   .metadata({ actionName: "removeExternalInvitee" })
   .inputSchema(removeExternalInviteeSchema)
-  .action(async ({ parsedInput }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     const email = parsedInput.externalEmail.toLowerCase();
 
     await db.transaction(async (tx) => {
@@ -451,7 +451,7 @@ export const setResponseStandingAction = authActionClient
   .metadata({ actionName: "setResponseStanding" })
   .inputSchema(setResponseStandingSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+    const { event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
 
     const payment = await db.transaction(async (tx) => {
       // Same lock as the RSVP path, so a promotion cannot race a new yes.
@@ -506,8 +506,8 @@ export const setResponseStandingAction = authActionClient
 export const removeResponseAction = authActionClient
   .metadata({ actionName: "removeResponse" })
   .inputSchema(removeResponseSchema)
-  .action(async ({ parsedInput }) => {
-    const { event } = await requireEventManagementAccess(parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
 
     await db.transaction(async (tx) => {
       // Sync before the delete: the FK sets `response_id` null afterwards and
@@ -536,7 +536,7 @@ export const sendEventInviteEmailsAction = authActionClient
   .metadata({ actionName: "sendEventInviteEmails" })
   .inputSchema(sendEventInviteEmailsSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { context, event } = await requireEventManagementAccess(parsedInput.eventId);
+    const { context, event } = await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     const recipients = await getEventRecipients(context.organization.id, event.id, parsedInput.filter);
 
     if (parsedInput.dryRun) {
@@ -559,8 +559,8 @@ export const sendEventInviteEmailsAction = authActionClient
 export const respondToEventAction = authActionClient
   .metadata({ actionName: "respondToEvent" })
   .inputSchema(respondToEventSchema)
-  .action(async ({ parsedInput }) => {
-    const member = await requireCurrentMember();
+  .action(async ({ parsedInput, ctx }) => {
+    const member = await requireCurrentMember(ctx.viewer);
     const orgId = member.orgId;
 
     const [event] = await db

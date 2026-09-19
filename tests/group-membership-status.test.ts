@@ -20,7 +20,7 @@ import {
   resolveJoinRequestRecipients,
   resolveRegistrationRecipients,
 } from "@/server/notifications/recipients";
-import { listScopedGroupIds } from "@/server/queries/access";
+import { loadViewerScope } from "@/server/queries/viewer";
 import { listEligibleMemberIds } from "@/server/queries/events";
 import { listGroupMembers } from "@/server/queries/groups";
 
@@ -86,7 +86,7 @@ suite("pending join requests are not memberships", () => {
   async function visibility(memberId: string) {
     const [roster, scoped, eligible, recipients, desired, inScope] = await Promise.all([
       listGroupMembers(orgId, groupId),
-      listScopedGroupIds(orgId, memberId),
+      loadViewerScope(orgId, memberId).then((scope) => scope.groups.map((group) => group.id)),
       listEligibleMemberIds(orgId, eventId),
       resolveRegistrationRecipients({ orgId, groupIds: [groupId] }),
       resolveDesiredMembers(orgId, "unused-workspace-group", {

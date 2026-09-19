@@ -25,7 +25,8 @@ export type AppCapabilities = {
 };
 
 export type AppShellContext = {
-  viewer: {
+  /** The signed-in account as the sidebar shows it. */
+  account: {
     name: string;
     email: string;
     avatar: string | null;

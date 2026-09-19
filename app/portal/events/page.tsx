@@ -2,11 +2,13 @@ import { AppPage } from "@/components/app/app-page";
 import { PortalEventsAgenda } from "@/components/app/events/portal-events-agenda";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listEventsForViewer } from "@/server/queries/events";
 import { listFormsForViewer } from "@/server/queries/forms";
 
 export default async function PortalEventsPage() {
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });

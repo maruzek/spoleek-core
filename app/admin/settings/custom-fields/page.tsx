@@ -1,10 +1,12 @@
 import { AppPage } from "@/components/app/app-page";
 import { MemberCustomFieldsAdmin } from "@/components/app/member-custom-fields-admin";
 import { requireOrgAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listMemberCustomFields } from "@/server/queries/member-custom-fields";
 
 export default async function AdminCustomFieldsPage() {
-  const { organization } = await requireOrgAdminAccess();
+  const viewer = await requireViewer();
+  const { organization } = await requireOrgAdminAccess(viewer);
   const fields = await listMemberCustomFields(organization.id);
 
   return (

@@ -2,12 +2,14 @@ import { AppPage } from "@/components/app/app-page";
 import { PortalDashboard } from "@/components/app/portal/portal-dashboard";
 import { orgFormatLocale } from "@/lib/i18n";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getPortalDashboardData } from "@/server/queries/portal-dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function PortalOverviewPage() {
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });

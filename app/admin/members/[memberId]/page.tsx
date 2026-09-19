@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { EnabledProvisionField } from "@/components/app/member-approve-workspace-dialog";
 import { MemberDetailView } from "@/components/app/member-detail/member-detail-view";
 import { getMemberDetailData } from "@/server/queries/member-detail";
+import { requireViewer } from "@/server/queries/viewer";
 import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
 
 export default async function AdminMemberDetailPage({
@@ -14,7 +15,8 @@ export default async function AdminMemberDetailPage({
 }) {
   const { memberId } = await params;
   const query = searchParams ? await searchParams : {};
-  const data = await getMemberDetailData(memberId, {
+  const viewer = await requireViewer();
+  const data = await getMemberDetailData(viewer, memberId, {
     selectedEmailId: typeof query.email === "string" ? query.email : null,
   });
 

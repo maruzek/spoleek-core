@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { buildMemberIdentity, getFormById, getFormEvent, getFormForFiller } from "@/server/queries/forms";
 
 export default async function PortalFormPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });

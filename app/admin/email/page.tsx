@@ -5,6 +5,7 @@ import { AppPage } from "@/components/app/app-page";
 import { Button } from "@/components/ui/button";
 import { EmailAdmin } from "@/components/app/email-admin";
 import { requireAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import {
   getOrganizationEmailActivityDetail,
   listOrganizationEmailActivities,
@@ -15,7 +16,8 @@ export default async function AdminEmailPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { organization } = await requireAdminAccess({
+  const viewer = await requireViewer();
+  const { organization } = await requireAdminAccess(viewer, {
     requireFullAccess: true,
     capability: "canManageOrganization",
   });

@@ -50,14 +50,26 @@ export type EventWizardProps = {
 
 export type FieldErrors = Partial<Record<keyof EventInput, string[]>>;
 
-export function emptyDraft(): EventDraft {
+/**
+ * The owner a fresh draft starts with: the organization when the viewer may
+ * post org-wide, otherwise the first category or group they manage. A scoped
+ * admin must never start on an owner the server will refuse.
+ */
+export function defaultOwner(owners: OwnerOptions): Pick<EventDraft, "ownerType" | "ownerCategoryId" | "ownerGroupId"> {
+  if (owners.organization) return { ownerType: "organization", ownerCategoryId: null, ownerGroupId: null };
+  const category = owners.categories[0];
+  if (category) return { ownerType: "category", ownerCategoryId: category.id, ownerGroupId: null };
+  const group = owners.groups[0];
+  if (group) return { ownerType: "group", ownerCategoryId: null, ownerGroupId: group.id };
+  return { ownerType: "organization", ownerCategoryId: null, ownerGroupId: null };
+}
+
+export function emptyDraft(owners?: OwnerOptions): EventDraft {
   return {
     title: "",
     slug: "",
     descriptionHtml: null,
-    ownerType: "organization",
-    ownerCategoryId: null,
-    ownerGroupId: null,
+    ...(owners ? defaultOwner(owners) : { ownerType: "organization", ownerCategoryId: null, ownerGroupId: null }),
     visibility: "targeted",
     startsAt: null,
     endsAt: null,

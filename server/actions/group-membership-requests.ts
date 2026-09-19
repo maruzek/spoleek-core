@@ -191,8 +191,8 @@ const memberGate = {
 export const joinGroupAction = authActionClient
   .metadata({ actionName: "joinGroup" })
   .inputSchema(joinGroupSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization, member } = await requireCurrentMemberAccess(memberGate);
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization, member } = await requireCurrentMemberAccess(ctx.viewer, memberGate);
 
     const result = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);
@@ -255,8 +255,8 @@ export const joinGroupAction = authActionClient
 export const leaveGroupAction = authActionClient
   .metadata({ actionName: "leaveGroup" })
   .inputSchema(leaveGroupSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization, member } = await requireCurrentMemberAccess(memberGate);
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization, member } = await requireCurrentMemberAccess(ctx.viewer, memberGate);
 
     const group = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);
@@ -288,8 +288,8 @@ export const leaveGroupAction = authActionClient
 export const requestToJoinGroupAction = authActionClient
   .metadata({ actionName: "requestToJoinGroup" })
   .inputSchema(requestToJoinGroupSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization, member } = await requireCurrentMemberAccess(memberGate);
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization, member } = await requireCurrentMemberAccess(ctx.viewer, memberGate);
 
     const group = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);
@@ -362,8 +362,8 @@ export const requestToJoinGroupAction = authActionClient
 export const withdrawJoinRequestAction = authActionClient
   .metadata({ actionName: "withdrawJoinRequest" })
   .inputSchema(withdrawJoinRequestSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization, member } = await requireCurrentMemberAccess(memberGate);
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization, member } = await requireCurrentMemberAccess(ctx.viewer, memberGate);
 
     const group = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);
@@ -393,9 +393,9 @@ export const withdrawJoinRequestAction = authActionClient
 export const decideJoinRequestAction = authActionClient
   .metadata({ actionName: "decideJoinRequest" })
   .inputSchema(decideJoinRequestSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
-    const { member: approver } = await requireGroupManagementAccess(parsedInput.groupId);
+    const { member: approver } = await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
 
     const group = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);
@@ -458,9 +458,9 @@ export const decideJoinRequestAction = authActionClient
 export const setJoinRequestBlockAction = authActionClient
   .metadata({ actionName: "setJoinRequestBlock" })
   .inputSchema(setJoinRequestBlockSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const organization = await requireOrganization();
-    await requireGroupManagementAccess(parsedInput.groupId);
+    await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
 
     const group = await db.transaction(async (tx) => {
       const group = await loadGroup(tx, organization.id, parsedInput.groupId);

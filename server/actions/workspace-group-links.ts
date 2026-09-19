@@ -12,6 +12,8 @@ import {
   updateGroupWorkspaceLinkSchema,
 } from "@/lib/workspace-group-links";
 import { authActionClient } from "@/lib/safe-action-auth";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   groupWorkspaceLinks,
@@ -30,7 +32,7 @@ import {
 import { recordLinkDrift } from "@/server/lib/workspace/drift";
 import { drainWorkspaceSyncOperations } from "@/server/lib/workspace/sync-queue";
 
-async function requireLinkForEdit(linkId: string) {
+async function requireLinkForEdit(viewer: Viewer, linkId: string) {
   const [existing] = await db
     .select({ groupId: groupWorkspaceLinks.groupId })
     .from(groupWorkspaceLinks)
@@ -41,7 +43,7 @@ async function requireLinkForEdit(linkId: string) {
     throw new Error("That Workspace link no longer exists.");
   }
 
-  const context = await requireWorkspaceLinkAccess(existing.groupId);
+  const context = await requireWorkspaceLinkAccess(viewer, existing.groupId);
   const link = await getGroupWorkspaceLink(context.organization.id, linkId);
 
   if (!link) {
@@ -103,8 +105,8 @@ async function findConflictingLink(
 export const previewGroupWorkspaceLinkAction = authActionClient
   .metadata({ actionName: "previewGroupWorkspaceLink" })
   .inputSchema(previewGroupWorkspaceLinkSchema)
-  .action(async ({ parsedInput }) => {
-    const context = await requireWorkspaceLinkAccess(parsedInput.groupId);
+  .action(async ({ parsedInput, ctx }) => {
+    const context = await requireWorkspaceLinkAccess(ctx.viewer, parsedInput.groupId);
 
     const target = await getWorkspaceGroup(
       context.organization.id,
@@ -170,8 +172,8 @@ export const previewGroupWorkspaceLinkAction = authActionClient
 export const createGroupWorkspaceLinkAction = authActionClient
   .metadata({ actionName: "createGroupWorkspaceLink" })
   .inputSchema(createGroupWorkspaceLinkSchema)
-  .action(async ({ parsedInput }) => {
-    const context = await requireWorkspaceLinkAccess(parsedInput.groupId);
+  .action(async ({ parsedInput, ctx }) => {
+    const context = await requireWorkspaceLinkAccess(ctx.viewer, parsedInput.groupId);
 
     const target = await getWorkspaceGroup(
       context.organization.id,
@@ -241,8 +243,8 @@ export const createGroupWorkspaceLinkAction = authActionClient
 export const updateGroupWorkspaceLinkAction = authActionClient
   .metadata({ actionName: "updateGroupWorkspaceLink" })
   .inputSchema(updateGroupWorkspaceLinkSchema)
-  .action(async ({ parsedInput }) => {
-    const { context } = await requireLinkForEdit(parsedInput.linkId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { context } = await requireLinkForEdit(ctx.viewer, parsedInput.linkId);
 
     await db
       .update(groupWorkspaceLinks)
@@ -272,8 +274,8 @@ export const updateGroupWorkspaceLinkAction = authActionClient
 export const syncGroupWorkspaceLinkAction = authActionClient
   .metadata({ actionName: "syncGroupWorkspaceLink" })
   .inputSchema(syncGroupWorkspaceLinkSchema)
-  .action(async ({ parsedInput }) => {
-    const { link } = await requireLinkForEdit(parsedInput.linkId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { link } = await requireLinkForEdit(ctx.viewer, parsedInput.linkId);
 
     const preview = await planLinkSync(link);
 
@@ -321,8 +323,8 @@ export const syncGroupWorkspaceLinkAction = authActionClient
 export const deleteGroupWorkspaceLinkAction = authActionClient
   .metadata({ actionName: "deleteGroupWorkspaceLink" })
   .inputSchema(deleteGroupWorkspaceLinkSchema)
-  .action(async ({ parsedInput }) => {
-    const { link } = await requireLinkForEdit(parsedInput.linkId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { link } = await requireLinkForEdit(ctx.viewer, parsedInput.linkId);
 
     const owned = await db
       .select({ address: workspaceGroupMemberLinks.address })

@@ -52,8 +52,8 @@ async function clearOtherDateOfBirthFields(
 export const saveMemberCustomFieldAction = orgAdminActionClient
   .metadata({ actionName: "saveMemberCustomField" })
   .inputSchema(memberCustomFieldSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const duplicate = await getMemberCustomFieldByKey(organization.id, parsedInput.key);
 
@@ -165,8 +165,8 @@ export const saveMemberCustomFieldAction = orgAdminActionClient
 export const setMemberCustomFieldActiveAction = orgAdminActionClient
   .metadata({ actionName: "setMemberCustomFieldActive" })
   .inputSchema(memberCustomFieldActiveSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     if (!parsedInput.id) {
       throw new Error("Field id is required.");

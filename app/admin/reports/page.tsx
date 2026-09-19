@@ -13,6 +13,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { requireAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getFeeManagingCategory } from "@/server/lib/membership-report";
 import { getBoardReportView } from "@/server/queries/membership-reports";
 import { orgFormatLocale } from "@/lib/i18n";
@@ -24,7 +25,8 @@ export default async function AdminReportsPage({
 }) {
   // Board-only. Group admins work their own report through the group page and
   // must never reach the org-wide roster view.
-  const { organization } = await requireAdminAccess({
+  const viewer = await requireViewer();
+  const { organization } = await requireAdminAccess(viewer, {
     requireFullAccess: true,
     capability: "canManageOrganization",
   });

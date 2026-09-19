@@ -4,6 +4,7 @@ import { getShredAnchor } from "@/lib/forms/rules";
 import { resolveQuestionShape } from "@/lib/forms/validation";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { listManageableOwners, requireFormManagementAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listFormEmailActivities } from "@/server/queries/email-activity";
 import { listEventsForOwnerPicker } from "@/server/queries/events";
 import {
@@ -24,7 +25,8 @@ export default async function AdminFormPage({
 }) {
   const { id } = await params;
   const query = searchParams ? await searchParams : {};
-  const { context, form } = await requireFormManagementAccess(id);
+  const viewer = await requireViewer();
+  const { context, form } = await requireFormManagementAccess(viewer, id);
   const orgId = context.organization.id;
 
   const canWrite = form.isTemplate ? context.capabilities.canManageOrganization : true;
@@ -32,7 +34,7 @@ export default async function AdminFormPage({
 
   const [editor, owners, picker, submissions, aggregates, pending, sendLog] = await Promise.all([
     getFormForEditor(orgId, form),
-    listManageableOwners(context),
+    listManageableOwners(viewer),
     listEventsForOwnerPicker(orgId),
     listFormSubmissions(orgId, form.id, viewerAccess),
     getFormAggregates(orgId, form.id),

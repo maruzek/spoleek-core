@@ -48,8 +48,8 @@ function revalidateGroupPage(group: { slug: string; categoryId: string; id: stri
 export const updateGroupAnnouncementAction = authActionClient
   .metadata({ actionName: "updateGroupAnnouncement" })
   .inputSchema(updateGroupAnnouncementSchema)
-  .action(async ({ parsedInput }) => {
-    const context = await requireGroupManagementAccess(parsedInput.groupId);
+  .action(async ({ parsedInput, ctx }) => {
+    const context = await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
     const orgId = context.organization.id;
     const group = await loadGroupForPage(orgId, parsedInput.groupId);
 
@@ -88,8 +88,8 @@ export const updateGroupAnnouncementAction = authActionClient
 export const saveGroupResourcesAction = authActionClient
   .metadata({ actionName: "saveGroupResources" })
   .inputSchema(saveGroupResourcesSchema)
-  .action(async ({ parsedInput }) => {
-    const context = await requireGroupManagementAccess(parsedInput.groupId);
+  .action(async ({ parsedInput, ctx }) => {
+    const context = await requireGroupManagementAccess(ctx.viewer, parsedInput.groupId);
     const orgId = context.organization.id;
     const group = await loadGroupForPage(orgId, parsedInput.groupId);
 
@@ -151,8 +151,8 @@ export const saveGroupResourcesAction = authActionClient
 export const setHideFromGroupRostersAction = authActionClient
   .metadata({ actionName: "setHideFromGroupRosters" })
   .inputSchema(setHideFromGroupRostersSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization, member } = await requireCurrentMemberAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization, member } = await requireCurrentMemberAccess(ctx.viewer);
 
     await db
       .update(tenantMembers)

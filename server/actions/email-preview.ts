@@ -27,8 +27,8 @@ export type EmailPreview = {
 export const getEmailPreviewAction = orgAdminActionClient
   .metadata({ actionName: "getEmailPreview" })
   .inputSchema(z.object({ emailActivityId: z.string().uuid() }))
-  .action(async ({ parsedInput }): Promise<EmailPreview> => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }): Promise<EmailPreview> => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     // Scoped by org so an id from another tenant cannot be used to read mail.
     const [activity] = await db

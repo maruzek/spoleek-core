@@ -6,6 +6,7 @@ import { PortalEventForms } from "@/components/app/forms/portal-event-forms";
 import { isRsvpOpen } from "@/lib/events/rsvp";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
 import { canManageEvent, requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import {
   getEventCounts,
@@ -17,7 +18,8 @@ import { getFormForFiller, listFormsForEvent } from "@/server/queries/forms";
 
 export default async function PortalEventPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });
@@ -29,7 +31,7 @@ export default async function PortalEventPage({ params }: { params: Promise<{ sl
   const [response, counts, canManage] = await Promise.all([
     getMemberResponse(organization.id, row.event.id, member.id),
     getEventCounts(organization.id, row.event.id),
-    canManageEvent({ organization, member, event: row.event }),
+    canManageEvent(viewer, row.event),
   ]);
   const payment = response ? await getLivePaymentForResponse(organization.id, response.id) : null;
 

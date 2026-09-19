@@ -2,11 +2,13 @@ import { AppPage } from "@/components/app/app-page";
 import { AppPlaceholder } from "@/components/app/app-placeholder";
 import { PaymentQrCard } from "@/components/app/payment-qr-card";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listPaymentsForMember } from "@/server/queries/payments";
 import { PaymentsTable } from "./payments-table";
 
 export default async function PortalPaymentsPage() {
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requireProfileComplete: true,
     requirePolicyAcknowledgement: true,
   });

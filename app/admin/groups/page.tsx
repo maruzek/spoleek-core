@@ -1,10 +1,13 @@
 import { AppPage } from "@/components/app/app-page";
 import { GroupCategoriesAdmin } from "@/components/app/group-categories-admin";
-import { listAccessibleCategoryIds, requireGroupAdminModuleAccess } from "@/server/queries/access";
+import { managesEveryGroup, overseenCategoryIds } from "@/lib/access/viewer";
+import { requireGroupAdminModuleAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listGroupCategories, listPendingRequestCountsByCategory } from "@/server/queries/groups";
 
 export default async function AdminGroupsPage() {
-  const access = await requireGroupAdminModuleAccess();
+  const viewer = await requireViewer();
+  const access = await requireGroupAdminModuleAccess(viewer);
   const [categoryRows, pendingByCategory] = await Promise.all([
     listGroupCategories(access.organization.id),
     listPendingRequestCountsByCategory(access.organization.id),
@@ -13,12 +16,8 @@ export default async function AdminGroupsPage() {
     ...category,
     pendingRequestCount: pendingByCategory.get(category.id) ?? 0,
   }));
-  const canManageCategories =
-    access.adminAccessLevel === "full" || access.member?.role === "leader";
-  const scopedCategoryIds =
-    access.adminAccessLevel === "full" || access.member?.role === "leader" || !access.member
-      ? null
-      : await listAccessibleCategoryIds(access.organization.id, access.member.id);
+  const canManageCategories = managesEveryGroup(viewer);
+  const scopedCategoryIds = overseenCategoryIds(viewer);
 
   return (
     <AppPage

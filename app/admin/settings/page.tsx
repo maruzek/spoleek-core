@@ -7,6 +7,7 @@ import { DEFAULT_SORT_LOCALE, isSortLocaleTag } from "@/lib/collation";
 import { AdminSettingsTabs } from "@/components/app/admin-settings-tabs";
 import { Button } from "@/components/ui/button";
 import { requireAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getAppOrganization, getOrganizationPolicy } from "@/server/queries/app";
 import { listGroupCategories } from "@/server/queries/groups";
 import { listGroupWorkspaceLinks } from "@/server/queries/workspace-group-links";
@@ -23,7 +24,8 @@ export default async function AdminSettingsPage({
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  await requireAdminAccess({
+  const viewer = await requireViewer();
+  await requireAdminAccess(viewer, {
     requireFullAccess: true,
     capability: "canManageOrganization",
   });

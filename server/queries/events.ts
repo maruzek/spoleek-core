@@ -4,6 +4,8 @@ import { resolveEligibleMemberIds } from "@/lib/events/eligibility";
 import { isLivePayment, type EventPaymentView } from "@/lib/events/payment-plan";
 import { eventEndInstant, seatsTaken } from "@/lib/events/rsvp";
 import type { EventRecipientFilter } from "@/lib/events/schemas";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   eventAudience,
@@ -433,9 +435,9 @@ async function attachCounts(orgId: string, rows: OwnerJoined[]): Promise<EventLi
 }
 
 /** Admin table: every live event whose owner the viewer may manage. */
-export async function listEventsForManager() {
-  const context = await requireGroupAdminModuleAccess();
-  const owners = await listManageableOwners(context);
+export async function listEventsForManager(viewer: Viewer) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  const owners = await listManageableOwners(viewer);
   const orgId = context.organization.id;
 
   const ownerClauses = [

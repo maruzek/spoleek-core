@@ -7,6 +7,8 @@ import { z } from "zod";
 import { forbidden } from "next/navigation";
 
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   groupMemberships,
@@ -58,7 +60,7 @@ export const openMembershipReportAction = orgAdminActionClient
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    const { organization } = await requireOrgAdminAccess();
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const result = await openMembershipReport({
       orgId: organization.id,
@@ -84,8 +86,8 @@ export const setReportDeadlineAction = orgAdminActionClient
       confirmDueAt: dateOnlySchema.nullable().default(null),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const report = await loadReportForBoard(organization.id, parsedInput.reportId);
 
     if (report.status === "closed") {
@@ -175,8 +177,8 @@ export const closeMembershipReportAction = orgAdminActionClient
       acknowledgeIncomplete: z.boolean().default(false),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const report = await loadReportForBoard(organization.id, parsedInput.reportId);
 
     if (report.status === "closed") {
@@ -229,8 +231,8 @@ export const closeMembershipReportAction = orgAdminActionClient
 export const reopenMembershipReportAction = orgAdminActionClient
   .metadata({ actionName: "reopenMembershipReport" })
   .inputSchema(z.object({ reportId: z.string().uuid() }))
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const report = await loadReportForBoard(organization.id, parsedInput.reportId);
 
     if (report.status !== "closed") {
@@ -256,7 +258,7 @@ export const reopenMembershipReportAction = orgAdminActionClient
  * their own report because they administer that group, which is the same guard
  * the rest of the group page uses. A report row is never addressable on its own.
  */
-async function requireReportGroupAccess(reportGroupId: string) {
+async function requireReportGroupAccess(viewer: Viewer, reportGroupId: string) {
   const [row] = await db
     .select({
       id: membershipReportGroups.id,
@@ -280,7 +282,7 @@ async function requireReportGroupAccess(reportGroupId: string) {
   const groupId = row.groupId;
   if (!groupId) forbidden();
 
-  const access = await requireGroupManagementAccess(groupId);
+  const access = await requireGroupManagementAccess(viewer, groupId);
 
   if (access.organization.id !== row.orgId) forbidden();
 
@@ -308,7 +310,7 @@ export const setReportMemberInclusionAction = authActionClient
       note: z.string().trim().max(500).optional(),
     }),
   )
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [member] = await db
       .select({ reportGroupId: membershipReportMembers.reportGroupId })
       .from(membershipReportMembers)
@@ -317,7 +319,7 @@ export const setReportMemberInclusionAction = authActionClient
 
     if (!member) forbidden();
 
-    const { row } = await requireReportGroupAccess(member.reportGroupId);
+    const { row } = await requireReportGroupAccess(ctx.viewer, member.reportGroupId);
     assertEditable(row.status, row.reportStatus);
 
     // Excluding someone the payments say is confirmed overrides the record, so
@@ -367,8 +369,8 @@ export const addReportMemberManuallyAction = authActionClient
       note: z.string().trim().min(1).max(500),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { row } = await requireReportGroupAccess(parsedInput.reportGroupId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { row } = await requireReportGroupAccess(ctx.viewer, parsedInput.reportGroupId);
 
     if (row.reportStatus !== "open") {
       throw new Error("This report is no longer collecting.");
@@ -456,7 +458,7 @@ export const addReportMemberManuallyAction = authActionClient
 export const acceptPendingAdditionAction = authActionClient
   .metadata({ actionName: "acceptPendingAddition" })
   .inputSchema(z.object({ reportMemberId: z.string().uuid() }))
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [member] = await db
       .select({
         reportGroupId: membershipReportMembers.reportGroupId,
@@ -471,7 +473,7 @@ export const acceptPendingAdditionAction = authActionClient
       throw new Error("That member is already part of the report.");
     }
 
-    const { row } = await requireReportGroupAccess(member.reportGroupId);
+    const { row } = await requireReportGroupAccess(ctx.viewer, member.reportGroupId);
 
     if (row.reportStatus !== "open") {
       throw new Error("This report is no longer collecting.");
@@ -521,8 +523,9 @@ export const submitGroupReportAction = authActionClient
       submissionNote: z.string().trim().max(1000).optional(),
     }),
   )
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const { row, access } = await requireReportGroupAccess(
+      ctx.viewer,
       parsedInput.reportGroupId,
     );
     assertEditable(row.status, row.reportStatus);
@@ -593,7 +596,7 @@ export const approveGroupReportAction = orgAdminActionClient
   .metadata({ actionName: "approveGroupReport" })
   .inputSchema(z.object({ reportGroupId: z.string().uuid() }))
   .action(async ({ parsedInput, ctx }) => {
-    const { organization } = await requireOrgAdminAccess();
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const row = await loadReportGroupForBoard(
       organization.id,
       parsedInput.reportGroupId,
@@ -650,7 +653,7 @@ export const bulkApproveGroupReportsAction = orgAdminActionClient
     }),
   )
   .action(async ({ parsedInput, ctx }) => {
-    const { organization } = await requireOrgAdminAccess();
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const rows = await db
       .select({
@@ -736,8 +739,8 @@ export const returnGroupReportAction = orgAdminActionClient
       reason: z.string().trim().min(1).max(1000),
     }),
   )
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
     const row = await loadReportGroupForBoard(
       organization.id,
       parsedInput.reportGroupId,

@@ -15,6 +15,8 @@ import {
   setPolicyDocumentActiveSchema,
 } from "@/lib/policies";
 import { authActionClient, orgAdminActionClient } from "@/lib/safe-action-auth";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   memberPolicyAcknowledgements,
@@ -37,8 +39,8 @@ import {
  * tenant boundary: without it an org admin could address another org's
  * documents by id.
  */
-async function requirePolicyDocument(documentId: string) {
-  const { organization } = await requireOrgAdminAccess();
+async function requirePolicyDocument(viewer: Viewer, documentId: string) {
+  const { organization } = await requireOrgAdminAccess(viewer);
 
   const [document] = await db
     .select()
@@ -70,8 +72,8 @@ async function requirePolicyDocument(documentId: string) {
 export const savePolicyDraftAction = orgAdminActionClient
   .metadata({ actionName: "savePolicyDraft" })
   .inputSchema(savePolicyDraftSchema)
-  .action(async ({ parsedInput }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
     const bodyHtml = sanitizePolicyHtml(parsedInput.bodyHtml);
 
     const [existing] = await db
@@ -116,7 +118,7 @@ export const publishPolicyVersionAction = orgAdminActionClient
   .metadata({ actionName: "publishPolicyVersion" })
   .inputSchema(publishPolicyVersionSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
 
     const [draft] = await db
       .select()
@@ -225,8 +227,8 @@ export const publishPolicyVersionAction = orgAdminActionClient
 export const discardPolicyDraftAction = orgAdminActionClient
   .metadata({ actionName: "discardPolicyDraft" })
   .inputSchema(discardPolicyDraftSchema)
-  .action(async ({ parsedInput }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
 
     await db
       .delete(policyVersions)
@@ -252,8 +254,8 @@ export const discardPolicyDraftAction = orgAdminActionClient
 export const createPolicyDocumentAction = orgAdminActionClient
   .metadata({ actionName: "createPolicyDocument" })
   .inputSchema(createPolicyDocumentSchema)
-  .action(async ({ parsedInput }) => {
-    const { organization } = await requireOrgAdminAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { organization } = await requireOrgAdminAccess(ctx.viewer);
 
     const [taken] = await db
       .select({ id: policyDocuments.id })
@@ -296,8 +298,8 @@ export const createPolicyDocumentAction = orgAdminActionClient
 export const renamePolicyDocumentAction = orgAdminActionClient
   .metadata({ actionName: "renamePolicyDocument" })
   .inputSchema(renamePolicyDocumentSchema)
-  .action(async ({ parsedInput }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
 
     await db
       .update(policyDocuments)
@@ -320,8 +322,8 @@ export const renamePolicyDocumentAction = orgAdminActionClient
 export const setPolicyDocumentActiveAction = orgAdminActionClient
   .metadata({ actionName: "setPolicyDocumentActive" })
   .inputSchema(setPolicyDocumentActiveSchema)
-  .action(async ({ parsedInput }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
 
     await db
       .update(policyDocuments)
@@ -344,8 +346,8 @@ export const setPolicyDocumentActiveAction = orgAdminActionClient
 export const deletePolicyDocumentAction = orgAdminActionClient
   .metadata({ actionName: "deletePolicyDocument" })
   .inputSchema(deletePolicyDocumentSchema)
-  .action(async ({ parsedInput }) => {
-    const { document } = await requirePolicyDocument(parsedInput.documentId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { document } = await requirePolicyDocument(ctx.viewer, parsedInput.documentId);
 
     const [{ acknowledgements = 0 } = { acknowledgements: 0 }] = await db
       .select({ acknowledgements: count() })
@@ -385,8 +387,8 @@ export const deletePolicyDocumentAction = orgAdminActionClient
 export const acknowledgePoliciesAction = authActionClient
   .metadata({ actionName: "acknowledgePolicies" })
   .inputSchema(acknowledgePoliciesSchema)
-  .action(async ({ parsedInput }) => {
-    const { member, organization } = await requireCurrentMemberAccess();
+  .action(async ({ parsedInput, ctx }) => {
+    const { member, organization } = await requireCurrentMemberAccess(ctx.viewer);
 
     const outstanding = await listOutstandingPolicies(organization.id, member.id);
     const outstandingIds = new Set(outstanding.map((entry) => entry.version.id));

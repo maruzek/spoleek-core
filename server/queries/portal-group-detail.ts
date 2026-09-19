@@ -30,7 +30,6 @@ import {
   type GroupMembershipRole,
   type MemberPaymentStatus,
   type Organization,
-  type TenantMember,
 } from "@/server/db/schema";
 import { activeMembership } from "@/server/lib/group-membership";
 import {
@@ -40,7 +39,8 @@ import {
   type PortalGroupNotice,
   type PortalGroupPerson,
 } from "@/server/lib/portal-group-summaries";
-import { canManageGroup } from "@/server/queries/access";
+import { canManageGroup, type Viewer } from "@/lib/access/viewer";
+import { requireCurrentMember } from "@/server/queries/access";
 import { listEventsForViewer, type ViewerEventItem } from "@/server/queries/events";
 import { listFormsForViewer, type ViewerFormItem } from "@/server/queries/forms";
 import { listPendingRequestCounts } from "@/server/queries/groups";
@@ -108,11 +108,12 @@ export type PortalGroupDetail = {
  * avatar and role — nothing else.
  */
 export async function getPortalGroupDetail(params: {
-  organization: Organization;
-  member: Pick<TenantMember, "id" | "role" | "status" | "userId">;
+  viewer: Viewer;
   slug: string;
 }): Promise<PortalGroupDetail | null> {
-  const { organization, member, slug } = params;
+  const { viewer, slug } = params;
+  const { organization } = viewer;
+  const member = await requireCurrentMember(viewer);
   const orgId = organization.id;
   const memberId = member.id;
 
@@ -182,7 +183,7 @@ export async function getPortalGroupDetail(params: {
     listFormsForViewer({ orgId, memberId }),
     listPaymentsForMember(orgId, memberId),
     isMember ? loadAdminCountByGroup(orgId, [group.id]) : new Map<string, number>(),
-    canManageGroup({ orgId, member, group }),
+    canManageGroup(viewer, group),
     db
       .select({ id: groups.id, name: groups.name, joinPolicy: groups.joinPolicy })
       .from(groupMemberships)

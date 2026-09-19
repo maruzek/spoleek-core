@@ -95,7 +95,7 @@ export function EventWizardDialog({
   const isEdit = Boolean(event?.id);
 
   const [activeStep, setActiveStep] = useState<WizardStep>("basics");
-  const [draft, setDraft] = useState<EventDraft>(() => event ?? emptyDraft());
+  const [draft, setDraft] = useState<EventDraft>(() => event ?? emptyDraft(owners));
   const [rules, setRules] = useState<AudienceDraft[]>(audience ?? []);
   const [slugTouched, setSlugTouched] = useState(isEdit);
   // Errors only show for steps the user has tried to leave.
@@ -112,7 +112,7 @@ export function EventWizardDialog({
     setWasOpen(open);
     if (open) {
       setActiveStep("basics");
-      setDraft(event ?? emptyDraft());
+      setDraft(event ?? emptyDraft(owners));
       setRules(audience ?? []);
       setSlugTouched(isEdit);
       setVisited(new Set());
@@ -124,7 +124,7 @@ export function EventWizardDialog({
 
   // Dirty = the draft or member rules differ from what the wizard opened with.
   const initial = useMemo(
-    () => JSON.stringify({ draft: event ?? emptyDraft(), rules: audience ?? [] }),
+    () => JSON.stringify({ draft: event ?? emptyDraft(owners), rules: audience ?? [] }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- snapshot per open
     [open],
   );
@@ -189,6 +189,10 @@ export function EventWizardDialog({
       toast.success(isEdit ? "Event updated." : "Event created as a draft.");
       onOpenChange(false);
       onSaved(eventId!);
+    } catch {
+      // A guard that throws out of the action (forbidden) never reaches
+      // `serverError`; without this the dialog just stopped spinning.
+      toast.error("You cannot save an event for that owner.");
     } finally {
       setSaving(false);
     }

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppPage } from "@/components/app/app-page";
 import { GroupDetail } from "@/components/app/group-detail";
 import { requireGroupManagementAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getGroupDetailData } from "@/server/queries/groups";
 import { getMembersAdminPageData } from "@/server/queries/members";
 import { WORKSPACE_FIELD_MAP } from "@/server/lib/workspace/field-catalog";
@@ -22,14 +23,15 @@ export default async function AdminGroupPage({
 }) {
   const [{ categoryId, groupId }, { report: requestedReportId, tab }] =
     await Promise.all([params, searchParams]);
+  const viewer = await requireViewer();
   const [access, organization] = await Promise.all([
-    requireGroupManagementAccess(groupId),
+    requireGroupManagementAccess(viewer, groupId),
     getAppOrganization(),
   ]);
   const [detail, membersTable, workspaceLinks, workspaceDrift, reportView] = await Promise.all([
     getGroupDetailData(access.organization.id, groupId),
     // The Members tab is the dashboard's table narrowed to this group.
-    getMembersAdminPageData(null, { groupId }),
+    getMembersAdminPageData(viewer, null, { groupId }),
     listGroupWorkspaceLinks(access.organization.id, { groupId }),
     listWorkspaceGroupDrift(access.organization.id, {
       groupId,

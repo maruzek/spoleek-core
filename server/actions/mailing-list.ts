@@ -17,8 +17,8 @@ export const resolveMailingListAction = authActionClient
   .metadata({ actionName: "resolveMailingList" })
   .inputSchema(resolveMailingListSchema)
   .outputSchema(resolveMailingListResultSchema)
-  .action(async ({ parsedInput }) => {
-    const dataset = await resolveMemberDataset(parsedInput.scope);
+  .action(async ({ parsedInput, ctx }) => {
+    const dataset = await resolveMemberDataset(ctx.viewer, parsedInput.scope);
     const selectedMemberIds = new Set(parsedInput.selectedMemberIds);
     const scopedRows =
       selectedMemberIds.size > 0

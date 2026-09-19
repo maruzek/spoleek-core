@@ -2,8 +2,8 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { buildAbsoluteAppUrl } from "@/lib/auth/urls";
-import { getViewerSession } from "@/server/queries/auth";
 import { requireOrgAdminAccess } from "@/server/queries/access";
+import { getViewer } from "@/server/queries/viewer";
 import {
   buildWorkspaceAuthUrl,
   generateOAuthState,
@@ -16,12 +16,12 @@ const STATE_TTL_SECONDS = 600;
 const SETUP_ORIGIN_SUFFIX = ".setup";
 
 export async function GET(request: NextRequest) {
-  const session = await getViewerSession();
-  if (!session) {
+  const viewer = await getViewer();
+  if (!viewer) {
     return NextResponse.redirect(buildAbsoluteAppUrl("/"));
   }
 
-  const { organization } = await requireOrgAdminAccess(session.user.id);
+  const { organization } = await requireOrgAdminAccess(viewer);
   // The origin travels inside the state value itself, so the callback can send
   // the admin back to the first-run wizard rather than to settings.
   const state =

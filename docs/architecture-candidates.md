@@ -38,57 +38,20 @@ made `getPaymentScope` testable with a fake access object.
 
 ---
 
-## 1 · Collapse the access-guard twins into one Viewer — **Strong**
+## ✅ 1 · Viewer — DONE (2026-09-19)
 
-**Files**
-- `server/queries/access.ts` — `getViewerAppContext` :151, `requireAdminAccess`
-  :636, `requireGroupManagementAccess` :484 vs `canManageGroup` :523,
-  `requireEventOwnerAccess` :722 vs `canManageEvent` :778,
-  `requireEventManagementAccess` :821
-- `lib/safe-action-auth.ts` :11-30 (`authActionClient`, `orgAdminActionClient`)
-- `server/queries/auth.ts` :6-9
-- every `server/actions/*` file: 82 in-body guard calls; 98 of 142 actions
-  ignore `ctx`
-
-**Problem.** "Who may manage group G / event E" is written twice — a throwing
-`require*` and a non-throwing `can*` — with structurally different bodies
-(`requireEventOwnerAccess` goes through the `canManageGroups` capability gate;
-`canManageEvent` does not). Every guarded call re-resolves the viewer from
-scratch: `requireEventManagementAccess` → `requireOrganization` →
-`requireEventOwnerAccess` → `requireGroupManagementAccess` →
-`requireGroupAdminModuleAccess` → `requireAdminAccess` → `getViewerAppContext`
-→ `requireOrganization` again → `getCurrentMember` … ≈15–18 queries before the
-action does its own work. `requireOrganization()` has 26 uncached call sites;
-`grep -c 'cache(' server/queries/access.ts` = 0. The `orgAdminMiddleware`
-queries `systemRole`, then `requireOrgAdminAccess` queries it again (:673-678).
-
-**Deepening.** One `Viewer` value per request — session, org, member,
-systemRole, scoped category ids, scoped group ids — resolved once in the
-safe-action middleware (into `ctx.viewer`) and once per page. Each `require*`
-becomes "throw unless `can*`(viewer, …)" so there is exactly one predicate per
-rule. Actions read `ctx.viewer` and stop calling `headers()`-bound guards.
-`getPaymentScope(access)` already has this shape; generalise it.
-
-**Deletion test.** Deleting the `can*` twins forces the `require*` guards to
-expose their predicate for the portal pages → concentrates. Collapse.
-
-**Suggested order**
-1. Introduce `Viewer` (type + one loader) and make `getViewerAppContext` build
-   it; memoise with React `cache()` for the request.
-2. Rewrite `canManageGroup` / `canManageEvent` to take a `Viewer`; make the
-   `require*` twins one-liners over them.
-3. Add `ctx.viewer` to `authActionClient`; migrate actions file by file
-   (start with `server/actions/payments.ts`, then `events.ts`, `groups.ts`).
-4. Tests: `tests/access-predicates.test.ts` constructing Viewers by hand;
-   one DB test per predicate for the scoped-admin cases.
-
-**Done when**
-- `grep -c "await require" server/actions/*.ts` drops to ~0 for the migrated
-  files; guards take a `Viewer`.
-- `canManageGroup` / `canManageEvent` are the only place each rule is spelled.
-- At least one action in `server/actions/payments.ts` has a test that never
-  touches `headers()`.
-- Add **Viewer** to `CONTEXT.md`.
+`lib/access/viewer.ts` (`Viewer`, pure predicates: `canManageGroup`,
+`canManageCategory`, `canOverseeCategory`, `canManageOwner`, `getCapabilities`,
+`getAdminAccessLevel`), `server/queries/viewer.ts` (`loadViewer` memoised with
+React `cache()`, `requireViewer`, `getViewer`, `loadViewerScope`). Every guard
+in `server/queries/access.ts` takes a `Viewer` first; `authActionClient` puts
+one on `ctx.viewer` (`sessionActionClient` is session-only, for setup). The
+`can*`/`require*` twins are gone — one predicate per rule. Payment mutations
+live in `server/lib/payment-actions.ts` and are tested through a hand-built
+Viewer (`tests/helpers/viewer.ts`, `tests/access-predicates.test.ts`,
+`tests/payment-scope-db.test.ts`). Left as is: `requireOrganization()` still
+has 18 action call sites (now cached, so harmless); replace with
+`ctx.viewer.organization` when touching those files.
 
 ---
 

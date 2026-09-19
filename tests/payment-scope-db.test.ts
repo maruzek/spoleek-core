@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import { EMPTY_PAYMENT_SCOPE } from "@/lib/payments/scope";
 import { db, pool } from "@/server/db";
@@ -12,8 +12,12 @@ import {
   memberPayments,
   organizations,
   tenantMembers,
+  users,
 } from "@/server/db/schema";
+import { bulkMarkPaymentsPaid, markPaymentPaid } from "@/server/lib/payment-actions";
 import { getPaymentScope } from "@/server/queries/access";
+import { loadViewerScope } from "@/server/queries/viewer";
+import { makeViewer } from "./helpers/viewer";
 import { listPaymentsForOrg } from "@/server/queries/payments";
 
 /**
@@ -41,16 +45,17 @@ suite("payment scope", () => {
   let otherMemberId: string;
   let ledEventId: string;
   let orgEventId: string;
+  let userId: string;
 
   const paymentIds: Record<string, string> = {};
 
-  function scopedAccess(memberId: string) {
-    return {
-      adminAccessLevel: "scoped" as const,
-      capabilities: { canManagePayments: true } as never,
-      organization: { id: orgId } as never,
-      member: { id: memberId } as never,
-    };
+  /** A plain member whose only access is the category/group admin rows loaded from the DB. */
+  async function scopedViewer(memberId: string) {
+    return makeViewer({
+      orgId,
+      member: { id: memberId, userId },
+      scope: await loadViewerScope(orgId, memberId),
+    });
   }
 
   async function makeMember(firstName: string) {
@@ -95,6 +100,9 @@ suite("payment scope", () => {
       .values({ name: "Payment Scope Test Org", slug: `payment-scope-${suffix}` })
       .returning({ id: organizations.id });
     orgId = org.id;
+
+    userId = `user-${suffix}`;
+    await db.insert(users).values({ id: userId, name: "Leader", email: `${userId}@example.test` });
 
     const [category] = await db
       .insert(groupCategories)
@@ -164,6 +172,9 @@ suite("payment scope", () => {
     if (orgId) {
       await db.delete(organizations).where(eq(organizations.id, orgId));
     }
+    if (userId) {
+      await db.delete(users).where(eq(users.id, userId));
+    }
     await pool.end();
   });
 
@@ -178,7 +189,7 @@ suite("payment scope", () => {
   }
 
   it("a group leader reaches their members' fees and their event, plus their members' rows elsewhere", async () => {
-    const scope = await getPaymentScope(scopedAccess(leaderId));
+    const scope = await getPaymentScope(await scopedViewer(leaderId));
     if (scope === null || scope === "full") throw new Error("expected a scoped allowlist");
     expect([...scope.memberIds].sort()).toEqual([ledMemberId, leaderId].sort());
     expect(scope.eventIds).toEqual([ledEventId]);
@@ -192,20 +203,56 @@ suite("payment scope", () => {
   });
 
   it("a category admin with no group-admin row sees only events their category's groups own", async () => {
-    const scope = await getPaymentScope(scopedAccess(categoryAdminId));
+    const scope = await getPaymentScope(await scopedViewer(categoryAdminId));
     expect(scope).toEqual({ memberIds: [], eventIds: [] });
     // The old read path turned this into "every payment in the org".
     expect(await listedKeys({ scope: EMPTY_PAYMENT_SCOPE })).toEqual([]);
   });
 
   it("no capability means no scope", async () => {
-    const access = { ...scopedAccess(leaderId), capabilities: { canManagePayments: false } as never };
-    expect(await getPaymentScope(access)).toBeNull();
+    // Same member, but with no admin rows: no `canManagePayments` capability.
+    expect(await getPaymentScope(makeViewer({ orgId, member: { id: leaderId } }))).toBeNull();
   });
 
   it("full access is unrestricted", async () => {
-    const access = { ...scopedAccess(leaderId), adminAccessLevel: "full" as const };
-    expect(await getPaymentScope(access)).toBe("full");
+    const orgAdmin = makeViewer({ orgId, member: { id: leaderId, role: "org_admin" } });
+    expect(await getPaymentScope(orgAdmin)).toBe("full");
     expect(await listedKeys({ scope: "full" })).toHaveLength(5);
+  });
+
+  // The mutations behind `server/actions/payments.ts`, driven by a Viewer built
+  // here: no session, no `headers()`.
+  describe("marking paid through the viewer", () => {
+    it("refuses a payment outside the scope", async () => {
+      const viewer = await scopedViewer(leaderId);
+      await expect(
+        markPaymentPaid(viewer, { paymentId: paymentIds["fee-other"] }),
+      ).rejects.toThrow();
+      const [row] = await db
+        .select({ status: memberPayments.status })
+        .from(memberPayments)
+        .where(eq(memberPayments.id, paymentIds["fee-other"]));
+      expect(row.status).toBe("pending");
+    });
+
+    it("a bulk call marks only the ids in scope and reports the rest as skipped", async () => {
+      const viewer = await scopedViewer(leaderId);
+      const requested = [
+        paymentIds["fee-led"],
+        paymentIds["fee-other"],
+        paymentIds["org-event-led-member"],
+      ];
+      const { paidIds } = await bulkMarkPaymentsPaid(viewer, { paymentIds: requested });
+      expect(paidIds).toEqual([paymentIds["fee-led"]]);
+
+      const rows = await db
+        .select({ id: memberPayments.id, status: memberPayments.status, confirmedByUserId: memberPayments.confirmedByUserId })
+        .from(memberPayments)
+        .where(inArray(memberPayments.id, requested));
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      expect(byId.get(paymentIds["fee-led"])).toMatchObject({ status: "paid", confirmedByUserId: userId });
+      expect(byId.get(paymentIds["fee-other"])?.status).toBe("pending");
+      expect(byId.get(paymentIds["org-event-led-member"])?.status).toBe("pending");
+    });
   });
 });

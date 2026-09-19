@@ -202,8 +202,8 @@ export const createFormAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const { settings } = parsedInput;
     const context = parsedInput.asTemplate
-      ? await requireGroupAdminModuleAccess()
-      : await requireFormOwnerAccess(settings.ownerType, ownerIdOf(settings));
+      ? await requireGroupAdminModuleAccess(ctx.viewer)
+      : await requireFormOwnerAccess(ctx.viewer, settings.ownerType, ownerIdOf(settings));
     const orgId = context.organization.id;
 
     if (parsedInput.asTemplate && !context.capabilities.canManageOrganization) {
@@ -211,13 +211,13 @@ export const createFormAction = authActionClient
     }
 
     if (parsedInput.eventId && !parsedInput.asTemplate) {
-      await requireEventManagementAccess(parsedInput.eventId);
+      await requireEventManagementAccess(ctx.viewer, parsedInput.eventId);
     }
 
     let template: { id: string } | null = null;
     if (parsedInput.fromTemplateId) {
       // Read access to a template is any manager's.
-      const { form } = await requireFormManagementAccess(parsedInput.fromTemplateId);
+      const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.fromTemplateId);
       if (!form.isTemplate) throw new FormError("NOT_FOUND");
       template = { id: form.id };
     }
@@ -245,8 +245,8 @@ export const createFormAction = authActionClient
 export const updateFormSettingsAction = authActionClient
   .metadata({ actionName: "updateFormSettings" })
   .inputSchema(updateFormSettingsSchema)
-  .action(async ({ parsedInput }) => {
-    const { form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     const { settings } = parsedInput;
 
     // Templates stay org-owned; the CHECK would reject anything else anyway.
@@ -259,7 +259,7 @@ export const updateFormSettingsAction = authActionClient
       (form.ownerType === "group" ? form.ownerGroupId : form.ownerCategoryId) !==
         ownerIdOf(settings);
     if (ownerChanged) {
-      await requireFormOwnerAccess(settings.ownerType, ownerIdOf(settings));
+      await requireFormOwnerAccess(ctx.viewer, settings.ownerType, ownerIdOf(settings));
     }
 
     await db.update(forms).set(settingsColumns(settings)).where(eq(forms.id, form.id));
@@ -270,8 +270,8 @@ export const updateFormSettingsAction = authActionClient
 export const setFormStatusAction = authActionClient
   .metadata({ actionName: "setFormStatus" })
   .inputSchema(setFormStatusSchema)
-  .action(async ({ parsedInput }) => {
-    const { form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     if (form.isTemplate) throw new FormError("TEMPLATE_READ_ONLY");
     await db.update(forms).set({ status: parsedInput.status }).where(eq(forms.id, form.id));
     return { success: true as const };
@@ -280,8 +280,8 @@ export const setFormStatusAction = authActionClient
 export const deleteFormAction = authActionClient
   .metadata({ actionName: "deleteForm" })
   .inputSchema(formIdSchema)
-  .action(async ({ parsedInput }) => {
-    const { form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     await db.update(forms).set({ deletedAt: new Date() }).where(eq(forms.id, form.id));
     return { success: true as const };
   });
@@ -289,8 +289,8 @@ export const deleteFormAction = authActionClient
 export const attachFormToEventAction = authActionClient
   .metadata({ actionName: "attachFormToEvent" })
   .inputSchema(attachFormToEventSchema)
-  .action(async ({ parsedInput }) => {
-    const { form, event } = await requireFormAttachAccess(parsedInput.formId, parsedInput.eventId);
+  .action(async ({ parsedInput, ctx }) => {
+    const { form, event } = await requireFormAttachAccess(ctx.viewer, parsedInput.formId, parsedInput.eventId);
     if (form.isTemplate) throw new FormError("TEMPLATE_READ_ONLY");
     await db.update(forms).set({ eventId: event.id }).where(eq(forms.id, form.id));
     return { success: true as const };
@@ -299,10 +299,10 @@ export const attachFormToEventAction = authActionClient
 export const detachFormFromEventAction = authActionClient
   .metadata({ actionName: "detachFormFromEvent" })
   .inputSchema(formIdSchema)
-  .action(async ({ parsedInput }) => {
-    const { form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     if (!form.eventId) return { success: true as const };
-    await requireFormAttachAccess(form.id, form.eventId);
+    await requireFormAttachAccess(ctx.viewer, form.id, form.eventId);
     await db.update(forms).set({ eventId: null, onlyRsvpYes: false }).where(eq(forms.id, form.id));
     return { success: true as const };
   });
@@ -312,7 +312,7 @@ export const saveFormAsTemplateAction = authActionClient
   .metadata({ actionName: "saveFormAsTemplate" })
   .inputSchema(formIdSchema.extend({ title: z.string().trim().min(2).max(200).optional() }))
   .action(async ({ parsedInput, ctx }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId);
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId);
     const orgId = context.organization.id;
 
     const templateId = await db.transaction(async (tx) => {
@@ -343,7 +343,7 @@ export const duplicateFormAction = authActionClient
   .metadata({ actionName: "duplicateForm" })
   .inputSchema(formIdSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId);
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId);
     const orgId = context.organization.id;
 
     const copyId = await db.transaction(async (tx) => {
@@ -377,8 +377,8 @@ export const duplicateFormAction = authActionClient
 export const loadLinkableFieldsAction = authActionClient
   .metadata({ actionName: "loadLinkableFields" })
   .inputSchema(z.object({}))
-  .action(async () => {
-    const context = await requireGroupAdminModuleAccess();
+  .action(async ({ ctx }) => {
+    const context = await requireGroupAdminModuleAccess(ctx.viewer);
     const fields = await listActiveMemberCustomFields(context.organization.id);
     return {
       fields: fields
@@ -402,8 +402,8 @@ export const loadLinkableFieldsAction = authActionClient
 export const setFormQuestionsAction = authActionClient
   .metadata({ actionName: "setFormQuestions" })
   .inputSchema(setFormQuestionsSchema)
-  .action(async ({ parsedInput }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     const orgId = context.organization.id;
 
     const linkedIds = [
@@ -480,8 +480,8 @@ export const setFormQuestionsAction = authActionClient
 export const setFormAudienceAction = authActionClient
   .metadata({ actionName: "setFormAudience" })
   .inputSchema(setFormAudienceSchema)
-  .action(async ({ parsedInput }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     const orgId = context.organization.id;
 
     await db.transaction(async (tx) => {
@@ -510,7 +510,7 @@ export const submitFormForMemberAction = authActionClient
   .metadata({ actionName: "submitFormForMember" })
   .inputSchema(submitFormForMemberSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     const orgId = context.organization.id;
     if (form.isTemplate) throw new FormError("TEMPLATE_READ_ONLY");
 
@@ -569,8 +569,8 @@ export const submitFormForMemberAction = authActionClient
 export const deleteSubmissionAction = authActionClient
   .metadata({ actionName: "deleteSubmission" })
   .inputSchema(deleteSubmissionSchema)
-  .action(async ({ parsedInput }) => {
-    const { form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+  .action(async ({ parsedInput, ctx }) => {
+    const { form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     await db
       .delete(formSubmissions)
       .where(and(eq(formSubmissions.formId, form.id), eq(formSubmissions.id, parsedInput.submissionId)));
@@ -585,7 +585,7 @@ export const sendFormReminderEmailsAction = authActionClient
   .metadata({ actionName: "sendFormReminderEmails" })
   .inputSchema(sendFormReminderEmailsSchema)
   .action(async ({ parsedInput, ctx }) => {
-    const { context, form } = await requireFormManagementAccess(parsedInput.formId, { write: true });
+    const { context, form } = await requireFormManagementAccess(ctx.viewer, parsedInput.formId, { write: true });
     if (form.isTemplate) throw new FormError("TEMPLATE_READ_ONLY");
     const orgId = context.organization.id;
 
@@ -613,8 +613,8 @@ export const sendFormReminderEmailsAction = authActionClient
 export const submitFormAction = authActionClient
   .metadata({ actionName: "submitForm" })
   .inputSchema(submitFormSchema)
-  .action(async ({ parsedInput }) => {
-    const member = await requireCurrentMember();
+  .action(async ({ parsedInput, ctx }) => {
+    const member = await requireCurrentMember(ctx.viewer);
     const orgId = member.orgId;
 
     const form = await getFormById(orgId, parsedInput.formId);

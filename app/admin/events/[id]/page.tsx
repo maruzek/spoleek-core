@@ -5,6 +5,7 @@ import { countNoAnswer } from "@/lib/events/no-answer";
 import { eventRecipientFilterSchema, type EventRecipientFilter } from "@/lib/events/schemas";
 import { getMemberDisplayName } from "@/lib/member-custom-fields";
 import { listManageableOwners, requireEventManagementAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { listEventEmailActivities } from "@/server/queries/email-activity";
 import {
   getEventById,
@@ -27,13 +28,14 @@ export default async function AdminEventPage({
 }) {
   const { id } = await params;
   const query = searchParams ? await searchParams : {};
-  const { context, event } = await requireEventManagementAccess(id);
+  const viewer = await requireViewer();
+  const { context, event } = await requireEventManagementAccess(viewer, id);
   const orgId = context.organization.id;
 
   const [row, owners, picker, audience, eligibleIds, responses, counts, sendLog] =
     await Promise.all([
       getEventById(orgId, event.id),
-      listManageableOwners(context),
+      listManageableOwners(viewer),
       listEventsForOwnerPicker(orgId),
       listEventAudience(orgId, event.id),
       listEligibleMemberIds(orgId, event.id),
@@ -44,8 +46,8 @@ export default async function AdminEventPage({
 
   const [formRows, managed, templates] = await Promise.all([
     listEventFormsForManager(orgId, event),
-    listFormsForManager({ templates: false }),
-    listFormsForManager({ templates: true }),
+    listFormsForManager(viewer, { templates: false }),
+    listFormsForManager(viewer, { templates: true }),
   ]);
 
   const recipientEntries = await Promise.all(

@@ -12,6 +12,8 @@ import {
 } from "@/lib/member-custom-fields";
 import { memberStatusSortRank } from "@/lib/member-ordering";
 import { DEFAULT_PHONE_COUNTRY } from "@/lib/phone";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { collateFor } from "@/server/lib/collation";
 import type { CustomFieldValue } from "@/server/db/schema";
 import { db } from "@/server/db";
@@ -855,6 +857,7 @@ export async function getWorkspaceModuleState(
 }
 
 export async function getMembersAdminPageData(
+  viewer: Viewer,
   editMemberId: string | null,
   options?: {
     includeDeleted?: boolean;
@@ -866,7 +869,7 @@ export async function getMembersAdminPageData(
     groupId?: string;
   },
 ) {
-  const scope = await resolveMemberManagementScope();
+  const scope = await resolveMemberManagementScope(viewer);
   const visibleGroupIds =
     options?.groupId == null
       ? scope.managedGroupIds

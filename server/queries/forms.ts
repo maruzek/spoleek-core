@@ -10,6 +10,8 @@ import {
   type FormOpenResult,
 } from "@/lib/forms/rules";
 import { resolveQuestionShape } from "@/lib/forms/validation";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   categoryAdminAssignments,
@@ -500,9 +502,9 @@ export type FormListItem = {
 };
 
 /** Admin tables. Templates are org-wide; forms are limited to manageable owners. */
-export async function listFormsForManager(options: { templates: boolean }) {
-  const context = await requireGroupAdminModuleAccess();
-  const owners = await listManageableOwners(context);
+export async function listFormsForManager(viewer: Viewer, options: { templates: boolean }) {
+  const context = await requireGroupAdminModuleAccess(viewer);
+  const owners = await listManageableOwners(viewer);
   const orgId = context.organization.id;
 
   const ownerClauses = options.templates

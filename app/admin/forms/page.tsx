@@ -2,12 +2,14 @@ import { AppPage } from "@/components/app/app-page";
 import { FormsAdmin } from "@/components/app/forms/forms-admin";
 import { listEventsForManager, listEventsForOwnerPicker } from "@/server/queries/events";
 import { listFormsForManager } from "@/server/queries/forms";
+import { requireViewer } from "@/server/queries/viewer";
 
 export default async function AdminFormsPage() {
+  const viewer = await requireViewer();
   const [{ context, owners, items }, templates, events] = await Promise.all([
-    listFormsForManager({ templates: false }),
-    listFormsForManager({ templates: true }),
-    listEventsForManager(),
+    listFormsForManager(viewer, { templates: false }),
+    listFormsForManager(viewer, { templates: true }),
+    listEventsForManager(viewer),
   ]);
   const picker = await listEventsForOwnerPicker(context.organization.id);
 

@@ -2,6 +2,7 @@ import { AppPage } from "@/components/app/app-page";
 import { ProfileForm } from "@/components/app/profile-form";
 import { resolveMemberEmailForOrg } from "@/server/lib/preferred-email";
 import { requireCurrentMemberAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import {
   getMemberCustomFieldAnswerMap,
   listActiveMemberCustomFields,
@@ -14,7 +15,8 @@ export default async function PortalProfilePage({
 }) {
   // Gated on policies but not on profile completeness: this page is where a
   // member completes their profile, so gating it on that would trap them.
-  const { member, organization } = await requireCurrentMemberAccess({
+  const viewer = await requireViewer();
+  const { member, organization } = await requireCurrentMemberAccess(viewer, {
     requirePolicyAcknowledgement: true,
   });
   const params = searchParams ? await searchParams : {};

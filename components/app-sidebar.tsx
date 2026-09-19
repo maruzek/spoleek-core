@@ -143,7 +143,7 @@ function getSidebarData(appContext: AppShellContext) {
       return appContext.capabilities.canManageGroups;
     }
 
-    if (item.href === "/admin/settings") {
+    if (item.href.startsWith("/admin/settings")) {
       return appContext.capabilities.canManageOrganization;
     }
 
@@ -232,9 +232,9 @@ export function AppSidebar({
       <SidebarFooter>
         <NavUser
           user={{
-            name: appContext.viewer.name,
-            email: appContext.viewer.email,
-            avatar: appContext.viewer.avatar,
+            name: appContext.account.name,
+            email: appContext.account.email,
+            avatar: appContext.account.avatar,
             portalHref: appContext.capabilities.canAccessPortal
               ? "/portal"
               : null,

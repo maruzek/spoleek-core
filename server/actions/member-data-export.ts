@@ -55,7 +55,7 @@ export const exportMemberDataAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     const inScope = await canAccessMemberInScope(
@@ -98,7 +98,7 @@ export const exportMyDataAction = authActionClient
   .action(async ({ ctx }) => {
     // No member id from the client: a member exports themselves and nobody
     // else, so the id comes from the session.
-    const { member, organization } = await requireCurrentMemberAccess();
+    const { member, organization } = await requireCurrentMemberAccess(ctx.viewer);
 
     const data = await buildMemberDataExport({
       orgId: organization.id,

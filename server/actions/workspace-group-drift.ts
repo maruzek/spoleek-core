@@ -9,6 +9,8 @@ import {
   removeWorkspaceGroupDriftSchema,
 } from "@/lib/workspace-group-drift";
 import { authActionClient } from "@/lib/safe-action-auth";
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import { groupWorkspaceLinks, workspaceGroupDrift } from "@/server/db/schema";
 import { requireWorkspaceLinkAccess } from "@/server/queries/access";
@@ -39,7 +41,7 @@ type DriftSelection = {
  * one guard call in practice; it still holds if a future org-wide inbox mixes
  * links from several groups.
  */
-async function loadDriftSelection(driftIds: string[]) {
+async function loadDriftSelection(viewer: Viewer, driftIds: string[]) {
   const rows = await db
     .select({
       id: workspaceGroupDrift.id,
@@ -93,7 +95,7 @@ async function loadDriftSelection(driftIds: string[]) {
   }
 
   for (const selection of byLink.values()) {
-    const context = await requireWorkspaceLinkAccess(selection.link.groupId);
+    const context = await requireWorkspaceLinkAccess(viewer, selection.link.groupId);
 
     if (context.organization.id !== selection.link.orgId) {
       throw new Error("Those addresses belong to another organization.");
@@ -111,8 +113,8 @@ async function loadDriftSelection(driftIds: string[]) {
 export const adoptWorkspaceGroupDriftAction = authActionClient
   .metadata({ actionName: "adoptWorkspaceGroupDrift" })
   .inputSchema(adoptWorkspaceGroupDriftSchema)
-  .action(async ({ parsedInput }) => {
-    const selections = await loadDriftSelection(parsedInput.driftIds);
+  .action(async ({ parsedInput, ctx }) => {
+    const selections = await loadDriftSelection(ctx.viewer, parsedInput.driftIds);
 
     let adopted = 0;
     let createdMembers = 0;
@@ -156,8 +158,8 @@ export const adoptWorkspaceGroupDriftAction = authActionClient
 export const removeWorkspaceGroupDriftAction = authActionClient
   .metadata({ actionName: "removeWorkspaceGroupDrift" })
   .inputSchema(removeWorkspaceGroupDriftSchema)
-  .action(async ({ parsedInput }) => {
-    const selections = await loadDriftSelection(parsedInput.driftIds);
+  .action(async ({ parsedInput, ctx }) => {
+    const selections = await loadDriftSelection(ctx.viewer, parsedInput.driftIds);
 
     let queued = 0;
 
@@ -195,8 +197,8 @@ export const removeWorkspaceGroupDriftAction = authActionClient
 export const ignoreWorkspaceGroupDriftAction = authActionClient
   .metadata({ actionName: "ignoreWorkspaceGroupDrift" })
   .inputSchema(ignoreWorkspaceGroupDriftSchema)
-  .action(async ({ parsedInput }) => {
-    const selections = await loadDriftSelection(parsedInput.driftIds);
+  .action(async ({ parsedInput, ctx }) => {
+    const selections = await loadDriftSelection(ctx.viewer, parsedInput.driftIds);
 
     for (const { link, rows } of selections) {
       await db

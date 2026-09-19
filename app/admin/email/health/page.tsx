@@ -5,10 +5,12 @@ import { AppPage } from "@/components/app/app-page";
 import { EmailHealth } from "@/components/app/emails/email-health";
 import { Button } from "@/components/ui/button";
 import { requireAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getOrganizationEmailHealth, getProviderEmailHealth } from "@/server/queries/email-health";
 
 export default async function AdminEmailHealthPage() {
-  const { organization, isSystemAdmin } = await requireAdminAccess({
+  const viewer = await requireViewer();
+  const { organization, isSystemAdmin } = await requireAdminAccess(viewer, {
     requireFullAccess: true,
     capability: "canManageOrganization",
   });

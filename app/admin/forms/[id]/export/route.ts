@@ -1,11 +1,13 @@
 import { slugify } from "@/lib/slugify";
 import { requireFormManagementAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { exportFormSubmissionsCsv } from "@/server/queries/forms";
 
 /** CSV of the submissions table as the viewer sees it; withheld cells say so. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { context, form } = await requireFormManagementAccess(id);
+  const viewer = await requireViewer();
+  const { context, form } = await requireFormManagementAccess(viewer, id);
   const includeSensitive = new URL(request.url).searchParams.get("sensitive") === "1";
 
   const csv = await exportFormSubmissionsCsv(

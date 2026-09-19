@@ -244,7 +244,7 @@ export const createShadowMemberAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const groupIds = validateGroupSelectionOrThrow({
       schema: createMemberSchema,
@@ -391,7 +391,7 @@ export const approveMemberAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,
@@ -577,10 +577,10 @@ export const checkWorkspaceEmailAvailabilityAction = authActionClient
       primaryEmail: z.string().email(),
     }),
   )
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     await assertMemberInScopeOrThrow({
       orgId: organization.id,
@@ -630,10 +630,10 @@ export const checkWorkspaceEmailAvailabilityAction = authActionClient
 export const suggestWorkspaceEmailAction = authActionClient
   .metadata({ actionName: "suggestWorkspaceEmail" })
   .inputSchema(z.object({ memberId: z.string().uuid() }))
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,
@@ -665,7 +665,7 @@ export const syncWorkspaceMemberAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     const member = await assertMemberInScopeOrThrow({
@@ -752,7 +752,7 @@ export const resendMemberInviteAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     await assertMemberInScopeOrThrow({
@@ -783,10 +783,10 @@ export const resendMemberInviteAction = authActionClient
 export const updateMemberAction = authActionClient
   .metadata({ actionName: "updateMember" })
   .inputSchema(updateMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,
@@ -951,7 +951,7 @@ export const deleteMemberAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     await assertMemberInScopeOrThrow({
@@ -990,10 +990,10 @@ export const deleteMemberAction = authActionClient
 export const restoreMemberAction = authActionClient
   .metadata({ actionName: "restoreMember" })
   .inputSchema(restoreMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     await assertMemberInScopeOrThrow({
@@ -1021,10 +1021,10 @@ export const restoreMemberAction = authActionClient
 export const rejectMemberAction = authActionClient
   .metadata({ actionName: "rejectMember" })
   .inputSchema(rejectMemberSchema)
-  .action(async ({ parsedInput }) => {
+  .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,
@@ -1070,7 +1070,7 @@ export const bulkDeleteMembersAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     for (const memberId of parsedInput.memberIds) {
@@ -1132,7 +1132,7 @@ export const importMembersAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
 
     const customFields = await listMemberCustomFields(organization.id);
@@ -1473,7 +1473,7 @@ export const provisionMemberWorkspaceAccountAction = authActionClient
   .action(async ({ parsedInput, ctx }) => {
     const [organization, scope] = await Promise.all([
       requireOrganization(),
-      resolveMemberManagementScope(),
+      resolveMemberManagementScope(ctx.viewer),
     ]);
     const member = await assertMemberInScopeOrThrow({
       orgId: organization.id,

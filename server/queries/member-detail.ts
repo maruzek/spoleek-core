@@ -1,5 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 
+import type { Viewer } from "@/lib/access/viewer";
+
 import { db } from "@/server/db";
 import {
   groupWorkspaceLinks,
@@ -179,10 +181,11 @@ function summarisePayments(payments: MemberPayment[]): MemberPaymentSummary {
  * id belongs to another org.
  */
 export async function getMemberDetailData(
+  viewer: Viewer,
   memberId: string,
   options?: { selectedEmailId?: string | null },
 ): Promise<MemberDetailData | null> {
-  const scope = await resolveMemberManagementScope();
+  const scope = await resolveMemberManagementScope(viewer);
 
   const editor = await getMemberEditorData(scope.organizationId, memberId, {
     visibleGroupIds: scope.managedGroupIds,

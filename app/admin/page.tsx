@@ -3,12 +3,14 @@ import { AdminDashboard } from "@/components/app/dashboard/admin-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { orgFormatLocale } from "@/lib/i18n";
 import { requireAdminAccess } from "@/server/queries/access";
+import { requireViewer } from "@/server/queries/viewer";
 import { getAdminDashboardData } from "@/server/queries/dashboard";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOverviewPage() {
-  const context = await requireAdminAccess();
+  const viewer = await requireViewer();
+  const context = await requireAdminAccess(viewer);
   const data = await getAdminDashboardData(context);
 
   const locale = orgFormatLocale(context.organization.locale);
@@ -20,7 +22,7 @@ export default async function AdminOverviewPage() {
   }).format(data.now);
 
   const firstName =
-    context.member?.firstName?.trim() || context.viewer.name.split(" ")[0] || "";
+    context.member?.firstName?.trim() || context.viewer.user.name.split(" ")[0] || "";
 
   const summary = [
     data.attention.length === 0
