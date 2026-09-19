@@ -105,7 +105,7 @@ export function FormRemindersPanel({
         <header className="flex flex-wrap items-center gap-4 px-4 py-3">
           <span
             className={cn(
-              "font-heading text-2xl leading-none tabular-nums tracking-tight",
+              "font-semibold text-2xl leading-none tabular-nums tracking-tight",
               pending.length === 0 ? "text-muted-foreground/50" : "text-foreground",
             )}
           >
@@ -186,7 +186,7 @@ export function FormRemindersPanel({
               <span className="text-sm text-muted-foreground">Counting recipients…</span>
             ) : (
               <>
-                <span className="font-heading text-3xl leading-none tabular-nums">{dryRunCount}</span>
+                <span className="font-semibold text-3xl leading-none tabular-nums">{dryRunCount}</span>
                 <span className="text-sm text-muted-foreground">recipient{dryRunCount === 1 ? "" : "s"} will be emailed</span>
               </>
             )}

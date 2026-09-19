@@ -164,7 +164,7 @@ function InvalidLink({ brand, title, body }: { brand: string; title: string; bod
   return (
     <PublicShell brand={brand} width="narrow">
       <div className="mx-auto w-full max-w-md rounded-2xl border bg-background p-6 text-center shadow-sm">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        <h1 className="font-heading text-xl font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{body}</p>
       </div>
     </PublicShell>

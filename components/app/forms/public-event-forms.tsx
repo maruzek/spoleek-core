@@ -23,7 +23,7 @@ export function PublicEventForms({
   if (items.length === 0) return null;
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="font-heading text-lg font-semibold tracking-tight">{t.public.openForms}</h2>
+      <h2 className="text-lg font-semibold tracking-tight">{t.public.openForms}</h2>
       <ul className="flex flex-col gap-2">
         {items.map((item) => {
           const submitted = item.submittedAt != null;

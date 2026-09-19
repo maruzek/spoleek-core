@@ -46,7 +46,7 @@ export function AfterRsvpFormDialog({
       >
         <DialogHeader>
           <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">{t.event.inlineTitle}</p>
-          <DialogTitle className="font-heading text-xl">{data.form.title}</DialogTitle>
+          <DialogTitle>{data.form.title}</DialogTitle>
           <DialogDescription>{required ? t.event.dialogRequired : t.event.dialogOptional}</DialogDescription>
         </DialogHeader>
         {data.form.description ? (

@@ -89,7 +89,7 @@ export function SignInCard({
         <p className="text-xs tracking-[0.28em] text-muted-foreground uppercase">
           {organizationName}
         </p>
-        <h1 className="text-3xl leading-tight font-semibold text-balance">
+        <h1 className="font-heading text-3xl leading-tight font-semibold text-balance">
           {dict.title}
         </h1>
         <p className="text-sm leading-6 text-muted-foreground text-balance">

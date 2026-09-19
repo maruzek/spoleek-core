@@ -62,7 +62,7 @@ export default async function JoinPage() {
           <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase">
             {t.join.eyebrow}
           </p>
-          <h1 className="max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
+          <h1 className="font-heading max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
             {joinPage.joinPageHeadline}
           </h1>
           <p className="max-w-xl text-base leading-8 whitespace-pre-line text-muted-foreground">

@@ -9,7 +9,7 @@ export default function ForbiddenPage() {
         <p className="text-xs font-semibold tracking-[0.28em] uppercase text-slate-500">
           Forbidden
         </p>
-        <h1 className="mt-4 text-4xl font-semibold text-slate-950">
+        <h1 className="font-heading mt-4 text-4xl font-semibold text-slate-950">
           This area is restricted.
         </h1>
         <p className="mt-4 text-sm leading-7 text-slate-600">

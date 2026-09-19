@@ -65,7 +65,7 @@ export function GuestRsvpForm({
           <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <CheckIcon className="size-4" aria-hidden />
           </span>
-          <p className="font-heading text-lg text-foreground">{t.public.thanks}</p>
+          <p className="font-medium text-lg text-foreground">{t.public.thanks}</p>
         </div>
         {answer === "yes" ? (
           <p className={cn("text-sm", done.standing === "confirmed" ? "text-primary" : "text-amber-700 dark:text-amber-400")}>
@@ -133,7 +133,7 @@ export function GuestRsvpForm({
       }}
     >
       <div className="flex flex-col gap-1">
-        <p className="font-heading text-lg text-foreground">{t.detail.answerPrompt}</p>
+        <p className="font-medium text-lg text-foreground">{t.detail.answerPrompt}</p>
       </div>
 
       <AnswerTiles value={answer} onChange={setAnswer} />

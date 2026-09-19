@@ -529,7 +529,7 @@ export function EventsAdmin({
       {items.length === 0 && canCreate ? (
         <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
           <CalendarPlusIcon className="size-5 text-muted-foreground" aria-hidden />
-          <p className="font-heading text-lg">Your first event</p>
+          <p className="font-medium text-lg">Your first event</p>
           <p className="max-w-md text-sm text-muted-foreground">
             Start as a draft, set the audience, then publish. Invites only go out when you send them from the
             Emails tab.

@@ -39,7 +39,7 @@ export default async function TokenFormPage({ params }: { params: Promise<{ toke
     return (
       <PublicShell brand={organization.name} width="narrow">
         <div className="mx-auto w-full max-w-md rounded-2xl border bg-background p-6 text-center shadow-sm">
-          <h1 className="text-xl font-semibold">{t.token.invalidTitle}</h1>
+          <h1 className="font-heading text-xl font-semibold">{t.token.invalidTitle}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{t.token.invalidBody}</p>
         </div>
       </PublicShell>

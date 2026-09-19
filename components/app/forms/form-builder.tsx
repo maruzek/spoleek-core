@@ -164,7 +164,7 @@ export function FormBuilder({
     <div className="flex flex-col gap-4">
       {drafts.length === 0 ? (
         <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
-          <p className="font-heading text-lg">No questions yet</p>
+          <p className="font-medium text-lg">No questions yet</p>
           <p className="max-w-md text-sm text-muted-foreground">
             Add a question for each thing you need to know. Link one to a profile field and the answer can be saved to
             the member&apos;s profile too.

@@ -704,7 +704,7 @@ export function SetupWizard({
             <Badge variant="secondary" className="rounded-full px-3 py-1">
               First-run setup
             </Badge>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-foreground md:text-6xl">
+            <h1 className="font-heading mt-4 text-4xl font-semibold tracking-tight text-foreground md:text-6xl">
               Configure Spoleek before the rest of the app unlocks.
             </h1>
             <p className="mt-4 text-base leading-8 text-muted-foreground">

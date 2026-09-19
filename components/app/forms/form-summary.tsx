@@ -32,7 +32,7 @@ export function FormSummary({
     return (
       <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
         <BarChart3Icon className="size-5 text-muted-foreground" aria-hidden />
-        <p className="font-heading text-lg">Nothing to chart</p>
+        <p className="font-medium text-lg">Nothing to chart</p>
         <p className="max-w-md text-sm text-muted-foreground">
           Summaries are built for choice and yes / no questions. Free text and sensitive answers are read in the
           Submissions tab.

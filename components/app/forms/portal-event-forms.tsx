@@ -12,7 +12,7 @@ export function PortalEventForms({ items }: { items: ViewerFormItem[] }) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-heading text-lg font-semibold tracking-tight">{t.event.title}</h2>
+        <h2 className="text-lg font-semibold tracking-tight">{t.event.title}</h2>
         {pending > 0 ? (
           <span className="text-xs font-medium text-amber-700 dark:text-amber-500">{t.event.pendingHint(pending)}</span>
         ) : null}

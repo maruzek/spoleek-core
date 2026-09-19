@@ -78,7 +78,7 @@ export function PublicFormFiller({
         <span className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
           <CheckIcon className="size-4" aria-hidden />
         </span>
-        <p className="font-heading text-lg text-foreground">{t.public.thanks}</p>
+        <p className="font-medium text-lg text-foreground">{t.public.thanks}</p>
       </div>
     );
   }

@@ -379,7 +379,7 @@ function ReadOnlyQuestions({ questions }: { questions: EditorQuestion[] }) {
         <li key={q.id} className="flex items-start gap-3 px-4 py-3 text-sm">
           <span className="w-6 shrink-0 tabular-nums text-muted-foreground">{i + 1}</span>
           <div className="flex min-w-0 flex-1 flex-col">
-            <span className={cn("font-medium", q.kind === "section" && "font-heading text-base")}>{q.label}</span>
+            <span className={cn("font-medium", q.kind === "section" && "text-base")}>{q.label}</span>
             {q.kind === "input" ? (
               <span className="text-xs text-muted-foreground">
                 {q.liveField?.type ?? q.type}

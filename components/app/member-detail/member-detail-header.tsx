@@ -67,7 +67,7 @@ export function MemberDetailHeader({
 
         <div className="flex min-w-0 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
+            <h1 className="font-heading truncate text-2xl font-semibold tracking-tight text-foreground">
               {displayName}
             </h1>
             <Badge variant="secondary">{ROLE_LABELS[member.role]}</Badge>

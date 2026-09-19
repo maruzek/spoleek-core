@@ -33,7 +33,7 @@ export function AppPage({
               </p>
             ) : null}
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
                 {title}
               </h1>
               {tooltip ? (

@@ -147,12 +147,8 @@
   html {
     @apply font-sans;
   }
-  h1,
-  h2,
-  h3,
-  h4 {
-    font-family: var(--font-heading);
-  }
+  /* No global serif on headings: the serif is opt-in via `font-heading` and
+     reserved for page titles and long-form prose (see docs/design-guide.md). */
 
   button:not(:disabled),
   [role="button"]:not(:disabled) {

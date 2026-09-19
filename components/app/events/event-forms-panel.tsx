@@ -92,7 +92,7 @@ export function EventFormsPanel({
       {forms.length === 0 ? (
         <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
           <ClipboardListIcon className="size-5 text-muted-foreground" aria-hidden />
-          <p className="font-heading text-lg">No forms on this event</p>
+          <p className="font-medium text-lg">No forms on this event</p>
           <p className="max-w-md text-sm text-muted-foreground">
             Add one for anything a yes / no cannot answer. It starts as a draft and appears to invitees once you open it.
           </p>

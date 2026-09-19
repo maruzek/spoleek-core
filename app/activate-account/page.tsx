@@ -83,7 +83,7 @@ export default async function ActivateAccountPage({
           <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
             {t.activation.eyebrow}
           </p>
-          <h1 className="max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
+          <h1 className="font-heading max-w-xl text-4xl leading-tight font-semibold text-balance md:text-6xl">
             {t.activation.title}
           </h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">

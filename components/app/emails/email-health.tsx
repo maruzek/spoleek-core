@@ -81,7 +81,7 @@ export function EmailHealth({
 
       <section className="flex flex-col gap-4">
         <div>
-          <h2 className="font-heading text-lg font-semibold">Last 30 days</h2>
+          <h2 className="text-lg font-semibold">Last 30 days</h2>
           <p className="text-sm text-muted-foreground">Outbound email recorded by Spoleek for this organization.</p>
         </div>
         <StatGroup columns={4}>
@@ -142,7 +142,7 @@ function ProviderSection({ provider }: { provider: ProviderEmailHealth }) {
   return (
     <section className="flex flex-col gap-4">
       <div>
-        <h2 className="font-heading text-lg font-semibold">Sending account</h2>
+        <h2 className="text-lg font-semibold">Sending account</h2>
         <p className="text-sm text-muted-foreground">
           Live from the Resend API. Shared by every organization on this instance, so only system admins see it.
         </p>

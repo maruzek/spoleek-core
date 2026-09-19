@@ -71,7 +71,7 @@ export function EventRsvpControl({
       }}
     >
       <div className="flex flex-col gap-1">
-        <p className="font-heading text-lg text-foreground">{t.detail.answerPrompt}</p>
+        <p className="font-medium text-lg text-foreground">{t.detail.answerPrompt}</p>
         <p className="text-xs text-muted-foreground">{t.detail.answerHint}</p>
       </div>
 

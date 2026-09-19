@@ -185,7 +185,6 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
   const tg = useDictionary().portalGroups;
   const { group, standing, leaders } = detail;
   const leaderNames = leaders.map((leader) => leader.name).join(", ");
-  console.log(standing);
 
   return (
     <div className="flex flex-col gap-6 pb-6 md:pb-8">
@@ -201,7 +200,7 @@ function Header({ detail, canManage }: { detail: PortalGroupDetail; canManage: b
       {/* Same shape as the event header: pill, serif title, one icon meta line, actions on the right. */}
       <header className="flex items-start gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          {standing.role === "group_admin" ? (
+          {standing?.role === "group_admin" ? (
             <div className="flex flex-wrap items-center gap-2">
               <Status variant="success">
                 <StatusIndicator />
@@ -570,7 +569,7 @@ function FormsSection({ detail }: { detail: PortalGroupDetail }) {
 function PageSectionHeading({ children, count, hint }: { children: ReactNode; count?: number; hint?: ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <h2 className="flex items-baseline gap-2 font-heading text-lg font-semibold tracking-tight text-foreground">
+      <h2 className="flex items-baseline gap-2 text-lg font-semibold tracking-tight text-foreground">
         {children}
         {count != null && count > 0 ? (
           <span className="font-sans text-sm font-normal tabular-nums text-muted-foreground">{count}</span>
@@ -598,7 +597,7 @@ function AsideCard({
   return (
     <section className={cn(factCardClassName, className)}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="flex items-baseline gap-2 font-heading text-lg text-foreground">
+        <h2 className="flex items-baseline gap-2 text-lg font-semibold tracking-tight text-foreground">
           {title}
           {count != null && count > 0 ? (
             <span className="font-sans text-xs font-normal tabular-nums text-muted-foreground">{count}</span>

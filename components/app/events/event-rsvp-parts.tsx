@@ -84,7 +84,7 @@ export function GuestStepper({
         >
           <MinusIcon />
         </Button>
-        <span className="w-8 text-center font-heading text-xl tabular-nums" aria-live="polite">
+        <span className="w-8 text-center font-semibold text-xl tabular-nums" aria-live="polite">
           {value}
         </span>
         <Button

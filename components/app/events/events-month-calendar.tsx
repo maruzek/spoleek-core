@@ -94,7 +94,7 @@ export function EventsMonthCalendar({
 
   const Toolbar = ({ onNavigate, label }: ToolbarProps<RbcEvent>) => (
     <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-      <h2 className="font-heading text-lg capitalize text-foreground">{label}</h2>
+      <h2 className="font-semibold text-lg capitalize text-foreground">{label}</h2>
       <div className="flex items-center gap-1">
         <Button size="sm" variant="outline" onClick={() => onNavigate("TODAY")}>
           {labels.today}

@@ -131,7 +131,7 @@ export function PaymentQrCard({
           <p className="truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{eyebrow}</p>
           <h2
             className={cn(
-              "mt-0.5 flex items-center gap-1.5 font-heading text-lg leading-tight",
+              "mt-0.5 flex items-center gap-1.5 font-medium text-lg leading-tight",
               tone === "error" && "text-destructive",
               tone === "success" && "text-green-700 dark:text-green-400",
             )}
@@ -155,7 +155,7 @@ export function PaymentQrCard({
         </div>
         <p
           className={cn(
-            "shrink-0 font-heading text-2xl tabular-nums tracking-tight",
+            "shrink-0 font-semibold text-2xl tabular-nums tracking-tight",
             isOverdue ? "text-destructive" : "text-foreground",
           )}
         >

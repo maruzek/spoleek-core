@@ -77,7 +77,7 @@ export function EventAgendaRow({
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                "font-heading text-lg leading-tight text-foreground",
+                "text-lg leading-tight text-foreground",
                 cancelled && "text-muted-foreground line-through decoration-1",
               )}
             >

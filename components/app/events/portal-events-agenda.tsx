@@ -194,7 +194,7 @@ export function PortalEventsAgenda({
             <CalendarIcon className="size-5 text-muted-foreground" aria-hidden />
           </div>
           <div className="flex flex-col gap-1">
-            <p className="font-heading text-lg text-foreground">{emptyTitle}</p>
+            <p className="font-medium text-lg text-foreground">{emptyTitle}</p>
             <p className="text-sm text-muted-foreground">{emptyBody}</p>
           </div>
         </div>
@@ -202,7 +202,7 @@ export function PortalEventsAgenda({
         <div className="flex flex-col gap-8">
           {groups.map((group) => (
             <section key={group.key} className="flex flex-col gap-3">
-              <h2 className="sticky top-0 z-10 -mx-1 bg-background/95 px-1 py-1 font-heading text-lg capitalize text-foreground backdrop-blur">
+              <h2 className="sticky top-0 z-10 -mx-1 bg-background/95 px-1 py-1 font-semibold text-lg capitalize text-foreground backdrop-blur">
                 {group.label}
               </h2>
               <ol className="flex flex-col gap-2">

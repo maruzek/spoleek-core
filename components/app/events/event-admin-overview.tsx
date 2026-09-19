@@ -91,7 +91,7 @@ export function EventAdminOverview({
           />
         ) : (
           <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed p-6">
-            <p className="font-heading text-lg text-foreground">No description yet</p>
+            <p className="font-medium text-lg text-foreground">No description yet</p>
             <p className="max-w-md text-sm text-muted-foreground">
               Members see this text on the event page and in invites. A sentence or two on what to expect goes a long way.
             </p>

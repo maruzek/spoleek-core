@@ -21,7 +21,7 @@ export default function GlobalError({
           Unexpected Error
         </p>
 
-        <h1 className="mb-6 max-w-lg text-balance text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+        <h1 className="font-heading mb-6 max-w-lg text-balance text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
           Something interrupted the flow.
         </h1>
 
