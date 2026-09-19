@@ -1,18 +1,14 @@
-import { and, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 
 import { PublicFormCard } from "@/components/app/forms/public-form-card";
 import { PublicFormFiller } from "@/components/app/forms/public-form-filler";
 import { PublicShell } from "@/components/public/public-shell";
-import { isTokenValid } from "@/lib/events/rsvp";
+import { submissionIdentityOf } from "@/lib/events/responder";
 import { getDictionary, orgFormatLocale } from "@/lib/i18n";
-import { getMemberDisplayName } from "@/lib/member-custom-fields";
-import { db } from "@/server/db";
-import { tenantMembers } from "@/server/db/schema";
-import { findTokenHolder } from "@/server/lib/events/tokens";
 import { getAppOrganization } from "@/server/queries/app";
 import { getViewerSession } from "@/server/queries/auth";
-import { getFormById, getFormForFiller, getGuestRsvpAnswer, getMemberRsvpAnswer } from "@/server/queries/forms";
+import { getFormById, getFormForFiller } from "@/server/queries/forms";
+import { getResponderResponse, resolveTokenResponder } from "@/server/queries/responder";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +23,8 @@ export default async function TokenFormPage({ params }: { params: Promise<{ toke
   const organization = await getAppOrganization();
   if (!organization) redirect("/setup");
 
-  const holder = await findTokenHolder(token);
-  const valid = holder ? isTokenValid({ event: holder.event, token: holder.token, now: new Date() }) : null;
-  const dead =
-    !holder ||
-    holder.event.orgId !== organization.id ||
-    !valid ||
-    (!valid.open && (valid.reason === "token_expired" || valid.reason === "event_deleted" || valid.reason === "draft"));
-
-  if (dead) {
+  const resolved = await resolveTokenResponder(organization.id, token, new Date());
+  if (!resolved) {
     return (
       <PublicShell brand={organization.name} width="narrow">
         <div className="mx-auto w-full max-w-md rounded-2xl border bg-background p-6 text-center shadow-sm">
@@ -45,51 +34,33 @@ export default async function TokenFormPage({ params }: { params: Promise<{ toke
       </PublicShell>
     );
   }
+  const { event, responder } = resolved;
 
-  if (holder.token.memberId) {
+  if (responder.memberUserId) {
     const session = await getViewerSession();
-    if (session) {
-      const [member] = await db
-        .select({ id: tenantMembers.id })
-        .from(tenantMembers)
-        .where(and(eq(tenantMembers.id, holder.token.memberId), eq(tenantMembers.userId, session.user.id)))
-        .limit(1);
-      if (member) redirect(`/portal/forms/${formId}`);
-    }
+    if (session?.user.id === responder.memberUserId) redirect(`/portal/forms/${formId}`);
   }
 
   const form = await getFormById(organization.id, formId);
-  if (!form || form.eventId !== holder.event.id || form.status === "draft") notFound();
+  if (!form || form.eventId !== event.id || form.status === "draft") notFound();
 
-  const rsvpAnswer = holder.token.memberId
-    ? await getMemberRsvpAnswer(organization.id, holder.event.id, holder.token.memberId)
-    : await getGuestRsvpAnswer(organization.id, holder.event.id, holder.token.externalEmail!);
-  const holderName = holder.token.memberId
-    ? await db
-        .select({ firstName: tenantMembers.firstName, lastName: tenantMembers.lastName })
-        .from(tenantMembers)
-        .where(eq(tenantMembers.id, holder.token.memberId))
-        .limit(1)
-        .then((rows) => (rows[0] ? getMemberDisplayName(rows[0]) : null))
-    : holder.token.externalEmail;
-
-  const data = await getFormForFiller(organization.id, form, holder.event, {
-    kind: "token",
-    memberId: holder.token.memberId,
-    guestEmail: holder.token.externalEmail,
-    guestName: holder.token.externalEmail,
-    rsvpAnswer,
-  });
+  const response = await getResponderResponse(organization.id, event.id, responder);
+  const data = await getFormForFiller(
+    organization.id,
+    form,
+    event,
+    submissionIdentityOf(responder, response?.answer ?? null),
+  );
 
   return (
     <PublicShell brand={organization.name}>
       <PublicFormCard
         form={form}
-        event={holder.event}
+        event={event}
         backHref={`/events/rsvp/${token}`}
         locale={orgFormatLocale(organization.locale)}
         timeZone={organization.timezone}
-        note={t.token.fillingAs(holderName ?? "")}
+        note={t.token.fillingAs(responder.displayName)}
         t={t}
       >
         <PublicFormFiller

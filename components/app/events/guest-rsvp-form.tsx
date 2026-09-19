@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldLabel } from "@/components/ui/field";
 import { FieldHint } from "@/components/ui/field-hint";
 import { Input } from "@/components/ui/input";
-import type { RsvpOpenResult } from "@/lib/events/rsvp";
+import type { RsvpView } from "@/lib/events/responder";
 import { cn } from "@/lib/utils";
 import { respondAsGuestAction } from "@/server/actions/events";
 import type { EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
@@ -25,22 +25,19 @@ import type { EventRsvpAnswer, EventRsvpStanding } from "@/server/db/schema";
  */
 export function GuestRsvpForm({
   eventSlug,
-  open,
-  maxGuests,
-  priced,
+  view,
   rsvpBaseUrl,
-  afterRsvpForm,
 }: {
   eventSlug: string;
-  open: RsvpOpenResult;
-  maxGuests: number;
-  /** A confirmed yes creates a payment; the thank-you then points at the link and email. */
-  priced: boolean;
+  /** The guest responder's view: `current` and `payment` are always null here. */
+  view: RsvpView;
   /** Absolute `/events/rsvp/` prefix; the token is appended client-side. */
   rsvpBaseUrl: string;
-  /** An open `after_rsvp` form; the guest is sent to it on their new token. */
-  afterRsvpForm?: { id: string; title: string; required: boolean } | null;
 }) {
+  // A confirmed yes on a priced event creates a payment; the thank-you then
+  // points at the link and email. An open `after_rsvp` form sends the guest
+  // to it on their new token.
+  const { open, maxGuests, priced, afterRsvpForm } = view;
   const dict = useDictionary();
   const t = dict.events;
   const tf = dict.forms;
@@ -80,8 +77,8 @@ export function GuestRsvpForm({
             <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-500">{tf.event.inlineTitle}</p>
             <p className="text-sm text-muted-foreground">{afterRsvpForm.required ? tf.event.dialogRequired : tf.event.inlineHint}</p>
             <Button asChild size="sm">
-              <Link href={`/events/rsvp/${done.token}/forms/${afterRsvpForm.id}`}>
-                {tf.public.fillAfterRsvp(afterRsvpForm.title)}
+              <Link href={`/events/rsvp/${done.token}/forms/${afterRsvpForm.form.id}`}>
+                {tf.public.fillAfterRsvp(afterRsvpForm.form.title)}
                 <ArrowRightIcon data-icon="inline-end" />
               </Link>
             </Button>

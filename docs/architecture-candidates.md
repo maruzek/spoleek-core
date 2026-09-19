@@ -127,32 +127,31 @@ justify the seam: Resend in prod, in-memory in tests (replaces the single
 
 ---
 
-## 6 · One Responder view for the three RSVP surfaces — **Worth exploring**
+## ✅ 6 · One Responder view for the three RSVP surfaces — DONE (2026-09-19)
 
-**Files**
-- `app/portal/events/[slug]/page.tsx` :20-50,
-  `app/events/rsvp/[token]/page.tsx` :36-114, `app/events/[slug]/page.tsx` :22-34
-- `components/app/events/portal-event-rsvp.tsx` (117 lines) vs
-  `token-event-rsvp.tsx` (114 lines) — 23 lines differ after renaming
-- `server/actions/events.ts` — three respond actions (member / token / guest)
-  that already converge on `upsertResponse`
-- `server/queries/event-eligibility.ts` `isEligible(orgId, memberId, event)` —
-  takes a `memberId` for the same reason; the Responder is the natural key
-
-**Problem.** detail → counts → own response → live payment → forms → after-RSVP
-dialog → props is rebuilt per surface with drifts (the token page filters
-`submittedAt == null`, the public page does not; the portal page checks
-`item.open.open`, the token page does not). "RSVP state" spans ~12 files.
-These are the churn leaders of the last 80 commits.
-
-**Deepening.** One server-side responder-view builder keyed by responder
-identity (`member | token | guest`) returning one shape; one `EventRsvp` client
-parameterised by which respond action to call.
-
-**Done when**
-- One view builder, one client component; the two twins deleted.
-- The builder has a test per responder kind on a seeded priced event.
-- Add **Responder** to `CONTEXT.md`.
+`lib/events/responder.ts` (`Responder` = `member | token | guest`; pure:
+`responseOwnerOf` → the row key `upsertResponse` writes under,
+`submissionIdentityOf`, `selectAfterRsvpForm`, `tokenLinkState`; the client
+slice `RsvpView`) and `server/queries/responder.ts` (`memberResponder`,
+`resolveTokenResponder` — holder + validity + display name + owning account
+in one call, null for a dead link — `getResponderResponse`,
+`getResponderView`). The three pages are door → `getResponderView` → render;
+the token form page and both token actions (`respondWithToken`,
+`submitFormWithToken`) resolve the holder through the same door, so the
+external holder's `guestName` is now the audience rule's name everywhere,
+not the email on one path. `portal-event-rsvp.tsx` and `token-event-rsvp.tsx`
+are deleted for one `EventRsvp` parameterised by `target`; `GuestRsvpForm`
+takes the same `RsvpView`. Drifts resolved by construction: one after-RSVP
+rule (open ∧ not submitted — `open` was already implied by the list),
+counts always loaded, `externalNameFor` gone. `upsertResponse`'s parameter
+type was renamed `ResponseOwner` (two lines) so **Responder** means one
+thing. `tests/responder-view-db.test.ts` drives every door on a seeded
+priced event with a required, yes-gated `after_rsvp` form, plus the token
+door's dead / closed / reissued cases. **Responder** added to `CONTEXT.md`.
+Left as is: `respondToEventAction` still calls `isEligible(orgId, memberId)`
+directly — it keeps the `NOT_ELIGIBLE` message distinct from `NOT_FOUND`,
+which `getEventDetail` folds together; `isEligible` stays keyed on
+`memberId` since a member Responder carries nothing more.
 
 ---
 

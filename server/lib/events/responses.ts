@@ -10,7 +10,7 @@ export { EventError, type EventErrorCode } from "@/server/lib/events/errors";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-export type Responder =
+export type ResponseOwner =
   | { memberId: string; guestEmail?: null; guestName?: null }
   | { memberId?: null; guestEmail: string; guestName: string };
 
@@ -31,7 +31,7 @@ export async function upsertResponse(
   params: {
     orgId: string;
     eventId: string;
-    responder: Responder;
+    responder: ResponseOwner;
     answer: EventRsvpAnswer;
     guestCount: number;
     now?: Date;

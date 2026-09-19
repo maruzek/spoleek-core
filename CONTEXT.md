@@ -71,3 +71,24 @@ concept lives here.
   the org's active memberships, group→category map, active member ids and
   category admins — loaded once per request. Forms resolve their own rules
   against the same snapshot.
+- **Responder** — the person answering an event, as the RSVP surfaces see
+  them, resolved once per request behind one of three doors: `member` (the
+  signed-in member, from the Viewer), `token` (the holder of a personal link
+  — a member row for shadow and not-yet-activated accounts, or an external
+  email from the audience), `guest` (nobody yet: an anonymous visitor on a
+  public event, identified only by what they type). The door is the only
+  thing that differs per surface; everything after it is a function of the
+  Responder (`lib/events/responder.ts`): the *row key* an answer is written
+  under (`responseOwnerOf` — member id, or lower-cased email; a guest's key
+  comes from their form), the identity a form submission is stored against
+  (`submissionIdentityOf`), which `after_rsvp` form is prompted for
+  (`selectAfterRsvpForm`: open and not yet submitted, on every surface) and
+  what a link is worth (`tokenLinkState`: `dead` — unknown, expired, deleted
+  or draft event — gets the invalid page and is refused by the actions;
+  `closed` still shows the event so the holder sees why). One builder,
+  `getResponderView` (`server/queries/responder.ts`), returns the one view
+  every surface renders — counts, own response, live payment, forms, the
+  pending after-RSVP form — and one client, `EventRsvp`, is parameterised
+  only by which respond action to call. Locating the event stays with the
+  door: `getEventDetail` (eligibility for a member, public-only for a guest)
+  or `resolveTokenResponder` (the token *is* the invitation).

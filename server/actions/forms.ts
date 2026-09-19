@@ -4,7 +4,7 @@ import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { z } from "zod";
 
-import { isTokenValid } from "@/lib/events/rsvp";
+import { submissionIdentityOf } from "@/lib/events/responder";
 import { validateQuestionLink } from "@/lib/forms/profile-sync";
 import {
   attachFormToEventSchema,
@@ -36,7 +36,7 @@ import {
   tenantMembers,
   type MemberCustomField,
 } from "@/server/db/schema";
-import { findTokenHolder, touchRsvpToken } from "@/server/lib/events/tokens";
+import { touchRsvpToken } from "@/server/lib/events/tokens";
 import { FormError, persistSubmission } from "@/server/lib/forms/submissions";
 import { sanitizePolicyHtml } from "@/server/lib/policy-html";
 import { consumeRateLimit, getRequestIdentifier } from "@/server/lib/rate-limit";
@@ -56,12 +56,12 @@ import {
   getFormById,
   getFormEvent,
   getGuestRsvpAnswer,
-  getMemberRsvpAnswer,
   listFormPending,
   listFormQuestions,
   loadLiveFields,
 } from "@/server/queries/forms";
 import { listActiveMemberCustomFields } from "@/server/queries/member-custom-fields";
+import { getResponderResponse, resolveTokenResponder } from "@/server/queries/responder";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -650,45 +650,33 @@ export const submitFormWithTokenAction = actionClient
   .metadata({ actionName: "submitFormWithToken" })
   .inputSchema(submitFormWithTokenSchema)
   .action(async ({ parsedInput }) => {
-    const holder = await findTokenHolder(parsedInput.token);
-    if (!holder) throw new FormError("TOKEN_INVALID");
-
-    // The token opens the form as long as the event is live; the RSVP
+    const organization = await requireOrganization();
+    // The token opens the form as long as the link is alive; the RSVP
     // deadline is not the form's deadline.
-    const valid = isTokenValid({ event: holder.event, token: holder.token, now: new Date() });
-    if (!valid.open && (valid.reason === "token_expired" || valid.reason === "event_deleted" || valid.reason === "draft")) {
-      throw new FormError("TOKEN_INVALID");
-    }
+    const resolved = await resolveTokenResponder(organization.id, parsedInput.token, new Date());
+    if (!resolved) throw new FormError("TOKEN_INVALID");
+    const { event, responder } = resolved;
 
-    const orgId = holder.event.orgId;
+    const orgId = event.orgId;
     const form = await getFormById(orgId, parsedInput.formId);
-    if (!form || form.eventId !== holder.event.id) throw new FormError("NOT_FOUND");
+    if (!form || form.eventId !== event.id) throw new FormError("NOT_FOUND");
 
     const questions = await listFormQuestions(orgId, form.id);
     const liveFieldsById = await loadLiveFields(orgId, questions);
-
-    const rsvpAnswer = holder.token.memberId
-      ? await getMemberRsvpAnswer(orgId, holder.event.id, holder.token.memberId)
-      : await getGuestRsvpAnswer(orgId, holder.event.id, holder.token.externalEmail!);
+    const response = await getResponderResponse(orgId, event.id, responder);
 
     try {
       const result = await db.transaction(async (tx) => {
         const persisted = await persistSubmission(tx, {
           form,
-          event: holder.event,
+          event,
           questions,
           liveFieldsById,
-          identity: {
-            kind: "token",
-            memberId: holder.token.memberId,
-            guestEmail: holder.token.externalEmail,
-            guestName: holder.token.externalEmail,
-            rsvpAnswer,
-          },
+          identity: submissionIdentityOf(responder, response?.answer ?? null),
           answers: parsedInput.answers,
           submittedByUserId: null,
         });
-        await touchRsvpToken(holder.token.id, tx);
+        await touchRsvpToken(responder.tokenId, tx);
         return persisted;
       });
       return { success: true as const, submissionId: result.submissionId };

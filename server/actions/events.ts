@@ -1,12 +1,13 @@
 "use server";
 
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { returnValidationErrors } from "next-safe-action";
 import { after } from "next/server";
 import { z } from "zod";
 
 import { resolveEventPaymentDetails, type EventPaymentView } from "@/lib/events/payment-plan";
-import { canPromote, isTokenValid, seatsTaken } from "@/lib/events/rsvp";
+import { responseOwnerOf } from "@/lib/events/responder";
+import { canPromote, seatsTaken } from "@/lib/events/rsvp";
 import {
   addExternalInviteesSchema,
   eventIdSchema,
@@ -37,11 +38,7 @@ import {
 import { sendEventPaymentEmail } from "@/server/lib/events/payment-emails";
 import { syncEventPayment, syncEventPaymentsForEvent, type SyncResult } from "@/server/lib/events/payments";
 import { EventError, upsertResponse } from "@/server/lib/events/responses";
-import {
-  findTokenHolder,
-  issueRsvpToken,
-  touchRsvpToken,
-} from "@/server/lib/events/tokens";
+import { issueRsvpToken, touchRsvpToken } from "@/server/lib/events/tokens";
 import { sanitizePolicyHtml } from "@/server/lib/policy-html";
 import { consumeRateLimit, getRequestIdentifier } from "@/server/lib/rate-limit";
 import { sendEventInvites } from "@/server/notifications/events";
@@ -54,12 +51,14 @@ import {
 } from "@/server/queries/access";
 import {
   eventPaymentViewColumns,
+  getEventById,
   getEventBySlug,
   getEventRecipients,
   listEventsForOwnerPicker,
 } from "@/server/queries/events";
 import { isEligible } from "@/server/queries/event-eligibility";
 import { listAssignableTenantMembers } from "@/server/queries/groups";
+import { memberResponder, resolveTokenResponder } from "@/server/queries/responder";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -563,13 +562,9 @@ export const respondToEventAction = authActionClient
     const member = await requireCurrentMember(ctx.viewer);
     const orgId = member.orgId;
 
-    const [event] = await db
-      .select({ id: events.id, visibility: events.visibility, status: events.status })
-      .from(events)
-      .where(and(eq(events.orgId, orgId), eq(events.id, parsedInput.eventId), isNull(events.deletedAt)))
-      .limit(1);
-
-    if (!event || event.status === "draft") throw new EventError("NOT_FOUND");
+    const row = await getEventById(orgId, parsedInput.eventId);
+    if (!row || row.event.status === "draft") throw new EventError("NOT_FOUND");
+    const { event } = row;
 
     if (!(await isEligible(orgId, member.id, event))) {
       throw new EventError("NOT_ELIGIBLE");
@@ -579,7 +574,7 @@ export const respondToEventAction = authActionClient
       upsertResponse(tx, {
         orgId,
         eventId: event.id,
-        responder: { memberId: member.id },
+        responder: responseOwnerOf(memberResponder(member)),
         answer: parsedInput.answer,
         guestCount: parsedInput.guestCount,
       }),
@@ -599,34 +594,21 @@ export const respondWithTokenAction = actionClient
   .metadata({ actionName: "respondWithToken" })
   .inputSchema(respondWithTokenSchema)
   .action(async ({ parsedInput }) => {
-    const holder = await findTokenHolder(parsedInput.token);
-    if (!holder) throw new EventError("TOKEN_INVALID");
-
-    const valid = isTokenValid({ event: holder.event, token: holder.token, now: new Date() });
-    if (!valid.open) {
-      throw new EventError(
-        valid.reason === "token_expired" || valid.reason === "event_deleted"
-          ? "TOKEN_INVALID"
-          : "RSVP_CLOSED",
-      );
-    }
-
-    const responder = holder.token.memberId
-      ? { memberId: holder.token.memberId }
-      : {
-          guestEmail: holder.token.externalEmail!,
-          guestName: await externalNameFor(holder.event.id, holder.token.externalEmail!),
-        };
+    const organization = await requireOrganization();
+    // A dead link is refused here; a closed RSVP is refused by `upsertResponse`.
+    const resolved = await resolveTokenResponder(organization.id, parsedInput.token, new Date());
+    if (!resolved) throw new EventError("TOKEN_INVALID");
+    const { event, responder } = resolved;
 
     const result = await db.transaction(async (tx) => {
       const upserted = await upsertResponse(tx, {
-        orgId: holder.event.orgId,
-        eventId: holder.event.id,
-        responder,
+        orgId: event.orgId,
+        eventId: event.id,
+        responder: responseOwnerOf(responder),
         answer: parsedInput.answer,
         guestCount: parsedInput.guestCount,
       });
-      await touchRsvpToken(holder.token.id, tx);
+      await touchRsvpToken(responder.tokenId, tx);
       return upserted;
     });
 
@@ -654,22 +636,6 @@ async function livePaymentFor(sync: SyncResult | undefined): Promise<EventPaymen
     .limit(1);
 
   return row ?? null;
-}
-
-async function externalNameFor(eventId: string, email: string) {
-  const [rule] = await db
-    .select({ name: eventAudience.externalName })
-    .from(eventAudience)
-    .where(
-      and(
-        eq(eventAudience.eventId, eventId),
-        eq(eventAudience.kind, "external"),
-        sql`lower(${eventAudience.externalEmail}) = lower(${email})`,
-      ),
-    )
-    .limit(1);
-
-  return rule?.name ?? email;
 }
 
 const GUEST_RSVP_SCOPE = "event_guest_rsvp";
